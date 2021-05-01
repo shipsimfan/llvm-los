@@ -558,7 +558,8 @@ TargetInfo *AllocateTarget(const llvm::Triple &Triple,
       case llvm::Triple::Android:
         return new AndroidX86_64TargetInfo(Triple, Opts);
       }
-    }
+    case llvm::Triple::LOS:
+      return new LOSTargetInfo<X86_64TargetInfo>(Triple, Opts);
     case llvm::Triple::DragonFly:
       return new DragonFlyBSDTargetInfo<X86_64TargetInfo>(Triple, Opts);
     case llvm::Triple::NetBSD:
@@ -594,60 +595,62 @@ TargetInfo *AllocateTarget(const llvm::Triple &Triple,
       return new X86_64TargetInfo(Triple, Opts);
     }
 
-  case llvm::Triple::spir: {
-    if (os != llvm::Triple::UnknownOS ||
-        Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
-      return nullptr;
-    return new SPIR32TargetInfo(Triple, Opts);
-  }
-  case llvm::Triple::spir64: {
-    if (os != llvm::Triple::UnknownOS ||
-        Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
-      return nullptr;
-    return new SPIR64TargetInfo(Triple, Opts);
-  }
-  case llvm::Triple::wasm32:
-    if (Triple.getSubArch() != llvm::Triple::NoSubArch ||
-        Triple.getVendor() != llvm::Triple::UnknownVendor ||
-        !Triple.isOSBinFormatWasm())
-      return nullptr;
-    switch (os) {
+    case llvm::Triple::spir: {
+      if (os != llvm::Triple::UnknownOS ||
+          Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
+        return nullptr;
+      return new SPIR32TargetInfo(Triple, Opts);
+    }
+    case llvm::Triple::spir64: {
+      if (os != llvm::Triple::UnknownOS ||
+          Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
+        return nullptr;
+      return new SPIR64TargetInfo(Triple, Opts);
+    }
+    case llvm::Triple::wasm32:
+      if (Triple.getSubArch() != llvm::Triple::NoSubArch ||
+          Triple.getVendor() != llvm::Triple::UnknownVendor ||
+          !Triple.isOSBinFormatWasm())
+        return nullptr;
+      switch (os) {
       case llvm::Triple::WASI:
         return new WASITargetInfo<WebAssembly32TargetInfo>(Triple, Opts);
       case llvm::Triple::Emscripten:
         return new EmscriptenTargetInfo<WebAssembly32TargetInfo>(Triple, Opts);
       case llvm::Triple::UnknownOS:
-        return new WebAssemblyOSTargetInfo<WebAssembly32TargetInfo>(Triple, Opts);
+        return new WebAssemblyOSTargetInfo<WebAssembly32TargetInfo>(Triple,
+                                                                    Opts);
       default:
         return nullptr;
-    }
-  case llvm::Triple::wasm64:
-    if (Triple.getSubArch() != llvm::Triple::NoSubArch ||
-        Triple.getVendor() != llvm::Triple::UnknownVendor ||
-        !Triple.isOSBinFormatWasm())
-      return nullptr;
-    switch (os) {
+      }
+    case llvm::Triple::wasm64:
+      if (Triple.getSubArch() != llvm::Triple::NoSubArch ||
+          Triple.getVendor() != llvm::Triple::UnknownVendor ||
+          !Triple.isOSBinFormatWasm())
+        return nullptr;
+      switch (os) {
       case llvm::Triple::WASI:
         return new WASITargetInfo<WebAssembly64TargetInfo>(Triple, Opts);
       case llvm::Triple::Emscripten:
         return new EmscriptenTargetInfo<WebAssembly64TargetInfo>(Triple, Opts);
       case llvm::Triple::UnknownOS:
-        return new WebAssemblyOSTargetInfo<WebAssembly64TargetInfo>(Triple, Opts);
+        return new WebAssemblyOSTargetInfo<WebAssembly64TargetInfo>(Triple,
+                                                                    Opts);
       default:
         return nullptr;
+      }
+
+    case llvm::Triple::renderscript32:
+      return new LinuxTargetInfo<RenderScript32TargetInfo>(Triple, Opts);
+    case llvm::Triple::renderscript64:
+      return new LinuxTargetInfo<RenderScript64TargetInfo>(Triple, Opts);
+
+    case llvm::Triple::ve:
+      return new LinuxTargetInfo<VETargetInfo>(Triple, Opts);
     }
-
-  case llvm::Triple::renderscript32:
-    return new LinuxTargetInfo<RenderScript32TargetInfo>(Triple, Opts);
-  case llvm::Triple::renderscript64:
-    return new LinuxTargetInfo<RenderScript64TargetInfo>(Triple, Opts);
-
-  case llvm::Triple::ve:
-    return new LinuxTargetInfo<VETargetInfo>(Triple, Opts);
   }
-}
 } // namespace targets
-} // namespace clang
+} // namespace targets
 
 using namespace clang::targets;
 /// CreateTargetInfo - Return the target info object for the specified target
@@ -676,8 +679,7 @@ TargetInfo::CreateTargetInfo(DiagnosticsEngine &Diags,
   }
 
   // Check the TuneCPU name if specified.
-  if (!Opts->TuneCPU.empty() &&
-      !Target->isValidTuneCPUName(Opts->TuneCPU)) {
+  if (!Opts->TuneCPU.empty() && !Target->isValidTuneCPUName(Opts->TuneCPU)) {
     Diags.Report(diag::err_target_unknown_cpu) << Opts->TuneCPU;
     SmallVector<StringRef, 32> ValidList;
     Target->fillValidTuneCPUList(ValidList);
@@ -753,3 +755,4 @@ void TargetInfo::getOpenCLFeatureDefines(const LangOptions &Opts,
   // Assume compiling for FULL profile
   Builder.defineMacro("__opencl_c_int64");
 }
+} // namespace clang

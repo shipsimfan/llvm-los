@@ -173,6 +173,7 @@ public:
     IOS,
     KFreeBSD,
     Linux,
+    LOS,
     Lv2,        // PS3
     MacOSX,
     NetBSD,

@@ -301,7 +301,7 @@ protected:
     Builder.defineMacro("__HAIKU__");
     Builder.defineMacro("__ELF__");
     DefineStd(Builder, "unix", Opts);
-    if (this->HasFloat128) 
+    if (this->HasFloat128)
       Builder.defineMacro("__FLOAT128__");
   }
 
@@ -342,6 +342,7 @@ protected:
     if (Opts.CPlusPlus)
       Builder.defineMacro("_GNU_SOURCE");
   }
+
 public:
   HurdTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
       : OSTargetInfo<Target>(Triple, Opts) {}
@@ -394,7 +395,7 @@ protected:
         Builder.defineMacro("__ANDROID_API__", "__ANDROID_MIN_SDK_VERSION__");
       }
     } else {
-        Builder.defineMacro("__gnu_linux__");
+      Builder.defineMacro("__gnu_linux__");
     }
     if (Opts.POSIXThreads)
       Builder.defineMacro("_REENTRANT");
@@ -431,6 +432,31 @@ public:
 
   const char *getStaticInitSectionSpecifier() const override {
     return ".text.startup";
+  }
+};
+
+template <typename Target>
+class LLVM_LIBRARY_VISIBILITY LOSTargetInfo : public OSTargetInfo<Target> {
+protected:
+  void getOSDefines(const LangOptions &Opts, const llvm::Triple &Triple,
+                    MacroBuilder &Builder) const override {
+    if (this->HasFloat128)
+      Builder.defineMacro("__FLOAT128__");
+
+    Builder.defineMacro("__ELF__");
+    Builder.defineMacro("__LOS__");
+  }
+
+public:
+  LOSTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
+      : OSTargetInfo<Target>(Triple, Opts) {
+    switch (Triple.getArch()) {
+    default:
+      break;
+    case llvm::Triple::x86_64:
+      this->HasFloat128 = true;
+      break;
+    }
   }
 };
 
@@ -675,8 +701,7 @@ public:
 };
 
 // AIX Target
-template <typename Target>
-class AIXTargetInfo : public OSTargetInfo<Target> {
+template <typename Target> class AIXTargetInfo : public OSTargetInfo<Target> {
 protected:
   void getOSDefines(const LangOptions &Opts, const llvm::Triple &Triple,
                     MacroBuilder &Builder) const override {
@@ -695,16 +720,26 @@ protected:
     // Define AIX OS-Version Macros.
     // Includes logic for legacy versions of AIX; no specific intent to support.
     std::pair<int, int> OsVersion = {Major, Minor};
-    if (OsVersion >= std::make_pair(3, 2)) Builder.defineMacro("_AIX32");
-    if (OsVersion >= std::make_pair(4, 1)) Builder.defineMacro("_AIX41");
-    if (OsVersion >= std::make_pair(4, 3)) Builder.defineMacro("_AIX43");
-    if (OsVersion >= std::make_pair(5, 0)) Builder.defineMacro("_AIX50");
-    if (OsVersion >= std::make_pair(5, 1)) Builder.defineMacro("_AIX51");
-    if (OsVersion >= std::make_pair(5, 2)) Builder.defineMacro("_AIX52");
-    if (OsVersion >= std::make_pair(5, 3)) Builder.defineMacro("_AIX53");
-    if (OsVersion >= std::make_pair(6, 1)) Builder.defineMacro("_AIX61");
-    if (OsVersion >= std::make_pair(7, 1)) Builder.defineMacro("_AIX71");
-    if (OsVersion >= std::make_pair(7, 2)) Builder.defineMacro("_AIX72");
+    if (OsVersion >= std::make_pair(3, 2))
+      Builder.defineMacro("_AIX32");
+    if (OsVersion >= std::make_pair(4, 1))
+      Builder.defineMacro("_AIX41");
+    if (OsVersion >= std::make_pair(4, 3))
+      Builder.defineMacro("_AIX43");
+    if (OsVersion >= std::make_pair(5, 0))
+      Builder.defineMacro("_AIX50");
+    if (OsVersion >= std::make_pair(5, 1))
+      Builder.defineMacro("_AIX51");
+    if (OsVersion >= std::make_pair(5, 2))
+      Builder.defineMacro("_AIX52");
+    if (OsVersion >= std::make_pair(5, 3))
+      Builder.defineMacro("_AIX53");
+    if (OsVersion >= std::make_pair(6, 1))
+      Builder.defineMacro("_AIX61");
+    if (OsVersion >= std::make_pair(7, 1))
+      Builder.defineMacro("_AIX71");
+    if (OsVersion >= std::make_pair(7, 2))
+      Builder.defineMacro("_AIX72");
 
     // FIXME: Do not define _LONG_LONG when -fno-long-long is specified.
     Builder.defineMacro("_LONG_LONG");
@@ -953,7 +988,8 @@ class LLVM_LIBRARY_VISIBILITY EmscriptenTargetInfo
   }
 
 public:
-  explicit EmscriptenTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
+  explicit EmscriptenTargetInfo(const llvm::Triple &Triple,
+                                const TargetOptions &Opts)
       : WebAssemblyOSTargetInfo<Target>(Triple, Opts) {}
 };
 
