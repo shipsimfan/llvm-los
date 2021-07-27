@@ -1,4 +1,4 @@
-//===--- Minix.cpp - Minix ToolChain Implementations ------------*- C++ -*-===//
+//===--- LOS.cpp - LOS ToolChain Implementations ------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -29,47 +29,39 @@ void tools::los::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back("-z");
   CmdArgs.push_back("max-page-size=4096");
 
-  if (!D.SysRoot.empty()) {
+  if (!D.SysRoot.empty())
     CmdArgs.push_back(Args.MakeArgString("--sysroot=" + D.SysRoot));
-    CmdArgs.push_back(Args.MakeArgString("-L" + D.SysRoot + "/los/lib"));
-  } else
-    CmdArgs.push_back("-L/los/lib");
 
-  if (Args.hasArg(options::OPT_static))
-    CmdArgs.push_back("-Bstatic");
-  else if (Args.hasArg(options::OPT_shared))
-    CmdArgs.push_back("-shared");
-
-  if (Output.isFilename()) {
-    CmdArgs.push_back("-o");
-    CmdArgs.push_back(Output.getFilename());
-  } else {
-    assert(Output.isNothing() && "Invalid output.");
-  }
-
-  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA);
-
-  ToolChain.addProfileRTLibs(Args, CmdArgs);
-
-  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs))
-    if (D.CCCIsCXX())
-      if (ToolChain.ShouldLinkCXXStdlib(Args))
-        ToolChain.AddCXXStdlibLibArgs(Args, CmdArgs);
+  CmdArgs.push_back("-o");
+  CmdArgs.push_back(Output.getFilename());
 
   if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles)) {
+    CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crt0.o")));
+    CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crti.o")));
 
-    CmdArgs.push_back("-lkernel");
-    CmdArgs.push_back("-lc");
+    ToolChain.AddFilePathLibArgs(Args, CmdArgs);
+    AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA);
 
-    if (D.SysRoot.empty())
-      CmdArgs.push_back(Args.MakeArgString("/los/lib/crt0.o"));
-    else
-      CmdArgs.push_back(Args.MakeArgString(D.SysRoot + "/los/lib/crt0.o"));
+    CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crtn.o")));
+
+    ToolChain.addProfileRTLibs(Args, CmdArgs);
+
+    if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs)) {
+      if (D.CCCIsCXX())
+        if (ToolChain.ShouldLinkCXXStdlib(Args))
+          ToolChain.AddCXXStdlibLibArgs(Args, CmdArgs);
+
+      AddRunTimeLibs(ToolChain, D, CmdArgs, Args);
+
+      if (!Args.hasArg(options::OPT_nolibc))
+        CmdArgs.push_back("-lc");
+
+      CmdArgs.push_back("-lkernel");
+    }
   }
 
   const char *Exec = Args.MakeArgString(ToolChain.GetLinkerPath());
-  C.addCommand(std::make_unique<Command>(JA, *this,
-                                         ResponseFileSupport::AtFileCurCP(),
+  C.addCommand(std::make_unique<Command>(JA, *this, ResponseFileSupport::None(),
                                          Exec, CmdArgs, Inputs, Output));
 }
 
@@ -78,6 +70,13 @@ LOS::LOS(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
   getProgramPaths().push_back(getDriver().getInstalledDir());
   if (getDriver().getInstalledDir() != getDriver().Dir)
     getProgramPaths().push_back(getDriver().Dir);
+
+  if (!D.SysRoot.empty()) {
+    SmallString<128> P(D.SysRoot);
+    llvm::sys::path::append(P, "los", "lib");
+    getFilePaths().push_back(std::string(P.str()));
+  } else
+    getFilePaths().push_back(":1/los/lib");
 }
 
 void LOS::AddClangCXXStdlibIncludeArgs(
@@ -128,7 +127,8 @@ void LOS::AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
     SmallString<128> P(D.SysRoot);
     llvm::sys::path::append(P, "los", "include");
     addSystemInclude(DriverArgs, CC1Args, P.str());
-  }
+  } else
+    addSystemInclude(DriverArgs, CC1Args, ":1/los/include");
 }
 
 void LOS::addClangTargetOptions(const ArgList &DriverArgs,

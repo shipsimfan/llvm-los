@@ -40,7 +40,6 @@ public:
   LOS(const Driver &D, const llvm::Triple &Triple,
       const llvm::opt::ArgList &Args);
 
-  bool HasNativeLLVMSupport() const override { return true; }
   bool IsIntegratedAssemblerDefault() const override { return true; }
   bool IsMathErrnoDefault() const override { return false; }
   bool useRelaxRelocations() const override { return false; };
@@ -57,12 +56,12 @@ public:
   bool isPIEDefault() const override { return false; }
   bool isPICDefaultForced() const override { return false; }
   llvm::DebuggerKind getDefaultDebuggerTuning() const override {
-    return llvm::DebuggerKind::LLDB;
+    return llvm::DebuggerKind::GDB;
   }
 
   LangOptions::StackProtectorMode
   GetDefaultStackProtectorLevel(bool KernelOrKext) const override {
-    return LangOptions::SSPOff;
+    return LangOptions::SSPStrong;
   }
 
   void AddClangCXXStdlibIncludeArgs(
@@ -87,6 +86,8 @@ public:
   CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const override;
 
   const char *getDefaultLinker() const override { return "ld.lld"; }
+
+  std::string getStdlibPath() const override { return ":1/los/lib"; }
 
 protected:
   Tool *buildLinker() const override;
