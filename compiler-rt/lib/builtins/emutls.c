@@ -47,6 +47,8 @@ static void emutls_shutdown(emutls_address_array *array);
 
 #ifndef _WIN32
 
+#ifndef __LOS__
+
 #include <pthread.h>
 
 static pthread_mutex_t emutls_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -128,6 +130,49 @@ static __inline void emutls_init_once(void) {
 static __inline void emutls_lock() { pthread_mutex_lock(&emutls_mutex); }
 
 static __inline void emutls_unlock() { pthread_mutex_unlock(&emutls_mutex); }
+
+#else // __LOS__
+
+#include <los/memory.h>
+#include <los/process.h>
+
+typedef uintptr_t gcc_word;
+typedef void *gcc_pointer;
+
+static Mutex emutls_mutex;
+static uint8_t emutls_once;
+_Thread_local static void *emutls_specific;
+
+static __inline void emutls_memalign_free(void *base) { free_memory(base); }
+
+static __inline void *emutls_memalign_alloc(size_t align, size_t size) {
+  return allocate_memory(size, align);
+}
+
+static __inline void emutls_init_once(void) {
+  uint8_t ret;
+  uint8_t old = 0;
+  uint8_t new = 1;
+  asm volatile("lock cmpxchgb %2, %1"
+               : "=a"(ret), "+m"(emutls_once)
+               : "q"(new), "0"(old)
+               : "memory");
+
+  if (ret == 0)
+    emutls_mutex = create_mutex();
+}
+
+static __inline void emutls_lock() { lock_mutex(emutls_mutex); }
+
+static __inline void emutls_unlock() { unlock_mutex(emutls_mutex); }
+
+static __inline void emutls_setspecific(void *value) {
+  emutls_specific = value;
+}
+
+static __inline void *emutls_getspecific() { return emutls_specific; }
+
+#endif
 
 #else // _WIN32
 
