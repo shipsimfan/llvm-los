@@ -27,10 +27,9 @@ public:
   HostNativeProcessBase() : m_process(LLDB_INVALID_PROCESS) {}
   explicit HostNativeProcessBase(lldb::process_t process)
       : m_process(process) {}
-  virtual ~HostNativeProcessBase() {}
+  virtual ~HostNativeProcessBase() = default;
 
   virtual Status Terminate() = 0;
-  virtual Status GetMainModule(FileSpec &file_spec) const = 0;
 
   virtual lldb::pid_t GetProcessId() const = 0;
   virtual bool IsRunning() const = 0;

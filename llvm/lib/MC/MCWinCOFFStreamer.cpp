@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/MC/MCWinCOFFStreamer.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Triple.h"
@@ -27,14 +28,12 @@
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSymbolCOFF.h"
-#include "llvm/MC/MCWinCOFFStreamer.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
-#include <cassert>
 #include <cstdint>
 
 using namespace llvm;
@@ -66,18 +65,19 @@ void MCWinCOFFStreamer::emitInstToData(const MCInst &Inst,
   DF->getContents().append(Code.begin(), Code.end());
 }
 
-void MCWinCOFFStreamer::InitSections(bool NoExecStack) {
+void MCWinCOFFStreamer::initSections(bool NoExecStack,
+                                     const MCSubtargetInfo &STI) {
   // FIXME: this is identical to the ELF one.
   // This emulates the same behavior of GNU as. This makes it easier
   // to compare the output as the major sections are in the same order.
   SwitchSection(getContext().getObjectFileInfo()->getTextSection());
-  emitCodeAlignment(4);
+  emitCodeAlignment(4, &STI);
 
   SwitchSection(getContext().getObjectFileInfo()->getDataSection());
-  emitCodeAlignment(4);
+  emitCodeAlignment(4, &STI);
 
   SwitchSection(getContext().getObjectFileInfo()->getBSSSection());
-  emitCodeAlignment(4);
+  emitCodeAlignment(4, &STI);
 
   SwitchSection(getContext().getObjectFileInfo()->getTextSection());
 }
@@ -181,8 +181,7 @@ void MCWinCOFFStreamer::EndCOFFSymbolDef() {
 void MCWinCOFFStreamer::EmitCOFFSafeSEH(MCSymbol const *Symbol) {
   // SafeSEH is a feature specific to 32-bit x86.  It does not exist (and is
   // unnecessary) on all platforms which use table-based exception dispatch.
-  if (getContext().getObjectFileInfo()->getTargetTriple().getArch() !=
-      Triple::x86)
+  if (getContext().getTargetTriple().getArch() != Triple::x86)
     return;
 
   const MCSymbolCOFF *CSymbol = cast<MCSymbolCOFF>(Symbol);
@@ -266,7 +265,7 @@ void MCWinCOFFStreamer::emitCommonSymbol(MCSymbol *S, uint64_t Size,
                                          unsigned ByteAlignment) {
   auto *Symbol = cast<MCSymbolCOFF>(S);
 
-  const Triple &T = getContext().getObjectFileInfo()->getTargetTriple();
+  const Triple &T = getContext().getTargetTriple();
   if (T.isWindowsMSVCEnvironment()) {
     if (ByteAlignment > 32)
       report_fatal_error("alignment is limited to 32-bytes");

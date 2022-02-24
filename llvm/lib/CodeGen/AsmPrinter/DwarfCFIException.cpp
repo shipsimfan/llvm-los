@@ -33,8 +33,7 @@
 #include "llvm/Target/TargetOptions.h"
 using namespace llvm;
 
-DwarfCFIExceptionBase::DwarfCFIExceptionBase(AsmPrinter *A)
-    : EHStreamer(A), shouldEmitCFI(false), hasEmittedCFISections(false) {}
+DwarfCFIExceptionBase::DwarfCFIExceptionBase(AsmPrinter *A) : EHStreamer(A) {}
 
 void DwarfCFIExceptionBase::markFunctionEnd() {
   endFragment();
@@ -52,10 +51,9 @@ void DwarfCFIExceptionBase::endFragment() {
 }
 
 DwarfCFIException::DwarfCFIException(AsmPrinter *A)
-    : DwarfCFIExceptionBase(A), shouldEmitPersonality(false),
-      forceEmitPersonality(false), shouldEmitLSDA(false) {}
+    : DwarfCFIExceptionBase(A) {}
 
-DwarfCFIException::~DwarfCFIException() {}
+DwarfCFIException::~DwarfCFIException() = default;
 
 /// endModule - Emit all exception information that should come after the
 /// content.
@@ -120,8 +118,13 @@ void DwarfCFIException::beginFunction(const MachineFunction *MF) {
   shouldEmitLSDA = shouldEmitPersonality &&
     LSDAEncoding != dwarf::DW_EH_PE_omit;
 
-  shouldEmitCFI = MF->getMMI().getContext().getAsmInfo()->usesCFIForEH() &&
-                  (shouldEmitPersonality || shouldEmitMoves);
+  const MCAsmInfo &MAI = *MF->getMMI().getContext().getAsmInfo();
+  if (MAI.getExceptionHandlingType() != ExceptionHandling::None)
+    shouldEmitCFI =
+        MAI.usesCFIForEH() && (shouldEmitPersonality || shouldEmitMoves);
+  else
+    shouldEmitCFI = Asm->needsCFIForDebug() && shouldEmitMoves;
+
   beginFragment(&*MF->begin(), getExceptionSym);
 }
 

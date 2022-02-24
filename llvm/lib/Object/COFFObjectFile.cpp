@@ -25,7 +25,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/MemoryBufferRef.h"
 #include <algorithm>
 #include <cassert>
 #include <cinttypes>
@@ -328,7 +328,14 @@ bool COFFObjectFile::isSectionBSS(DataRefImpl Ref) const {
 
 // The .debug sections are the only debug sections for COFF
 // (\see MCObjectFileInfo.cpp).
-bool COFFObjectFile::isDebugSection(StringRef SectionName) const {
+bool COFFObjectFile::isDebugSection(DataRefImpl Ref) const {
+  Expected<StringRef> SectionNameOrErr = getSectionName(Ref);
+  if (!SectionNameOrErr) {
+    // TODO: Report the error message properly.
+    consumeError(SectionNameOrErr.takeError());
+    return false;
+  }
+  StringRef SectionName = SectionNameOrErr.get();
   return SectionName.startswith(".debug");
 }
 

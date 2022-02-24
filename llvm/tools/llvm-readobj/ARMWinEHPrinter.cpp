@@ -238,6 +238,33 @@ ErrorOr<SymbolRef> Decoder::getRelocatedSymbol(const COFFObjectFile &,
   return inconvertibleErrorCode();
 }
 
+SymbolRef Decoder::getPreferredSymbol(const COFFObjectFile &COFF, SymbolRef Sym,
+                                      uint64_t &SymbolOffset) {
+  // The symbol resolved by getRelocatedSymbol can be any internal
+  // nondescriptive symbol; try to resolve a more descriptive one.
+  COFFSymbolRef CoffSym = COFF.getCOFFSymbol(Sym);
+  if (CoffSym.getStorageClass() != COFF::IMAGE_SYM_CLASS_LABEL &&
+      CoffSym.getSectionDefinition() == nullptr)
+    return Sym;
+  for (const auto &S : COFF.symbols()) {
+    COFFSymbolRef CS = COFF.getCOFFSymbol(S);
+    if (CS.getSectionNumber() == CoffSym.getSectionNumber() &&
+        CS.getValue() <= CoffSym.getValue() + SymbolOffset &&
+        CS.getStorageClass() != COFF::IMAGE_SYM_CLASS_LABEL &&
+        CS.getSectionDefinition() == nullptr) {
+      uint32_t Offset = CoffSym.getValue() + SymbolOffset - CS.getValue();
+      if (Offset <= SymbolOffset) {
+        SymbolOffset = Offset;
+        Sym = S;
+        CoffSym = CS;
+        if (CS.isExternal() && SymbolOffset == 0)
+          return Sym;
+      }
+    }
+  }
+  return Sym;
+}
+
 ErrorOr<SymbolRef> Decoder::getSymbolForLocation(
     const COFFObjectFile &COFF, const SectionRef &Section,
     uint64_t OffsetInSection, uint64_t ImmediateOffset, uint64_t &SymbolAddress,
@@ -255,12 +282,14 @@ ErrorOr<SymbolRef> Decoder::getSymbolForLocation(
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
       logAllUnhandledErrors(AddressOrErr.takeError(), OS);
-      OS.flush();
-      report_fatal_error(Buf);
+      report_fatal_error(Twine(OS.str()));
     }
     // We apply SymbolOffset here directly. We return it separately to allow
     // the caller to print it as an offset on the symbol name.
     SymbolAddress = *AddressOrErr + SymbolOffset;
+
+    if (FunctionOnly) // Resolve label/section symbols into function names.
+      SymOrErr = getPreferredSymbol(COFF, *SymOrErr, SymbolOffset);
   } else {
     // No matching relocation found; operating on a linked image. Try to
     // find a descriptive symbol if possible. The immediate offset contains
@@ -976,8 +1005,7 @@ bool Decoder::dumpXDataRecord(const COFFObjectFile &COFF,
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
       logAllUnhandledErrors(Name.takeError(), OS);
-      OS.flush();
-      report_fatal_error(Buf);
+      report_fatal_error(Twine(OS.str()));
     }
 
     ListScope EHS(SW, "ExceptionHandler");
@@ -1016,8 +1044,7 @@ bool Decoder::dumpUnpackedEntry(const COFFObjectFile &COFF,
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
       logAllUnhandledErrors(FunctionNameOrErr.takeError(), OS);
-      OS.flush();
-      report_fatal_error(Buf);
+      report_fatal_error(Twine(OS.str()));
     }
     FunctionName = *FunctionNameOrErr;
   }
@@ -1031,8 +1058,7 @@ bool Decoder::dumpUnpackedEntry(const COFFObjectFile &COFF,
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
       logAllUnhandledErrors(Name.takeError(), OS);
-      OS.flush();
-      report_fatal_error(Buf);
+      report_fatal_error(Twine(OS.str()));
     }
 
     SW.printString("ExceptionRecord",
@@ -1077,8 +1103,7 @@ bool Decoder::dumpPackedEntry(const object::COFFObjectFile &COFF,
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
       logAllUnhandledErrors(FunctionNameOrErr.takeError(), OS);
-      OS.flush();
-      report_fatal_error(Buf);
+      report_fatal_error(Twine(OS.str()));
     }
     FunctionName = *FunctionNameOrErr;
   }
@@ -1119,8 +1144,7 @@ bool Decoder::dumpPackedARM64Entry(const object::COFFObjectFile &COFF,
       std::string Buf;
       llvm::raw_string_ostream OS(Buf);
       logAllUnhandledErrors(FunctionNameOrErr.takeError(), OS);
-      OS.flush();
-      report_fatal_error(Buf);
+      report_fatal_error(Twine(OS.str()));
     }
     FunctionName = *FunctionNameOrErr;
   }

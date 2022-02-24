@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 // UNSUPPORTED: c++03, c++11, c++14, c++17
-// XFAIL: LIBCXX-DEBUG-FIXME
+
+// AppleClang 12.0.0 doesn't fully support ranges/concepts
+// XFAIL: apple-clang-12.0.0
 
 // <span>
 

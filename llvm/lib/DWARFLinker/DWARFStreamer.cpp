@@ -21,13 +21,14 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/MCTargetOptionsCommandFlags.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/LEB128.h"
-#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetOptions.h"
 
 namespace llvm {
 
-bool DwarfStreamer::init(Triple TheTriple) {
+bool DwarfStreamer::init(Triple TheTriple,
+                         StringRef Swift5ReflectionSegmentName) {
   std::string ErrorStr;
   std::string TripleName;
   StringRef Context = "dwarf streamer init";
@@ -50,13 +51,14 @@ bool DwarfStreamer::init(Triple TheTriple) {
   if (!MAI)
     return error("no asm info for target " + TripleName, Context), false;
 
-  MOFI.reset(new MCObjectFileInfo);
-  MC.reset(new MCContext(MAI.get(), MRI.get(), MOFI.get()));
-  MOFI->InitMCObjectFileInfo(TheTriple, /*PIC*/ false, *MC);
-
   MSTI.reset(TheTarget->createMCSubtargetInfo(TripleName, "", ""));
   if (!MSTI)
     return error("no subtarget info for target " + TripleName, Context), false;
+
+  MC.reset(new MCContext(TheTriple, MAI.get(), MRI.get(), MSTI.get(), nullptr,
+                         nullptr, true, Swift5ReflectionSegmentName));
+  MOFI.reset(TheTarget->createMCObjectFileInfo(*MC, /*PIC=*/false, false));
+  MC->setObjectFileInfo(MOFI.get());
 
   MAB = TheTarget->createMCAsmBackend(*MSTI, *MRI, MCOptions);
   if (!MAB)
@@ -66,7 +68,7 @@ bool DwarfStreamer::init(Triple TheTriple) {
   if (!MII)
     return error("no instr info info for target " + TripleName, Context), false;
 
-  MCE = TheTarget->createMCCodeEmitter(*MII, *MRI, *MC);
+  MCE = TheTarget->createMCCodeEmitter(*MII, *MC);
   if (!MCE)
     return error("no code emitter for target " + TripleName, Context), false;
 
@@ -212,7 +214,7 @@ void DwarfStreamer::emitPaperTrailWarningsDie(DIE &Die) {
   Asm.emitInt32(11 + Die.getSize() - 4);
   Asm.emitInt16(2);
   Asm.emitInt32(0);
-  Asm.emitInt8(MOFI->getTargetTriple().isArch64Bit() ? 8 : 4);
+  Asm.emitInt8(MC->getTargetTriple().isArch64Bit() ? 8 : 4);
   DebugInfoSectionSize += 11;
   emitDIE(Die);
 }
@@ -299,6 +301,18 @@ void DwarfStreamer::emitSwiftAST(StringRef Buffer) {
   MCSection *SwiftASTSection = MOFI->getDwarfSwiftASTSection();
   SwiftASTSection->setAlignment(Align(32));
   MS->SwitchSection(SwiftASTSection);
+  MS->emitBytes(Buffer);
+}
+
+void DwarfStreamer::emitSwiftReflectionSection(
+    llvm::binaryformat::Swift5ReflectionSectionKind ReflSectionKind,
+    StringRef Buffer, uint32_t Alignment, uint32_t Size) {
+  MCSection *ReflectionSection =
+      MOFI->getSwift5ReflectionSection(ReflSectionKind);
+  if (ReflectionSection == nullptr)
+    return;
+  ReflectionSection->setAlignment(Align(Alignment));
+  MS->SwitchSection(ReflectionSection);
   MS->emitBytes(Buffer);
 }
 
@@ -531,9 +545,7 @@ void DwarfStreamer::emitLineTableForUnit(MCDwarfLineTableParams Params,
 
   unsigned RowsSinceLastSequence = 0;
 
-  for (unsigned Idx = 0; Idx < Rows.size(); ++Idx) {
-    auto &Row = Rows[Idx];
-
+  for (DWARFDebugLine::Row &Row : Rows) {
     int64_t AddressDelta;
     if (Address == -1ULL) {
       MS->emitIntValue(dwarf::DW_LNS_extended_op, 1);

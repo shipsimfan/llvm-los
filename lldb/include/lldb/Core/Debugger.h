@@ -9,7 +9,7 @@
 #ifndef LLDB_CORE_DEBUGGER_H
 #define LLDB_CORE_DEBUGGER_H
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <memory>
 #include <vector>
@@ -42,9 +42,9 @@
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/Threading.h"
 
-#include <assert.h>
-#include <stddef.h>
-#include <stdio.h>
+#include <cassert>
+#include <cstddef>
+#include <cstdio>
 
 namespace llvm {
 class raw_ostream;
@@ -176,7 +176,13 @@ public:
 
   repro::DataRecorder *GetInputRecorder();
 
-  void SetInputFile(lldb::FileSP file, repro::DataRecorder *recorder = nullptr);
+  Status SetInputString(const char *data);
+
+  // This method will setup data recorder if reproducer enabled.
+  // On reply mode this method should take instructions from reproducer file.
+  Status SetInputFile(lldb::FileSP file);
+
+  void SetInputFile(lldb::FileSP file, repro::DataRecorder *recorder);
 
   void SetOutputFile(lldb::FileSP file);
 
@@ -300,6 +306,10 @@ public:
 
   bool SetScriptLanguage(lldb::ScriptLanguage script_lang);
 
+  lldb::LanguageType GetREPLLanguage() const;
+
+  bool SetREPLLanguage(lldb::LanguageType repl_lang);
+
   uint32_t GetTerminalWidth() const;
 
   bool SetTerminalWidth(uint32_t term_width);
@@ -419,7 +429,7 @@ protected:
   /// \param [in] debugger_id
   ///   If this optional parameter has a value, it indicates the unique
   ///   debugger identifier that this progress should be delivered to. If this
-  ///   optional parameter does not have a value, the the progress will be
+  ///   optional parameter does not have a value, the progress will be
   ///   delivered to all debuggers.
   static void ReportProgress(uint64_t progress_id, const std::string &message,
                              uint64_t completed, uint64_t total,
@@ -428,8 +438,6 @@ protected:
   bool StartEventHandlerThread();
 
   void StopEventHandlerThread();
-
-  static lldb::thread_result_t EventHandlerThread(lldb::thread_arg_t arg);
 
   void PushIOHandler(const lldb::IOHandlerSP &reader_sp,
                      bool cancel_top_handler = true);
@@ -444,9 +452,9 @@ protected:
 
   void JoinIOHandlerThread();
 
-  static lldb::thread_result_t IOHandlerThread(lldb::thread_arg_t arg);
+  lldb::thread_result_t IOHandlerThread();
 
-  void DefaultEventHandler();
+  lldb::thread_result_t DefaultEventHandler();
 
   void HandleBreakpointEvent(const lldb::EventSP &event_sp);
 

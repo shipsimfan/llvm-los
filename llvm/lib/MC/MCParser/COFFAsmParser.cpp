@@ -13,11 +13,8 @@
 #include "llvm/BinaryFormat/COFF.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDirectives.h"
-#include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCAsmParserExtension.h"
-#include "llvm/MC/MCParser/MCTargetAsmParser.h"
-#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSectionCOFF.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/SectionKind.h"
@@ -403,7 +400,7 @@ bool COFFAsmParser::ParseDirectiveSection(StringRef, SMLoc) {
 
   SectionKind Kind = computeSectionKind(Flags);
   if (Kind.isText()) {
-    const Triple &T = getContext().getObjectFileInfo()->getTargetTriple();
+    const Triple &T = getContext().getTargetTriple();
     if (T.getArch() == Triple::arm || T.getArch() == Triple::thumb)
       Flags |= COFF::IMAGE_SCN_MEM_16BIT;
   }

@@ -26,9 +26,9 @@ namespace llvm {
 
 class MachineFrameInfo;
 class MachineFunction;
-class TargetRegisterClass;
 class SIMachineFunctionInfo;
 class SIRegisterInfo;
+class TargetRegisterClass;
 
 class AMDGPUPseudoSourceValue : public PseudoSourceValue {
 public:
@@ -289,10 +289,12 @@ struct SIMachineFunctionInfo final : public yaml::MachineFunctionInfo {
 
   Optional<SIArgumentInfo> ArgInfo;
   SIMode Mode;
+  Optional<FrameIndex> ScavengeFI;
 
   SIMachineFunctionInfo() = default;
   SIMachineFunctionInfo(const llvm::SIMachineFunctionInfo &,
-                        const TargetRegisterInfo &TRI);
+                        const TargetRegisterInfo &TRI,
+                        const llvm::MachineFunction &MF);
 
   void mappingImpl(yaml::IO &YamlIO) override;
   ~SIMachineFunctionInfo() = default;
@@ -322,6 +324,7 @@ template <> struct MappingTraits<SIMachineFunctionInfo> {
     YamlIO.mapOptional("highBitsOf32BitAddress",
                        MFI.HighBitsOf32BitAddress, 0u);
     YamlIO.mapOptional("occupancy", MFI.Occupancy, 0);
+    YamlIO.mapOptional("scavengeFI", MFI.ScavengeFI);
   }
 };
 
@@ -418,6 +421,9 @@ private:
   // Pointer to where the ABI inserts special kernel arguments separate from the
   // user arguments. This is an offset from the KernargSegmentPtr.
   bool ImplicitArgPtr : 1;
+  bool HostcallPtr : 1;
+
+  bool MayNeedAGPRs : 1;
 
   // The hard-wired high half of the address of the global information table
   // for AMDPAL OS type. 0xffffffff represents no hard-wired high half, since
@@ -429,6 +435,8 @@ private:
 
   // Current recorded maximum possible occupancy.
   unsigned Occupancy;
+
+  mutable Optional<bool> UsesAGPRs;
 
   MCPhysReg getNextUserSGPR() const;
 
@@ -460,6 +468,7 @@ public:
   struct VGPRSpillToAGPR {
     SmallVector<MCPhysReg, 32> Lanes;
     bool FullyAllocated = false;
+    bool IsDead = false;
   };
 
   // Map WWM VGPR to a stack slot that is used to save/restore it in the
@@ -496,13 +505,15 @@ public: // FIXME
   Register SGPRForBPSaveRestoreCopy;
   Optional<int> BasePointerSaveIndex;
 
-  Register VGPRReservedForSGPRSpill;
   bool isCalleeSavedReg(const MCPhysReg *CSRegs, MCPhysReg Reg);
 
 public:
   SIMachineFunctionInfo(const MachineFunction &MF);
 
-  bool initializeBaseYamlFields(const yaml::SIMachineFunctionInfo &YamlMFI);
+  bool initializeBaseYamlFields(const yaml::SIMachineFunctionInfo &YamlMFI,
+                                const MachineFunction &MF,
+                                PerFunctionMIParsingState &PFS,
+                                SMDiagnostic &Error, SMRange &SourceRange);
 
   void reserveWWMRegister(Register Reg, Optional<int> FI) {
     WWMReservedRegs.insert(std::make_pair(Reg, FI));
@@ -519,7 +530,6 @@ public:
   void setSGPRSpillVGPRs(Register NewVGPR, Optional<int> newFI, int Index) {
     SpillVGPRs[Index].VGPR = NewVGPR;
     SpillVGPRs[Index].FI = newFI;
-    VGPRReservedForSGPRSpill = NewVGPR;
   }
 
   bool removeVGPRForSGPRSpill(Register ReservedVGPR, MachineFunction &MF);
@@ -538,14 +548,24 @@ public:
                                          : I->second.Lanes[Lane];
   }
 
+  void setVGPRToAGPRSpillDead(int FrameIndex) {
+    auto I = VGPRToAGPRSpills.find(FrameIndex);
+    if (I != VGPRToAGPRSpills.end())
+      I->second.IsDead = true;
+  }
+
   bool haveFreeLanesForSGPRSpill(const MachineFunction &MF,
                                  unsigned NumLane) const;
   bool allocateSGPRSpillToVGPR(MachineFunction &MF, int FI);
-  bool reserveVGPRforSGPRSpills(MachineFunction &MF);
   bool allocateVGPRSpillToAGPR(MachineFunction &MF, int FI, bool isAGPRtoVGPR);
-  void removeDeadFrameIndices(MachineFrameInfo &MFI);
+
+  /// If \p ResetSGPRSpillStackIDs is true, reset the stack ID from sgpr-spill
+  /// to the default stack.
+  bool removeDeadFrameIndices(MachineFrameInfo &MFI,
+                              bool ResetSGPRSpillStackIDs);
 
   int getScavengeFI(MachineFrameInfo &MFI, const SIRegisterInfo &TRI);
+  Optional<int> getOptionalScavengeFI() const { return ScavengeFI; }
 
   bool hasCalculatedTID() const { return TIDReg != 0; };
   Register getTIDReg() const { return TIDReg; };
@@ -675,6 +695,10 @@ public:
 
   bool hasImplicitArgPtr() const {
     return ImplicitArgPtr;
+  }
+
+  bool hasHostcallPtr() const {
+    return HostcallPtr;
   }
 
   bool hasImplicitBufferPtr() const {
@@ -939,6 +963,17 @@ public:
       Occupancy = Limit;
     limitOccupancy(MF);
   }
+
+  bool mayNeedAGPRs() const {
+    return MayNeedAGPRs;
+  }
+
+  // \returns true if a function has a use of AGPRs via inline asm or
+  // has a call which may use it.
+  bool mayUseAGPRs(const MachineFunction &MF) const;
+
+  // \returns true if a function needs or may need AGPRs.
+  bool usesAGPRs(const MachineFunction &MF) const;
 };
 
 } // end namespace llvm
