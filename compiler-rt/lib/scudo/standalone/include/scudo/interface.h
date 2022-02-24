@@ -120,7 +120,7 @@ size_t __scudo_get_ring_buffer_size();
 
 // Tune the allocator's choice of memory tags to make it more likely that
 // a certain class of memory errors will be detected. The value argument should
-// be one of the M_MEMTAG_TUNING_* constants below.
+// be one of the enumerators of the scudo_memtag_tuning enum below.
 #ifndef M_MEMTAG_TUNING
 #define M_MEMTAG_TUNING -102
 #endif
@@ -145,15 +145,13 @@ size_t __scudo_get_ring_buffer_size();
 #define M_TSDS_COUNT_MAX -202
 #endif
 
-// Tune for buffer overflows.
-#ifndef M_MEMTAG_TUNING_BUFFER_OVERFLOW
-#define M_MEMTAG_TUNING_BUFFER_OVERFLOW 0
-#endif
+enum scudo_memtag_tuning {
+  // Tune for buffer overflows.
+  M_MEMTAG_TUNING_BUFFER_OVERFLOW,
 
-// Tune for use-after-free.
-#ifndef M_MEMTAG_TUNING_UAF
-#define M_MEMTAG_TUNING_UAF 1
-#endif
+  // Tune for use-after-free.
+  M_MEMTAG_TUNING_UAF,
+};
 
 } // extern "C"
 

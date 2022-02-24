@@ -40,7 +40,7 @@ void testInvalidation(Root *obj) {
 }
 @end
 
-struct S makeS(void);
+struct S makeS();
 
 @implementation ManyIvars
 

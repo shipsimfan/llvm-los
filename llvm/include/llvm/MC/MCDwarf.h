@@ -19,12 +19,13 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/MC/StringTableBuilder.h"
+#include "llvm/MC/MCSection.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/MD5.h"
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -33,8 +34,8 @@ namespace llvm {
 template <typename T> class ArrayRef;
 class MCAsmBackend;
 class MCContext;
+class MCDwarfLineStr;
 class MCObjectStreamer;
-class MCSection;
 class MCStreamer;
 class MCSymbol;
 class raw_ostream;
@@ -45,24 +46,6 @@ namespace mcdwarf {
 // Emit the common part of the DWARF 5 range/locations list tables header.
 MCSymbol *emitListsTableHeaderStart(MCStreamer &S);
 } // namespace mcdwarf
-
-/// Manage the .debug_line_str section contents, if we use it.
-class MCDwarfLineStr {
-  MCSymbol *LineStrLabel = nullptr;
-  StringTableBuilder LineStrings{StringTableBuilder::DWARF};
-  bool UseRelocs = false;
-
-public:
-  /// Construct an instance that can emit .debug_line_str (for use in a normal
-  /// v5 line table).
-  explicit MCDwarfLineStr(MCContext &Ctx);
-
-  /// Emit a reference to the string.
-  void emitRef(MCStreamer *MCOS, StringRef Path);
-
-  /// Emit the .debug_line_str section if appropriate.
-  void emitSection(MCStreamer *MCOS);
-};
 
 /// Instances of this class represent the name of the dwarf .file directive and
 /// its associated dwarf file number in the MC file. MCDwarfFile's are created
@@ -187,15 +170,6 @@ public:
 
   MCSymbol *getLabel() const { return Label; }
 
-  // This indicates the line entry is synthesized for an end entry.
-  bool IsEndEntry = false;
-
-  // Override the label with the given EndLabel.
-  void setEndLabel(MCSymbol *EndLabel) {
-    Label = EndLabel;
-    IsEndEntry = true;
-  }
-
   // This is called when an instruction is assembled into the specified
   // section and if there is information from the last .loc directive that
   // has yet to have a line entry made for it is made.
@@ -212,10 +186,6 @@ public:
   void addLineEntry(const MCDwarfLineEntry &LineEntry, MCSection *Sec) {
     MCLineDivisions[Sec].push_back(LineEntry);
   }
-
-  // Add an end entry by cloning the last entry, if exists, for the section
-  // the given EndLabel belongs to. The label is replaced by the given EndLabel.
-  void addEndEntry(MCSymbol *EndLabel);
 
   using MCDwarfLineEntryCollection = std::vector<MCDwarfLineEntry>;
   using iterator = MCDwarfLineEntryCollection::iterator;
@@ -347,11 +317,6 @@ public:
   void emitCU(MCStreamer *MCOS, MCDwarfLineTableParams Params,
               Optional<MCDwarfLineStr> &LineStr) const;
 
-  // This emits a single line table associated with a given Section.
-  static void
-  emitOne(MCStreamer *MCOS, MCSection *Section,
-          const MCLineSection::MCDwarfLineEntryCollection &LineEntries);
-
   Expected<unsigned> tryGetFile(StringRef &Directory, StringRef &FileName,
                                 Optional<MD5::MD5Result> Checksum,
                                 Optional<StringRef> Source,
@@ -422,6 +387,13 @@ public:
   static void Encode(MCContext &Context, MCDwarfLineTableParams Params,
                      int64_t LineDelta, uint64_t AddrDelta, raw_ostream &OS);
 
+  /// Utility function to encode a Dwarf pair of LineDelta and AddrDeltas using
+  /// fixed length operands. Returns (Offset, Size, SetDelta).
+  static std::tuple<uint32_t, uint32_t, bool> fixedEncode(MCContext &Context,
+                                                          int64_t LineDelta,
+                                                          uint64_t AddrDelta,
+                                                          raw_ostream &OS);
+
   /// Utility function to emit the encoding to a streamer.
   static void Emit(MCStreamer *MCOS, MCDwarfLineTableParams Params,
                    int64_t LineDelta, uint64_t AddrDelta);
@@ -473,7 +445,6 @@ public:
     OpRememberState,
     OpRestoreState,
     OpOffset,
-    OpLLVMDefAspaceCfa,
     OpDefCfaRegister,
     OpDefCfaOffset,
     OpDefCfa,
@@ -496,7 +467,6 @@ private:
     int Offset;
     unsigned Register2;
   };
-  unsigned AddressSpace;
   std::vector<char> Values;
   std::string Comment;
 
@@ -504,17 +474,12 @@ private:
                    StringRef Comment = "")
       : Operation(Op), Label(L), Register(R), Offset(O),
         Values(V.begin(), V.end()), Comment(Comment) {
-    assert(Op != OpRegister && Op != OpLLVMDefAspaceCfa);
+    assert(Op != OpRegister);
   }
 
   MCCFIInstruction(OpType Op, MCSymbol *L, unsigned R1, unsigned R2)
       : Operation(Op), Label(L), Register(R1), Register2(R2) {
     assert(Op == OpRegister);
-  }
-
-  MCCFIInstruction(OpType Op, MCSymbol *L, unsigned R, int O, unsigned AS)
-      : Operation(Op), Label(L), Register(R), Offset(O), AddressSpace(AS) {
-    assert(Op == OpLLVMDefAspaceCfa);
   }
 
 public:
@@ -543,17 +508,6 @@ public:
   /// offset.
   static MCCFIInstruction createAdjustCfaOffset(MCSymbol *L, int Adjustment) {
     return MCCFIInstruction(OpAdjustCfaOffset, L, 0, Adjustment, "");
-  }
-
-  // FIXME: Update the remaining docs to use the new proposal wording.
-  /// .cfi_llvm_def_aspace_cfa defines the rule for computing the CFA to
-  /// be the result of evaluating the DWARF operation expression
-  /// `DW_OP_constu AS; DW_OP_aspace_bregx R, B` as a location description.
-  static MCCFIInstruction createLLVMDefAspaceCfa(MCSymbol *L, unsigned Register,
-                                                 int Offset,
-                                                 unsigned AddressSpace) {
-    return MCCFIInstruction(OpLLVMDefAspaceCfa, L, Register, Offset,
-                            AddressSpace);
   }
 
   /// .cfi_offset Previous value of Register is saved at offset Offset
@@ -636,8 +590,7 @@ public:
     assert(Operation == OpDefCfa || Operation == OpOffset ||
            Operation == OpRestore || Operation == OpUndefined ||
            Operation == OpSameValue || Operation == OpDefCfaRegister ||
-           Operation == OpRelOffset || Operation == OpRegister ||
-           Operation == OpLLVMDefAspaceCfa);
+           Operation == OpRelOffset || Operation == OpRegister);
     return Register;
   }
 
@@ -646,16 +599,10 @@ public:
     return Register2;
   }
 
-  unsigned getAddressSpace() const {
-    assert(Operation == OpLLVMDefAspaceCfa);
-    return AddressSpace;
-  }
-
   int getOffset() const {
     assert(Operation == OpDefCfa || Operation == OpOffset ||
            Operation == OpRelOffset || Operation == OpDefCfaOffset ||
-           Operation == OpAdjustCfaOffset || Operation == OpGnuArgsSize ||
-           Operation == OpLLVMDefAspaceCfa);
+           Operation == OpAdjustCfaOffset || Operation == OpGnuArgsSize);
     return Offset;
   }
 
@@ -695,7 +642,8 @@ public:
   static void Emit(MCObjectStreamer &streamer, MCAsmBackend *MAB, bool isEH);
   static void EmitAdvanceLoc(MCObjectStreamer &Streamer, uint64_t AddrDelta);
   static void EncodeAdvanceLoc(MCContext &Context, uint64_t AddrDelta,
-                               raw_ostream &OS);
+                               raw_ostream &OS, uint32_t *Offset = nullptr,
+                               uint32_t *Size = nullptr);
 };
 
 } // end namespace llvm

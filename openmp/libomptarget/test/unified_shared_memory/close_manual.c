@@ -1,7 +1,5 @@
 // RUN: %libomptarget-compile-run-and-check-generic
 
-// REQUIRES: unified_shared_memory
-
 #include <omp.h>
 #include <stdio.h>
 

@@ -1,4 +1,4 @@
-//===----------------------------------------------------------------------===//
+//===------------------------- cxa_exception.cpp --------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -241,11 +241,10 @@ readSLEB128(const uint8_t** data)
 /// @link http://dwarfstd.org/Dwarf3.pdf @unlink
 /// @param data reference variable holding memory pointer to decode from
 /// @param encoding dwarf encoding type
-/// @param base for adding relative offset, default to 0
 /// @returns decoded value
 static
 uintptr_t
-readEncodedPointer(const uint8_t** data, uint8_t encoding, uintptr_t base = 0)
+readEncodedPointer(const uint8_t** data, uint8_t encoding)
 {
     uintptr_t result = 0;
     if (encoding == DW_EH_PE_omit)
@@ -296,12 +295,8 @@ readEncodedPointer(const uint8_t** data, uint8_t encoding, uintptr_t base = 0)
         if (result)
             result += (uintptr_t)(*data);
         break;
-    case DW_EH_PE_datarel:
-        assert((base != 0) && "DW_EH_PE_datarel is invalid with a base of 0");
-        if (result)
-            result += base;
-        break;
     case DW_EH_PE_textrel:
+    case DW_EH_PE_datarel:
     case DW_EH_PE_funcrel:
     case DW_EH_PE_aligned:
     default:
@@ -353,7 +348,7 @@ static const void* read_target2_value(const void* ptr)
 static const __shim_type_info*
 get_shim_type_info(uint64_t ttypeIndex, const uint8_t* classInfo,
                    uint8_t ttypeEncoding, bool native_exception,
-                   _Unwind_Exception* unwind_exception, uintptr_t /*base*/ = 0)
+                   _Unwind_Exception* unwind_exception)
 {
     if (classInfo == 0)
     {
@@ -376,7 +371,7 @@ static
 const __shim_type_info*
 get_shim_type_info(uint64_t ttypeIndex, const uint8_t* classInfo,
                    uint8_t ttypeEncoding, bool native_exception,
-                   _Unwind_Exception* unwind_exception, uintptr_t base = 0)
+                   _Unwind_Exception* unwind_exception)
 {
     if (classInfo == 0)
     {
@@ -405,8 +400,7 @@ get_shim_type_info(uint64_t ttypeIndex, const uint8_t* classInfo,
         call_terminate(native_exception, unwind_exception);
     }
     classInfo -= ttypeIndex;
-    return (const __shim_type_info*)readEncodedPointer(&classInfo,
-                                                       ttypeEncoding, base);
+    return (const __shim_type_info*)readEncodedPointer(&classInfo, ttypeEncoding);
 }
 #endif // !defined(_LIBCXXABI_ARM_EHABI)
 
@@ -424,8 +418,7 @@ static
 bool
 exception_spec_can_catch(int64_t specIndex, const uint8_t* classInfo,
                          uint8_t ttypeEncoding, const __shim_type_info* excpType,
-                         void* adjustedPtr, _Unwind_Exception* unwind_exception,
-                         uintptr_t /*base*/ = 0)
+                         void* adjustedPtr, _Unwind_Exception* unwind_exception)
 {
     if (classInfo == 0)
     {
@@ -470,8 +463,7 @@ static
 bool
 exception_spec_can_catch(int64_t specIndex, const uint8_t* classInfo,
                          uint8_t ttypeEncoding, const __shim_type_info* excpType,
-                         void* adjustedPtr, _Unwind_Exception* unwind_exception,
-                         uintptr_t base = 0)
+                         void* adjustedPtr, _Unwind_Exception* unwind_exception)
 {
     if (classInfo == 0)
     {
@@ -493,8 +485,7 @@ exception_spec_can_catch(int64_t specIndex, const uint8_t* classInfo,
                                                                classInfo,
                                                                ttypeEncoding,
                                                                true,
-                                                               unwind_exception,
-                                                               base);
+                                                               unwind_exception);
         void* tempPtr = adjustedPtr;
         if (catchType->can_catch(excpType, tempPtr))
             return false;
@@ -540,9 +531,6 @@ set_registers(_Unwind_Exception* unwind_exception, _Unwind_Context* context,
 {
 #if defined(__USING_SJLJ_EXCEPTIONS__)
 #define __builtin_eh_return_data_regno(regno) regno
-#elif defined(__ibmxl__)
-// IBM xlclang++ compiler does not support __builtin_eh_return_data_regno.
-#define __builtin_eh_return_data_regno(regno) regno + 3
 #endif
   _Unwind_SetGR(context, __builtin_eh_return_data_regno(0),
                 reinterpret_cast<uintptr_t>(unwind_exception));
@@ -622,11 +610,6 @@ static void scan_eh_tab(scan_results &results, _Unwind_Action actions,
         return;
     }
     results.languageSpecificData = lsda;
-#if defined(_AIX)
-    uintptr_t base = _Unwind_GetDataRelBase(context);
-#else
-    uintptr_t base = 0;
-#endif
     // Get the current instruction pointer and offset it before next
     // instruction in the current frame which threw the exception.
     uintptr_t ip = _Unwind_GetIP(context) - 1;
@@ -651,8 +634,7 @@ static void scan_eh_tab(scan_results &results, _Unwind_Action actions,
     //       dwarf emission
     // Parse LSDA header.
     uint8_t lpStartEncoding = *lsda++;
-    const uint8_t* lpStart =
-        (const uint8_t*)readEncodedPointer(&lsda, lpStartEncoding, base);
+    const uint8_t* lpStart = (const uint8_t*)readEncodedPointer(&lsda, lpStartEncoding);
     if (lpStart == 0)
         lpStart = (const uint8_t*)funcStart;
     uint8_t ttypeEncoding = *lsda++;
@@ -702,10 +684,10 @@ static void scan_eh_tab(scan_results &results, _Unwind_Action actions,
                 return;
             }
             landingPad = (uintptr_t)lpStart + landingPad;
+            results.landingPad = landingPad;
 #else  // __USING_SJLJ_EXCEPTIONS__
             ++landingPad;
 #endif // __USING_SJLJ_EXCEPTIONS__
-            results.landingPad = landingPad;
             if (actionEntry == 0)
             {
                 // Found a cleanup
@@ -729,8 +711,7 @@ static void scan_eh_tab(scan_results &results, _Unwind_Action actions,
                     const __shim_type_info* catchType =
                         get_shim_type_info(static_cast<uint64_t>(ttypeIndex),
                                            classInfo, ttypeEncoding,
-                                           native_exception, unwind_exception,
-                                           base);
+                                           native_exception, unwind_exception);
                     if (catchType == 0)
                     {
                         // Found catch (...) catches everything, including
@@ -791,8 +772,7 @@ static void scan_eh_tab(scan_results &results, _Unwind_Action actions,
                         }
                         if (exception_spec_can_catch(ttypeIndex, classInfo,
                                                      ttypeEncoding, excpType,
-                                                     adjustedPtr,
-                                                     unwind_exception, base))
+                                                     adjustedPtr, unwind_exception))
                         {
                             // Native exception caught by exception
                             // specification.
@@ -931,15 +911,6 @@ __gxx_personality_v0
 
         // Jump to the handler.
         set_registers(unwind_exception, context, results);
-        // Cache base for calculating the address of ttype in
-        // __cxa_call_unexpected.
-        if (results.ttypeIndex < 0) {
-#if defined(_AIX)
-          exception_header->catchTemp = (void *)_Unwind_GetDataRelBase(context);
-#else
-          exception_header->catchTemp = 0;
-#endif
-        }
         return _URC_INSTALL_CONTEXT;
     }
 
@@ -969,16 +940,6 @@ __gxx_personality_v0
     assert(actions & _UA_CLEANUP_PHASE);
     assert(results.reason == _URC_HANDLER_FOUND);
     set_registers(unwind_exception, context, results);
-    // Cache base for calculating the address of ttype in __cxa_call_unexpected.
-    if (results.ttypeIndex < 0) {
-      __cxa_exception* exception_header =
-            (__cxa_exception*)(unwind_exception + 1) - 1;
-#if defined(_AIX)
-      exception_header->catchTemp = (void *)_Unwind_GetDataRelBase(context);
-#else
-      exception_header->catchTemp = 0;
-#endif
-    }
     return _URC_INSTALL_CONTEXT;
 }
 
@@ -1004,14 +965,9 @@ extern "C" _Unwind_Reason_Code __gnu_unwind_frame(_Unwind_Exception*,
 static _Unwind_Reason_Code continue_unwind(_Unwind_Exception* unwind_exception,
                                            _Unwind_Context* context)
 {
-  switch (__gnu_unwind_frame(unwind_exception, context)) {
-  case _URC_OK:
+    if (__gnu_unwind_frame(unwind_exception, context) != _URC_OK)
+        return _URC_FAILURE;
     return _URC_CONTINUE_UNWIND;
-  case _URC_END_OF_STACK:
-    return _URC_END_OF_STACK;
-  default:
-    return _URC_FAILURE;
-  }
 }
 
 // ARM register names
@@ -1114,14 +1070,7 @@ __gxx_personality_v0(_Unwind_State state,
         // Either we didn't do a phase 1 search (due to forced unwinding), or
         //  phase 1 reported no catching-handlers.
         // Search for a (non-catching) cleanup
-        if (is_force_unwinding)
-          scan_eh_tab(
-              results,
-              static_cast<_Unwind_Action>(_UA_CLEANUP_PHASE | _UA_FORCE_UNWIND),
-              native_exception, unwind_exception, context);
-        else
-          scan_eh_tab(results, _UA_CLEANUP_PHASE, native_exception,
-                      unwind_exception, context);
+        scan_eh_tab(results, _UA_CLEANUP_PHASE, native_exception, unwind_exception, context);
         if (results.reason == _URC_HANDLER_FOUND)
         {
             // Found a non-catching handler
@@ -1165,8 +1114,6 @@ __cxa_call_unexpected(void* arg)
     __cxa_exception* old_exception_header = 0;
     int64_t ttypeIndex;
     const uint8_t* lsda;
-    uintptr_t base = 0;
-
     if (native_old_exception)
     {
         old_exception_header = (__cxa_exception*)(unwind_exception+1) - 1;
@@ -1180,7 +1127,6 @@ __cxa_call_unexpected(void* arg)
 #else
         ttypeIndex = old_exception_header->handlerSwitchValue;
         lsda = old_exception_header->languageSpecificData;
-        base = (uintptr_t)old_exception_header->catchTemp;
 #endif
     }
     else
@@ -1204,13 +1150,11 @@ __cxa_call_unexpected(void* arg)
             // Have:
             //   old_exception_header->languageSpecificData
             //   old_exception_header->actionRecord
-            //   old_exception_header->catchTemp, base for calculating ttype
             // Need
             //   const uint8_t* classInfo
             //   uint8_t ttypeEncoding
             uint8_t lpStartEncoding = *lsda++;
-            const uint8_t* lpStart =
-                (const uint8_t*)readEncodedPointer(&lsda, lpStartEncoding, base);
+            const uint8_t* lpStart = (const uint8_t*)readEncodedPointer(&lsda, lpStartEncoding);
             (void)lpStart;  // purposefully unused.  Just needed to increment lsda.
             uint8_t ttypeEncoding = *lsda++;
             if (ttypeEncoding == DW_EH_PE_omit)
@@ -1237,8 +1181,7 @@ __cxa_call_unexpected(void* arg)
                         ((__cxa_dependent_exception*)new_exception_header)->primaryException :
                         new_exception_header + 1;
                 if (!exception_spec_can_catch(ttypeIndex, classInfo, ttypeEncoding,
-                                              excpType, adjustedPtr,
-                                              unwind_exception, base))
+                                              excpType, adjustedPtr, unwind_exception))
                 {
                     // We need to __cxa_end_catch, but for the old exception,
                     //   not the new one.  This is a little tricky ...
@@ -1267,8 +1210,7 @@ __cxa_call_unexpected(void* arg)
             std::bad_exception be;
             adjustedPtr = &be;
             if (!exception_spec_can_catch(ttypeIndex, classInfo, ttypeEncoding,
-                                          excpType, adjustedPtr,
-                                          unwind_exception, base))
+                                          excpType, adjustedPtr, unwind_exception))
             {
                 // We need to __cxa_end_catch for both the old exception and the
                 //   new exception.  Technically we should do it in that order.
@@ -1283,15 +1225,6 @@ __cxa_call_unexpected(void* arg)
     }
     std::__terminate(t_handler);
 }
-
-#if defined(_AIX)
-// Personality routine for EH using the range table. Make it an alias of
-// __gxx_personality_v0().
-_LIBCXXABI_FUNC_VIS _Unwind_Reason_Code __xlcxx_personality_v1(
-    int version, _Unwind_Action actions, uint64_t exceptionClass,
-    _Unwind_Exception* unwind_exception, _Unwind_Context* context)
-    __attribute__((__alias__("__gxx_personality_v0")));
-#endif
 
 }  // extern "C"
 

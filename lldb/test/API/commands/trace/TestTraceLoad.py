@@ -1,13 +1,18 @@
 import lldb
-from intelpt_testcase import *
 from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 from lldbsuite.test.decorators import *
 
-class TestTraceLoad(TraceIntelPTTestCaseBase):
+class TestTraceLoad(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
     NO_DEBUG_INFO_TESTCASE = True
+
+    def setUp(self):
+        TestBase.setUp(self)
+        if 'intel-pt' not in configuration.enabled_plugins:
+            self.skipTest("The intel-pt test plugin is not enabled")
+
 
     def testLoadTrace(self):
         src_dir = self.getSourceDir()
@@ -33,10 +38,7 @@ class TestTraceLoad(TraceIntelPTTestCaseBase):
         # check that the Process and Thread objects were created correctly
         self.expect("thread info", substrs=["tid = 3842849"])
         self.expect("thread list", substrs=["Process 1234 stopped", "tid = 3842849"])
-        self.expect("thread trace dump info", substrs=['''Trace technology: intel-pt
 
-thread #1: tid = 3842849
-  Raw trace size: 4096 bytes'''])
 
     def testLoadInvalidTraces(self):
         src_dir = self.getSourceDir()

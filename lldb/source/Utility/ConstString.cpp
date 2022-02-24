@@ -21,9 +21,9 @@
 #include <array>
 #include <utility>
 
-#include <cinttypes>
-#include <cstdint>
-#include <cstring>
+#include <inttypes.h>
+#include <stdint.h>
+#include <string.h>
 
 using namespace lldb_private;
 
@@ -159,15 +159,16 @@ public:
     return nullptr;
   }
 
-  ConstString::MemoryStats GetMemoryStats() const {
-    ConstString::MemoryStats stats;
+  // Return the size in bytes that this object and any items in its collection
+  // of uniqued strings + data count values takes in memory.
+  size_t MemorySize() const {
+    size_t mem_size = sizeof(Pool);
     for (const auto &pool : m_string_pools) {
       llvm::sys::SmartScopedReader<false> rlock(pool.m_mutex);
-      const Allocator &alloc = pool.m_string_map.getAllocator();
-      stats.bytes_total += alloc.getTotalMemory();
-      stats.bytes_used += alloc.getBytesAllocated();
+      for (const auto &entry : pool.m_string_map)
+        mem_size += sizeof(StringPoolEntryType) + entry.getKey().size();
     }
-    return stats;
+    return mem_size;
   }
 
 protected:
@@ -252,7 +253,7 @@ bool ConstString::Equals(ConstString lhs, ConstString rhs,
   // perform case insensitive equality test
   llvm::StringRef lhs_string_ref(lhs.GetStringRef());
   llvm::StringRef rhs_string_ref(rhs.GetStringRef());
-  return lhs_string_ref.equals_insensitive(rhs_string_ref);
+  return lhs_string_ref.equals_lower(rhs_string_ref);
 }
 
 int ConstString::Compare(ConstString lhs, ConstString rhs,
@@ -269,7 +270,7 @@ int ConstString::Compare(ConstString lhs, ConstString rhs,
     if (case_sensitive) {
       return lhs_string_ref.compare(rhs_string_ref);
     } else {
-      return lhs_string_ref.compare_insensitive(rhs_string_ref);
+      return lhs_string_ref.compare_lower(rhs_string_ref);
     }
   }
 
@@ -326,8 +327,9 @@ void ConstString::SetTrimmedCStringWithLength(const char *cstr,
   m_string = StringPool().GetConstTrimmedCStringWithLength(cstr, cstr_len);
 }
 
-ConstString::MemoryStats ConstString::GetMemoryStats() {
-  return StringPool().GetMemoryStats();
+size_t ConstString::StaticMemorySize() {
+  // Get the size of the static string pool
+  return StringPool().MemorySize();
 }
 
 void llvm::format_provider<ConstString>::format(const ConstString &CS,

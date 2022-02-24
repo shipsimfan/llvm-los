@@ -17,8 +17,9 @@
 #include "test_macros.h"
 #include "min_allocator.h"
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     typedef std::string S;
     S s("0123456789");
     const S& cs = s;
@@ -34,9 +35,9 @@ bool test() {
     assert(cs[cs.size()] == '\0');
     const S s2 = S();
     assert(s2[0] == '\0');
-  }
+    }
 #if TEST_STD_VER >= 11
-  {
+    {
     typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
     S s("0123456789");
     const S& cs = s;
@@ -52,18 +53,8 @@ bool test() {
     assert(cs[cs.size()] == '\0');
     const S s2 = S();
     assert(s2[0] == '\0');
-  }
+    }
 #endif
 
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
-#endif
-
-  return 0;
+    return 0;
 }

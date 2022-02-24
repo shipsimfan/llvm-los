@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_ASMPARSER_LLTOKEN_H
-#define LLVM_ASMPARSER_LLTOKEN_H
+#ifndef LLVM_LIB_ASMPARSER_LLTOKEN_H
+#define LLVM_LIB_ASMPARSER_LLTOKEN_H
 
 namespace llvm {
 namespace lltok {
@@ -156,7 +156,6 @@ enum Kind {
   kw_webkit_jscc,
   kw_anyregcc,
   kw_swiftcc,
-  kw_swifttailcc,
   kw_preserve_mostcc,
   kw_preserve_allcc,
   kw_ghccc,
@@ -190,8 +189,6 @@ enum Kind {
   kw_convergent,
   kw_dereferenceable,
   kw_dereferenceable_or_null,
-  kw_disable_sanitizer_instrumentation,
-  kw_elementtype,
   kw_inaccessiblememonly,
   kw_inaccessiblemem_or_argmemonly,
   kw_inlinehint,
@@ -219,7 +216,6 @@ enum Kind {
   kw_nosync,
   kw_nocf_check,
   kw_nounwind,
-  kw_nosanitize_coverage,
   kw_null_pointer_is_valid,
   kw_optforfuzzing,
   kw_optnone,
@@ -243,7 +239,6 @@ enum Kind {
   kw_strictfp,
   kw_swifterror,
   kw_swiftself,
-  kw_swiftasync,
   kw_uwtable,
   kw_vscale_range,
   kw_willreturn,
@@ -252,8 +247,6 @@ enum Kind {
   kw_immarg,
   kw_byref,
   kw_mustprogress,
-  kw_sync,
-  kw_async,
 
   kw_type,
   kw_opaque,
@@ -264,7 +257,7 @@ enum Kind {
   kw_any,
   kw_exactmatch,
   kw_largest,
-  kw_nodeduplicate,
+  kw_noduplicates,
   kw_samesize,
 
   kw_eq,
@@ -372,7 +365,6 @@ enum Kind {
   kw_insertvalue,
   kw_blockaddress,
   kw_dso_local_equivalent,
-  kw_no_cfi,
 
   kw_freeze,
 
@@ -407,10 +399,6 @@ enum Kind {
   kw_returnDoesNotAlias,
   kw_noInline,
   kw_alwaysInline,
-  kw_noUnwind,
-  kw_mayThrow,
-  kw_hasUnknownCall,
-  kw_mustBeUnreachable,
   kw_calls,
   kw_callee,
   kw_params,

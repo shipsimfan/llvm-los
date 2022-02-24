@@ -9,7 +9,10 @@
 // UNSUPPORTED: c++03, c++11, c++14
 
 // Throwing bad_any_cast is supported starting in macosx10.13
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11|12}} && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.12 && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.11 && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.10 && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.9 && !no-exceptions
 
 // <any>
 
@@ -23,10 +26,17 @@
 
 int main(int, char**)
 {
+    using std::any;
+    using std::any_cast;
     // empty
     {
-        std::any a;
-        ASSERT_NOEXCEPT(a.reset());
+        any a;
+
+        // noexcept check
+        static_assert(
+            noexcept(a.reset())
+          , "any.reset() must be noexcept"
+          );
 
         assertEmpty(a);
 
@@ -36,7 +46,7 @@ int main(int, char**)
     }
     // small object
     {
-        std::any a = small(1);
+        any a((small(1)));
         assert(small::count == 1);
         assertContains<small>(a, 1);
 
@@ -47,7 +57,7 @@ int main(int, char**)
     }
     // large object
     {
-        std::any a = large(1);
+        any a(large(1));
         assert(large::count == 1);
         assertContains<large>(a, 1);
 

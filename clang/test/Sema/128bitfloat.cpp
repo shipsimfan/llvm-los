@@ -20,7 +20,7 @@ int g(int x, __float128 *y) {
   return x + *y;
 }
 
-// expected-no-error {{__float128 is not supported on this target}}
+// expected-no-diagnostics
 #else
 #if !defined(__STRICT_ANSI__)
 __float128 f;  // expected-error {{__float128 is not supported on this target}}
@@ -43,19 +43,4 @@ int g(int x, __float128 *y) {  // expected-error {{__float128 is not supported o
 }
 
 #endif
-#endif
-
-#ifdef __ppc__
-__ibm128 i;
-template <> struct __is_floating_point_helper<__ibm128> {};
-int w(int x, __ibm128 *y) {
-  return x + *y;
-}
-// expected-no-error {{__ibm128 is not supported on this target}}
-#else
-__ibm128 i;                                                 // expected-error {{__ibm128 is not supported on this target}}
-template <> struct __is_floating_point_helper<__ibm128> {}; // expected-error {{__ibm128 is not supported on this target}}
-int w(int x, __ibm128 *y) {                                 // expected-error {{__ibm128 is not supported on this target}}
-  return x + *y;
-}
 #endif

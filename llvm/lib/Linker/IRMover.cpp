@@ -16,11 +16,9 @@
 #include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/IR/GVMaterializer.h"
 #include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/PseudoProbe.h"
 #include "llvm/IR/TypeFinder.h"
 #include "llvm/Object/ModuleSymbolTable.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include <utility>
 using namespace llvm;
@@ -492,8 +490,8 @@ class IRLinker {
 
   void linkGlobalVariable(GlobalVariable &Dst, GlobalVariable &Src);
   Error linkFunctionBody(Function &Dst, Function &Src);
-  void linkAliasAliasee(GlobalAlias &Dst, GlobalAlias &Src);
-  void linkIFuncResolver(GlobalIFunc &Dst, GlobalIFunc &Src);
+  void linkIndirectSymbolBody(GlobalIndirectSymbol &Dst,
+                              GlobalIndirectSymbol &Src);
   Error linkGlobalValueBody(GlobalValue &Dst, GlobalValue &Src);
 
   /// Replace all types in the source AttributeList with the
@@ -504,7 +502,7 @@ class IRLinker {
   /// into the destination module.
   GlobalVariable *copyGlobalVariableProto(const GlobalVariable *SGVar);
   Function *copyFunctionProto(const Function *SF);
-  GlobalValue *copyIndirectSymbolProto(const GlobalValue *SGV);
+  GlobalValue *copyGlobalIndirectSymbolProto(const GlobalIndirectSymbol *SGIS);
 
   /// Perform "replace all uses with" operations. These work items need to be
   /// performed as part of materialization, but we postpone them to happen after
@@ -606,14 +604,10 @@ Value *IRLinker::materialize(Value *V, bool ForIndirectSymbol) {
   } else if (auto *V = dyn_cast<GlobalVariable>(New)) {
     if (V->hasInitializer() || V->hasAppendingLinkage())
       return New;
-  } else if (auto *GA = dyn_cast<GlobalAlias>(New)) {
-    if (GA->getAliasee())
-      return New;
-  } else if (auto *GI = dyn_cast<GlobalIFunc>(New)) {
-    if (GI->getResolver())
-      return New;
   } else {
-    llvm_unreachable("Invalid GlobalValue type");
+    auto *IS = cast<GlobalIndirectSymbol>(New);
+    if (IS->getIndirectSymbol())
+      return New;
   }
 
   // If the global is being linked for an indirect symbol, it may have already
@@ -646,21 +640,19 @@ GlobalVariable *IRLinker::copyGlobalVariableProto(const GlobalVariable *SGVar) {
                          /*init*/ nullptr, SGVar->getName(),
                          /*insertbefore*/ nullptr, SGVar->getThreadLocalMode(),
                          SGVar->getAddressSpace());
-  NewDGV->setAlignment(SGVar->getAlign());
+  NewDGV->setAlignment(MaybeAlign(SGVar->getAlignment()));
   NewDGV->copyAttributesFrom(SGVar);
   return NewDGV;
 }
 
 AttributeList IRLinker::mapAttributeTypes(LLVMContext &C, AttributeList Attrs) {
   for (unsigned i = 0; i < Attrs.getNumAttrSets(); ++i) {
-    for (int AttrIdx = Attribute::FirstTypeAttr;
-         AttrIdx <= Attribute::LastTypeAttr; AttrIdx++) {
-      Attribute::AttrKind TypedAttr = (Attribute::AttrKind)AttrIdx;
-      if (Attrs.hasAttributeAtIndex(i, TypedAttr)) {
-        if (Type *Ty =
-                Attrs.getAttributeAtIndex(i, TypedAttr).getValueAsType()) {
-          Attrs = Attrs.replaceAttributeTypeAtIndex(C, i, TypedAttr,
-                                                    TypeMap.get(Ty));
+    for (Attribute::AttrKind TypedAttr :
+         {Attribute::ByVal, Attribute::StructRet, Attribute::ByRef,
+          Attribute::InAlloca}) {
+      if (Attrs.hasAttribute(i, TypedAttr)) {
+        if (Type *Ty = Attrs.getAttribute(i, TypedAttr).getValueAsType()) {
+          Attrs = Attrs.replaceAttributeType(C, i, TypedAttr, TypeMap.get(Ty));
           break;
         }
       }
@@ -684,28 +676,22 @@ Function *IRLinker::copyFunctionProto(const Function *SF) {
 
 /// Set up prototypes for any indirect symbols that come over from the source
 /// module.
-GlobalValue *IRLinker::copyIndirectSymbolProto(const GlobalValue *SGV) {
+GlobalValue *
+IRLinker::copyGlobalIndirectSymbolProto(const GlobalIndirectSymbol *SGIS) {
   // If there is no linkage to be performed or we're linking from the source,
   // bring over SGA.
-  auto *Ty = TypeMap.get(SGV->getValueType());
-
-  if (auto *GA = dyn_cast<GlobalAlias>(SGV)) {
-    auto *DGA = GlobalAlias::create(Ty, SGV->getAddressSpace(),
-                                    GlobalValue::ExternalLinkage,
-                                    SGV->getName(), &DstM);
-    DGA->copyAttributesFrom(GA);
-    return DGA;
-  }
-
-  if (auto *GI = dyn_cast<GlobalIFunc>(SGV)) {
-    auto *DGI = GlobalIFunc::create(Ty, SGV->getAddressSpace(),
-                                    GlobalValue::ExternalLinkage,
-                                    SGV->getName(), nullptr, &DstM);
-    DGI->copyAttributesFrom(GI);
-    return DGI;
-  }
-
-  llvm_unreachable("Invalid source global value type");
+  auto *Ty = TypeMap.get(SGIS->getValueType());
+  GlobalIndirectSymbol *GIS;
+  if (isa<GlobalAlias>(SGIS))
+    GIS = GlobalAlias::create(Ty, SGIS->getAddressSpace(),
+                              GlobalValue::ExternalLinkage, SGIS->getName(),
+                              &DstM);
+  else
+    GIS = GlobalIFunc::create(Ty, SGIS->getAddressSpace(),
+                              GlobalValue::ExternalLinkage, SGIS->getName(),
+                              nullptr, &DstM);
+  GIS->copyAttributesFrom(SGIS);
+  return GIS;
 }
 
 GlobalValue *IRLinker::copyGlobalValueProto(const GlobalValue *SGV,
@@ -717,7 +703,7 @@ GlobalValue *IRLinker::copyGlobalValueProto(const GlobalValue *SGV,
     NewGV = copyFunctionProto(SF);
   } else {
     if (ForDefinition)
-      NewGV = copyIndirectSymbolProto(SGV);
+      NewGV = copyGlobalIndirectSymbolProto(cast<GlobalIndirectSymbol>(SGV));
     else if (SGV->getValueType()->isFunctionTy())
       NewGV =
           Function::Create(cast<FunctionType>(TypeMap.get(SGV->getValueType())),
@@ -877,7 +863,7 @@ IRLinker::linkAppendingVarProto(GlobalVariable *DstGV,
     if (DstGV->isConstant() != SrcGV->isConstant())
       return stringErr("Appending variables linked with different const'ness!");
 
-    if (DstGV->getAlign() != SrcGV->getAlign())
+    if (DstGV->getAlignment() != SrcGV->getAlignment())
       return stringErr(
           "Appending variables with different alignment need to be linked!");
 
@@ -1121,12 +1107,10 @@ Error IRLinker::linkFunctionBody(Function &Dst, Function &Src) {
   return Error::success();
 }
 
-void IRLinker::linkAliasAliasee(GlobalAlias &Dst, GlobalAlias &Src) {
-  Mapper.scheduleMapGlobalAlias(Dst, *Src.getAliasee(), IndirectSymbolMCID);
-}
-
-void IRLinker::linkIFuncResolver(GlobalIFunc &Dst, GlobalIFunc &Src) {
-  Mapper.scheduleMapGlobalIFunc(Dst, *Src.getResolver(), IndirectSymbolMCID);
+void IRLinker::linkIndirectSymbolBody(GlobalIndirectSymbol &Dst,
+                                      GlobalIndirectSymbol &Src) {
+  Mapper.scheduleMapGlobalIndirectSymbol(Dst, *Src.getIndirectSymbol(),
+                                         IndirectSymbolMCID);
 }
 
 Error IRLinker::linkGlobalValueBody(GlobalValue &Dst, GlobalValue &Src) {
@@ -1136,11 +1120,7 @@ Error IRLinker::linkGlobalValueBody(GlobalValue &Dst, GlobalValue &Src) {
     linkGlobalVariable(cast<GlobalVariable>(Dst), *GVar);
     return Error::success();
   }
-  if (auto *GA = dyn_cast<GlobalAlias>(&Src)) {
-    linkAliasAliasee(cast<GlobalAlias>(Dst), *GA);
-    return Error::success();
-  }
-  linkIFuncResolver(cast<GlobalIFunc>(Dst), cast<GlobalIFunc>(Src));
+  linkIndirectSymbolBody(cast<GlobalIndirectSymbol>(Dst), cast<GlobalIndirectSymbol>(Src));
   return Error::success();
 }
 
@@ -1226,10 +1206,6 @@ void IRLinker::linkNamedMDNodes() {
   for (const NamedMDNode &NMD : SrcM->named_metadata()) {
     // Don't link module flags here. Do them separately.
     if (&NMD == SrcModFlags)
-      continue;
-    // Don't import pseudo probe descriptors here for thinLTO. They will be
-    // emitted by the originating module.
-    if (IsPerformingImport && NMD.getName() == PseudoProbeDescMetadataName)
       continue;
     NamedMDNode *DestNMD = DstM.getOrInsertNamedMetadata(NMD.getName());
     // Add Src elements into Dest node.
@@ -1462,39 +1438,7 @@ Error IRLinker::run() {
   if (DstM.getDataLayout().isDefault())
     DstM.setDataLayout(SrcM->getDataLayout());
 
-  // Copy the target triple from the source to dest if the dest's is empty.
-  if (DstM.getTargetTriple().empty() && !SrcM->getTargetTriple().empty())
-    DstM.setTargetTriple(SrcM->getTargetTriple());
-
-  Triple SrcTriple(SrcM->getTargetTriple()), DstTriple(DstM.getTargetTriple());
-
-  // During CUDA compilation we have to link with the bitcode supplied with
-  // CUDA. libdevice bitcode either has no data layout set (pre-CUDA-11), or has
-  // the layout that is different from the one used by LLVM/clang (it does not
-  // include i128). Issuing a warning is not very helpful as there's not much
-  // the user can do about it.
-  bool EnableDLWarning = true;
-  bool EnableTripleWarning = true;
-  if (SrcTriple.isNVPTX() && DstTriple.isNVPTX()) {
-    std::string ModuleId = SrcM->getModuleIdentifier();
-    StringRef FileName = llvm::sys::path::filename(ModuleId);
-    bool SrcIsLibDevice =
-        FileName.startswith("libdevice") && FileName.endswith(".10.bc");
-    bool SrcHasLibDeviceDL =
-        (SrcM->getDataLayoutStr().empty() ||
-         SrcM->getDataLayoutStr() == "e-i64:64-v16:16-v32:32-n16:32:64");
-    // libdevice bitcode uses nvptx64-nvidia-gpulibs or just
-    // 'nvptx-unknown-unknown' triple (before CUDA-10.x) and is compatible with
-    // all NVPTX variants.
-    bool SrcHasLibDeviceTriple = (SrcTriple.getVendor() == Triple::NVIDIA &&
-                                  SrcTriple.getOSName() == "gpulibs") ||
-                                 (SrcTriple.getVendorName() == "unknown" &&
-                                  SrcTriple.getOSName() == "unknown");
-    EnableTripleWarning = !(SrcIsLibDevice && SrcHasLibDeviceTriple);
-    EnableDLWarning = !(SrcIsLibDevice && SrcHasLibDeviceDL);
-  }
-
-  if (EnableDLWarning && (SrcM->getDataLayout() != DstM.getDataLayout())) {
+  if (SrcM->getDataLayout() != DstM.getDataLayout()) {
     emitWarning("Linking two modules of different data layouts: '" +
                 SrcM->getModuleIdentifier() + "' is '" +
                 SrcM->getDataLayoutStr() + "' whereas '" +
@@ -1502,7 +1446,13 @@ Error IRLinker::run() {
                 DstM.getDataLayoutStr() + "'\n");
   }
 
-  if (EnableTripleWarning && !SrcM->getTargetTriple().empty() &&
+  // Copy the target triple from the source to dest if the dest's is empty.
+  if (DstM.getTargetTriple().empty() && !SrcM->getTargetTriple().empty())
+    DstM.setTargetTriple(SrcM->getTargetTriple());
+
+  Triple SrcTriple(SrcM->getTargetTriple()), DstTriple(DstM.getTargetTriple());
+
+  if (!SrcM->getTargetTriple().empty()&&
       !SrcTriple.isCompatibleWith(DstTriple))
     emitWarning("Linking two modules of different target triples: '" +
                 SrcM->getModuleIdentifier() + "' is '" +

@@ -32,6 +32,6 @@ public:
   }
 };
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // MLIR_INTERFACES_DECODEATTRIBUTESINTERFACES_H_

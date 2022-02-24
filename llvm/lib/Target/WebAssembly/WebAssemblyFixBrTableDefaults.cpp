@@ -61,13 +61,9 @@ void fixBrTableIndex(MachineInstr &MI, MachineBasicBlock *MBB,
   auto ExtMI = MF.getRegInfo().getVRegDef(MI.getOperand(0).getReg());
   if (ExtMI->getOpcode() == WebAssembly::I64_EXTEND_U_I32) {
     // Unnecessarily extending a 32-bit value to 64, remove it.
-    auto ExtDefReg = ExtMI->getOperand(0).getReg();
-    assert(MI.getOperand(0).getReg() == ExtDefReg);
+    assert(MI.getOperand(0).getReg() == ExtMI->getOperand(0).getReg());
     MI.getOperand(0).setReg(ExtMI->getOperand(1).getReg());
-    if (MF.getRegInfo().use_nodbg_empty(ExtDefReg)) {
-      // No more users of extend, delete it.
-      ExtMI->eraseFromParent();
-    }
+    ExtMI->eraseFromParent();
   } else {
     // Incoming 64-bit value that needs to be truncated.
     Register Reg32 =

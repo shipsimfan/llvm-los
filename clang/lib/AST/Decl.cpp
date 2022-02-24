@@ -102,7 +102,7 @@ bool Decl::isOutOfLine() const {
 
 TranslationUnitDecl::TranslationUnitDecl(ASTContext &ctx)
     : Decl(TranslationUnit, nullptr, SourceLocation()),
-      DeclContext(TranslationUnit), redeclarable_base(ctx), Ctx(ctx) {}
+      DeclContext(TranslationUnit), Ctx(ctx) {}
 
 //===----------------------------------------------------------------------===//
 // NamedDecl Implementation
@@ -604,14 +604,8 @@ static LinkageInfo getExternalLinkageFor(const NamedDecl *D) {
   //   - A name declared at namespace scope that does not have internal linkage
   //     by the previous rules and that is introduced by a non-exported
   //     declaration has module linkage.
-  //
-  // [basic.namespace.general]/p2
-  //   A namespace is never attached to a named module and never has a name with
-  //   module linkage.
-  if (isInModulePurview(D) &&
-      !isExportedFromModuleInterfaceUnit(
-          cast<NamedDecl>(D->getCanonicalDecl())) &&
-      !isa<NamespaceDecl>(D))
+  if (isInModulePurview(D) && !isExportedFromModuleInterfaceUnit(
+                                  cast<NamedDecl>(D->getCanonicalDecl())))
     return LinkageInfo(ModuleLinkage, DefaultVisibility, false);
 
   return LinkageInfo::external();
@@ -786,7 +780,6 @@ LinkageComputer::getLVForNamespaceScopeDecl(const NamedDecl *D,
     //
     // Note that we don't want to make the variable non-external
     // because of this, but unique-external linkage suits us.
-
     if (Context.getLangOpts().CPlusPlus && !isFirstInExternCContext(Var) &&
         !IgnoreVarTypeLinkage) {
       LinkageInfo TypeLV = getLVForType(*Var->getType(), computation);
@@ -912,6 +905,10 @@ LinkageComputer::getLVForNamespaceScopeDecl(const NamedDecl *D,
   // always be default.
   if (!isExternallyVisible(LV.getLinkage()))
     return LinkageInfo(LV.getLinkage(), DefaultVisibility, false);
+
+  // Mark the symbols as hidden when compiling for the device.
+  if (Context.getLangOpts().OpenMP && Context.getLangOpts().OpenMPIsDevice)
+    LV.mergeVisibility(HiddenVisibility, /*newExplicit=*/false);
 
   return LV;
 }
@@ -1066,7 +1063,6 @@ LinkageComputer::getLVForClassMember(const NamedDecl *D,
 
   // Finally, merge in information from the class.
   LV.mergeMaybeWithVisibility(classLV, considerClassVisibility);
-
   return LV;
 }
 
@@ -1080,44 +1076,6 @@ bool NamedDecl::isLinkageValid() const {
                   .computeLVForDecl(this, LVComputationKind::forLinkageOnly())
                   .getLinkage();
   return L == getCachedLinkage();
-}
-
-ReservedIdentifierStatus
-NamedDecl::isReserved(const LangOptions &LangOpts) const {
-  const IdentifierInfo *II = getIdentifier();
-
-  // This triggers at least for CXXLiteralIdentifiers, which we already checked
-  // at lexing time.
-  if (!II)
-    return ReservedIdentifierStatus::NotReserved;
-
-  ReservedIdentifierStatus Status = II->isReserved(LangOpts);
-  if (isReservedAtGlobalScope(Status) && !isReservedInAllContexts(Status)) {
-    // This name is only reserved at global scope. Check if this declaration
-    // conflicts with a global scope declaration.
-    if (isa<ParmVarDecl>(this) || isTemplateParameter())
-      return ReservedIdentifierStatus::NotReserved;
-
-    // C++ [dcl.link]/7:
-    //   Two declarations [conflict] if [...] one declares a function or
-    //   variable with C language linkage, and the other declares [...] a
-    //   variable that belongs to the global scope.
-    //
-    // Therefore names that are reserved at global scope are also reserved as
-    // names of variables and functions with C language linkage.
-    const DeclContext *DC = getDeclContext()->getRedeclContext();
-    if (DC->isTranslationUnit())
-      return Status;
-    if (auto *VD = dyn_cast<VarDecl>(this))
-      if (VD->isExternC())
-        return ReservedIdentifierStatus::StartsWithUnderscoreAndIsExternC;
-    if (auto *FD = dyn_cast<FunctionDecl>(this))
-      if (FD->isExternC())
-        return ReservedIdentifierStatus::StartsWithUnderscoreAndIsExternC;
-    return ReservedIdentifierStatus::NotReserved;
-  }
-
-  return Status;
 }
 
 ObjCStringFormatFamily NamedDecl::getObjCFStringFormattingFamily() const {
@@ -1389,7 +1347,6 @@ LinkageInfo LinkageComputer::computeLVForDecl(const NamedDecl *D,
     case Decl::NamespaceAlias:
     case Decl::ParmVar:
     case Decl::Using:
-    case Decl::UsingEnum:
     case Decl::UsingShadow:
     case Decl::UsingDirective:
       return LinkageInfo::none();
@@ -1550,8 +1507,6 @@ Module *Decl::getOwningModuleForLinkage(bool IgnoreLinkage) const {
     return nullptr;
 
   case Module::ModuleInterfaceUnit:
-  case Module::ModulePartitionInterface:
-  case Module::ModulePartitionImplementation:
     return M;
 
   case Module::GlobalModuleFragment: {
@@ -1559,16 +1514,16 @@ Module *Decl::getOwningModuleForLinkage(bool IgnoreLinkage) const {
     // for linkage purposes. But internal linkage declarations in the global
     // module fragment of a particular module are owned by that module for
     // linkage purposes.
-    // FIXME: p1815 removes the need for this distinction -- there are no
-    // internal linkage declarations that need to be referred to from outside
-    // this TU.
     if (IgnoreLinkage)
       return nullptr;
     bool InternalLinkage;
     if (auto *ND = dyn_cast<NamedDecl>(this))
       InternalLinkage = !ND->hasExternalFormalLinkage();
-    else
-      InternalLinkage = isInAnonymousNamespace();
+    else {
+      auto *NSD = dyn_cast<NamespaceDecl>(this);
+      InternalLinkage = (NSD && NSD->isAnonymousNamespace()) ||
+                        isInAnonymousNamespace();
+    }
     return InternalLinkage ? M->Parent : nullptr;
   }
 
@@ -1589,7 +1544,7 @@ std::string NamedDecl::getQualifiedNameAsString() const {
   std::string QualName;
   llvm::raw_string_ostream OS(QualName);
   printQualifiedName(OS, getASTContext().getPrintingPolicy());
-  return QualName;
+  return OS.str();
 }
 
 void NamedDecl::printQualifiedName(raw_ostream &OS) const {
@@ -1669,7 +1624,8 @@ void NamedDecl::printNestedNameSpecifier(raw_ostream &OS,
     NameInScope = ND->getDeclName();
   }
 
-  for (const DeclContext *DC : llvm::reverse(Contexts)) {
+  for (unsigned I = Contexts.size(); I != 0; --I) {
+    const DeclContext *DC = Contexts[I - 1];
     if (const auto *Spec = dyn_cast<ClassTemplateSpecializationDecl>(DC)) {
       OS << Spec->getName();
       const TemplateArgumentList &TemplateArgs = Spec->getTemplateArgs();
@@ -2237,18 +2193,14 @@ VarDecl *VarDecl::getActingDefinition() {
     return nullptr;
 
   VarDecl *LastTentative = nullptr;
-
-  // Loop through the declaration chain, starting with the most recent.
-  for (VarDecl *Decl = getMostRecentDecl(); Decl;
-       Decl = Decl->getPreviousDecl()) {
-    Kind = Decl->isThisDeclarationADefinition();
+  VarDecl *First = getFirstDecl();
+  for (auto I : First->redecls()) {
+    Kind = I->isThisDeclarationADefinition();
     if (Kind == Definition)
       return nullptr;
-    // Record the first (most recent) TentativeDefinition that is encountered.
-    if (Kind == TentativeDefinition && !LastTentative)
-      LastTentative = Decl;
+    if (Kind == TentativeDefinition)
+      LastTentative = I;
   }
-
   return LastTentative;
 }
 
@@ -2559,14 +2511,6 @@ bool VarDecl::isNonEscapingByref() const {
   return hasAttr<BlocksAttr>() && !NonParmVarDeclBits.EscapingByref;
 }
 
-bool VarDecl::hasDependentAlignment() const {
-  QualType T = getType();
-  return T->isDependentType() || T->isUndeducedAutoType() ||
-         llvm::any_of(specific_attrs<AlignedAttr>(), [](const AlignedAttr *AA) {
-           return AA->isAlignmentDependent();
-         });
-}
-
 VarDecl *VarDecl::getTemplateInstantiationPattern() const {
   const VarDecl *VD = this;
 
@@ -2794,15 +2738,11 @@ SourceRange ParmVarDecl::getSourceRange() const {
 }
 
 bool ParmVarDecl::isDestroyedInCallee() const {
-  // ns_consumed only affects code generation in ARC
   if (hasAttr<NSConsumedAttr>())
-    return getASTContext().getLangOpts().ObjCAutoRefCount;
+    return true;
 
-  // FIXME: isParamDestroyedInCallee() should probably imply
-  // isDestructedType()
   auto *RT = getType()->getAs<RecordType>();
-  if (RT && RT->getDecl()->isParamDestroyedInCallee() &&
-      getType().isDestructedType())
+  if (RT && RT->getDecl()->isParamDestroyedInCallee())
     return true;
 
   return false;
@@ -2881,7 +2821,7 @@ FunctionDecl::FunctionDecl(Kind DK, ASTContext &C, DeclContext *DC,
                            SourceLocation StartLoc,
                            const DeclarationNameInfo &NameInfo, QualType T,
                            TypeSourceInfo *TInfo, StorageClass S,
-                           bool UsesFPIntrin, bool isInlineSpecified,
+                           bool isInlineSpecified,
                            ConstexprSpecKind ConstexprKind,
                            Expr *TrailingRequiresClause)
     : DeclaratorDecl(DK, DC, NameInfo.getLoc(), NameInfo.getName(), T, TInfo,
@@ -2907,7 +2847,7 @@ FunctionDecl::FunctionDecl(Kind DK, ASTContext &C, DeclContext *DC,
   FunctionDeclBits.ConstexprKind = static_cast<uint64_t>(ConstexprKind);
   FunctionDeclBits.InstantiationIsPending = false;
   FunctionDeclBits.UsesSEHTry = false;
-  FunctionDeclBits.UsesFPIntrin = UsesFPIntrin;
+  FunctionDeclBits.UsesFPIntrin = false;
   FunctionDeclBits.HasSkippedBody = false;
   FunctionDeclBits.WillHaveBody = false;
   FunctionDeclBits.IsMultiVersion = false;
@@ -3201,9 +3141,7 @@ bool FunctionDecl::isInlineBuiltinDeclaration() const {
     return false;
 
   const FunctionDecl *Definition;
-  return hasBody(Definition) && Definition->isInlineSpecified() &&
-         Definition->hasAttr<AlwaysInlineAttr>() &&
-         Definition->hasAttr<GNUInlineAttr>();
+  return hasBody(Definition) && Definition->isInlineSpecified();
 }
 
 bool FunctionDecl::isDestroyingOperatorDelete() const {
@@ -3251,6 +3189,7 @@ bool FunctionDecl::isGlobal() const {
     if (const auto *Namespace = cast<NamespaceDecl>(DC)) {
       if (!Namespace->getDeclName())
         return false;
+      break;
     }
   }
 
@@ -3276,8 +3215,6 @@ MultiVersionKind FunctionDecl::getMultiVersionKind() const {
     return MultiVersionKind::CPUDispatch;
   if (hasAttr<CPUSpecificAttr>())
     return MultiVersionKind::CPUSpecific;
-  if (hasAttr<TargetClonesAttr>())
-    return MultiVersionKind::TargetClones;
   return MultiVersionKind::None;
 }
 
@@ -3291,10 +3228,6 @@ bool FunctionDecl::isCPUSpecificMultiVersion() const {
 
 bool FunctionDecl::isTargetMultiVersion() const {
   return isMultiVersion() && hasAttr<TargetAttr>();
-}
-
-bool FunctionDecl::isTargetClonesMultiVersion() const {
-  return isMultiVersion() && hasAttr<TargetClonesAttr>();
 }
 
 void
@@ -4303,7 +4236,6 @@ TagDecl::TagDecl(Kind DK, TagKind TK, const ASTContext &C, DeclContext *DC,
   setEmbeddedInDeclarator(false);
   setFreeStanding(false);
   setCompleteDefinitionRequired(false);
-  TagDeclBits.IsThisDeclarationADemotedDefinition = false;
 }
 
 SourceLocation TagDecl::getOuterLocStart() const {
@@ -4535,17 +4467,6 @@ unsigned EnumDecl::getODRHash() {
   return ODRHash;
 }
 
-SourceRange EnumDecl::getSourceRange() const {
-  auto Res = TagDecl::getSourceRange();
-  // Set end-point to enum-base, e.g. enum foo : ^bar
-  if (auto *TSI = getIntegerTypeSourceInfo()) {
-    // TagDecl doesn't know about the enum base.
-    if (!getBraceRange().getEnd().isValid())
-      Res.setEnd(TSI->getTypeLoc().getEndLoc());
-  }
-  return Res;
-}
-
 //===----------------------------------------------------------------------===//
 // RecordDecl Implementation
 //===----------------------------------------------------------------------===//
@@ -4636,13 +4557,6 @@ RecordDecl::field_iterator RecordDecl::field_begin() const {
 void RecordDecl::completeDefinition() {
   assert(!isCompleteDefinition() && "Cannot redefine record!");
   TagDecl::completeDefinition();
-
-  ASTContext &Ctx = getASTContext();
-
-  // Layouts are dumped when computed, so if we are dumping for all complete
-  // types, we need to force usage to get types that wouldn't be used elsewhere.
-  if (Ctx.getLangOpts().DumpRecordLayoutsComplete)
-    (void)Ctx.getASTRecordLayout(this);
 }
 
 /// isMsStruct - Get whether or not this record uses ms_struct layout.
@@ -4905,16 +4819,18 @@ ImplicitParamDecl *ImplicitParamDecl::CreateDeserialized(ASTContext &C,
   return new (C, ID) ImplicitParamDecl(C, QualType(), ImplicitParamKind::Other);
 }
 
-FunctionDecl *
-FunctionDecl::Create(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
-                     const DeclarationNameInfo &NameInfo, QualType T,
-                     TypeSourceInfo *TInfo, StorageClass SC, bool UsesFPIntrin,
-                     bool isInlineSpecified, bool hasWrittenPrototype,
-                     ConstexprSpecKind ConstexprKind,
-                     Expr *TrailingRequiresClause) {
-  FunctionDecl *New = new (C, DC) FunctionDecl(
-      Function, C, DC, StartLoc, NameInfo, T, TInfo, SC, UsesFPIntrin,
-      isInlineSpecified, ConstexprKind, TrailingRequiresClause);
+FunctionDecl *FunctionDecl::Create(ASTContext &C, DeclContext *DC,
+                                   SourceLocation StartLoc,
+                                   const DeclarationNameInfo &NameInfo,
+                                   QualType T, TypeSourceInfo *TInfo,
+                                   StorageClass SC, bool isInlineSpecified,
+                                   bool hasWrittenPrototype,
+                                   ConstexprSpecKind ConstexprKind,
+                                   Expr *TrailingRequiresClause) {
+  FunctionDecl *New =
+      new (C, DC) FunctionDecl(Function, C, DC, StartLoc, NameInfo, T, TInfo,
+                               SC, isInlineSpecified, ConstexprKind,
+                               TrailingRequiresClause);
   New->setHasWrittenPrototype(hasWrittenPrototype);
   return New;
 }
@@ -4922,7 +4838,7 @@ FunctionDecl::Create(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
 FunctionDecl *FunctionDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
   return new (C, ID) FunctionDecl(
       Function, C, nullptr, SourceLocation(), DeclarationNameInfo(), QualType(),
-      nullptr, SC_None, false, false, ConstexprSpecKind::Unspecified, nullptr);
+      nullptr, SC_None, false, ConstexprSpecKind::Unspecified, nullptr);
 }
 
 BlockDecl *BlockDecl::Create(ASTContext &C, DeclContext *DC, SourceLocation L) {

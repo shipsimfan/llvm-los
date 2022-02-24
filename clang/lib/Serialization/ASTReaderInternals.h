@@ -30,6 +30,7 @@ class ASTReader;
 class FileEntry;
 struct HeaderFileInfo;
 class HeaderSearch;
+class IdentifierTable;
 class ObjCMethodDecl;
 
 namespace serialization {

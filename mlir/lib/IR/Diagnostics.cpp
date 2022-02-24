@@ -8,6 +8,7 @@
 
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/Identifier.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Operation.h"
@@ -15,7 +16,6 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Regex.h"
@@ -88,11 +88,9 @@ static StringRef twineToStrRef(const Twine &val,
   // Allocate memory to hold this string.
   SmallString<64> data;
   auto strRef = val.toStringRef(data);
-  if (strRef.empty())
-    return strRef;
-
   strings.push_back(std::unique_ptr<char[]>(new char[strRef.size()]));
   memcpy(&strings.back()[0], strRef.data(), strRef.size());
+
   // Return a reference to the new string.
   return StringRef(&strings.back()[0], strRef.size());
 }
@@ -108,8 +106,11 @@ Diagnostic &Diagnostic::operator<<(Twine &&val) {
   return *this;
 }
 
-Diagnostic &Diagnostic::operator<<(StringAttr val) {
-  arguments.push_back(DiagnosticArgument(val));
+/// Stream in an Identifier.
+Diagnostic &Diagnostic::operator<<(Identifier val) {
+  // An identifier is stored in the context, so we don't need to worry about the
+  // lifetime of its data.
+  arguments.push_back(DiagnosticArgument(val.strref()));
   return *this;
 }
 
@@ -123,21 +124,9 @@ Diagnostic &Diagnostic::operator<<(OperationName val) {
 
 /// Stream in an Operation.
 Diagnostic &Diagnostic::operator<<(Operation &val) {
-  return appendOp(val, OpPrintingFlags());
-}
-Diagnostic &Diagnostic::appendOp(Operation &val, const OpPrintingFlags &flags) {
   std::string str;
   llvm::raw_string_ostream os(str);
-  val.print(os,
-            OpPrintingFlags(flags).useLocalScope().elideLargeElementsAttrs());
-  return *this << os.str();
-}
-
-/// Stream in a Value.
-Diagnostic &Diagnostic::operator<<(Value val) {
-  std::string str;
-  llvm::raw_string_ostream os(str);
-  val.print(os);
+  os << val;
   return *this << os.str();
 }
 
@@ -209,7 +198,7 @@ namespace detail {
 struct DiagnosticEngineImpl {
   /// Emit a diagnostic using the registered issue handle if present, or with
   /// the default behavior if not.
-  void emit(Diagnostic &&diag);
+  void emit(Diagnostic diag);
 
   /// A mutex to ensure that diagnostics emission is thread-safe.
   llvm::sys::SmartMutex<true> mutex;
@@ -228,7 +217,7 @@ struct DiagnosticEngineImpl {
 
 /// Emit a diagnostic using the registered issue handle if present, or with
 /// the default behavior if not.
-void DiagnosticEngineImpl::emit(Diagnostic &&diag) {
+void DiagnosticEngineImpl::emit(Diagnostic diag) {
   llvm::sys::SmartScopedLock<true> lock(mutex);
 
   // Try to process the given diagnostic on one of the registered handlers.
@@ -257,7 +246,7 @@ void DiagnosticEngineImpl::emit(Diagnostic &&diag) {
 //===----------------------------------------------------------------------===//
 
 DiagnosticEngine::DiagnosticEngine() : impl(new DiagnosticEngineImpl()) {}
-DiagnosticEngine::~DiagnosticEngine() = default;
+DiagnosticEngine::~DiagnosticEngine() {}
 
 /// Register a new handler for diagnostics to the engine. This function returns
 /// a unique identifier for the registered handler, which can be used to
@@ -277,7 +266,7 @@ void DiagnosticEngine::eraseHandler(HandlerID handlerID) {
 
 /// Emit a diagnostic using the registered issue handler if present, or with
 /// the default behavior if not.
-void DiagnosticEngine::emit(Diagnostic &&diag) {
+void DiagnosticEngine::emit(Diagnostic diag) {
   assert(diag.getSeverity() != DiagnosticSeverity::Note &&
          "notes should not be emitted directly");
   impl->emit(std::move(diag));
@@ -364,7 +353,7 @@ struct SourceMgrDiagnosticHandlerImpl {
     // Otherwise, try to load the source file.
     std::string ignored;
     unsigned id =
-        mgr.AddIncludeFile(std::string(filename), SMLoc(), ignored);
+        mgr.AddIncludeFile(std::string(filename), llvm::SMLoc(), ignored);
     filenameToBufId[filename] = id;
     return id;
   }
@@ -372,8 +361,8 @@ struct SourceMgrDiagnosticHandlerImpl {
   /// Mapping between file name and buffer ID's.
   llvm::StringMap<unsigned> filenameToBufId;
 };
-} // namespace detail
-} // namespace mlir
+} // end namespace detail
+} // end namespace mlir
 
 /// Return a processable FileLineColLoc from the given location.
 static Optional<FileLineColLoc> getFileLineColLoc(Location loc) {
@@ -420,21 +409,19 @@ static llvm::SourceMgr::DiagKind getDiagKind(DiagnosticSeverity kind) {
   llvm_unreachable("Unknown DiagnosticSeverity");
 }
 
-SourceMgrDiagnosticHandler::SourceMgrDiagnosticHandler(
-    llvm::SourceMgr &mgr, MLIRContext *ctx, raw_ostream &os,
-    ShouldShowLocFn &&shouldShowLocFn)
+SourceMgrDiagnosticHandler::SourceMgrDiagnosticHandler(llvm::SourceMgr &mgr,
+                                                       MLIRContext *ctx,
+                                                       raw_ostream &os)
     : ScopedDiagnosticHandler(ctx), mgr(mgr), os(os),
-      shouldShowLocFn(std::move(shouldShowLocFn)),
       impl(new SourceMgrDiagnosticHandlerImpl()) {
   setHandler([this](Diagnostic &diag) { emitDiagnostic(diag); });
 }
 
-SourceMgrDiagnosticHandler::SourceMgrDiagnosticHandler(
-    llvm::SourceMgr &mgr, MLIRContext *ctx, ShouldShowLocFn &&shouldShowLocFn)
-    : SourceMgrDiagnosticHandler(mgr, ctx, llvm::errs(),
-                                 std::move(shouldShowLocFn)) {}
+SourceMgrDiagnosticHandler::SourceMgrDiagnosticHandler(llvm::SourceMgr &mgr,
+                                                       MLIRContext *ctx)
+    : SourceMgrDiagnosticHandler(mgr, ctx, llvm::errs()) {}
 
-SourceMgrDiagnosticHandler::~SourceMgrDiagnosticHandler() = default;
+SourceMgrDiagnosticHandler::~SourceMgrDiagnosticHandler() {}
 
 void SourceMgrDiagnosticHandler::emitDiagnostic(Location loc, Twine message,
                                                 DiagnosticSeverity kind,
@@ -449,7 +436,7 @@ void SourceMgrDiagnosticHandler::emitDiagnostic(Location loc, Twine message,
     if (!loc.isa<UnknownLoc>())
       strOS << loc << ": ";
     strOS << message;
-    return mgr.PrintMessage(os, SMLoc(), getDiagKind(kind), strOS.str());
+    return mgr.PrintMessage(os, llvm::SMLoc(), getDiagKind(kind), strOS.str());
   }
 
   // Otherwise if we are displaying the source line, try to convert the file
@@ -465,7 +452,7 @@ void SourceMgrDiagnosticHandler::emitDiagnostic(Location loc, Twine message,
   // the constructor of SMDiagnostic that takes a location.
   std::string locStr;
   llvm::raw_string_ostream locOS(locStr);
-  locOS << fileLoc->getFilename().getValue() << ":" << fileLoc->getLine() << ":"
+  locOS << fileLoc->getFilename() << ":" << fileLoc->getLine() << ":"
         << fileLoc->getColumn();
   llvm::SMDiagnostic diag(locOS.str(), getDiagKind(kind), message.str());
   diag.print(nullptr, os);
@@ -473,39 +460,22 @@ void SourceMgrDiagnosticHandler::emitDiagnostic(Location loc, Twine message,
 
 /// Emit the given diagnostic with the held source manager.
 void SourceMgrDiagnosticHandler::emitDiagnostic(Diagnostic &diag) {
-  SmallVector<std::pair<Location, StringRef>> locationStack;
-  auto addLocToStack = [&](Location loc, StringRef locContext) {
-    if (Optional<Location> showableLoc = findLocToShow(loc))
-      locationStack.emplace_back(*showableLoc, locContext);
-  };
-
-  // Add locations to display for this diagnostic.
+  // Emit the diagnostic.
   Location loc = diag.getLocation();
-  addLocToStack(loc, /*locContext=*/{});
+  emitDiagnostic(loc, diag.str(), diag.getSeverity());
 
-  // If the diagnostic location was a call site location, add the call stack as
-  // well.
+  // If the diagnostic location was a call site location, then print the call
+  // stack as well.
   if (auto callLoc = getCallSiteLoc(loc)) {
     // Print the call stack while valid, or until the limit is reached.
     loc = callLoc->getCaller();
     for (unsigned curDepth = 0; curDepth < callStackLimit; ++curDepth) {
-      addLocToStack(loc, "called from");
+      emitDiagnostic(loc, "called from", DiagnosticSeverity::Note);
       if ((callLoc = getCallSiteLoc(loc)))
         loc = callLoc->getCaller();
       else
         break;
     }
-  }
-
-  // If the location stack is empty, use the initial location.
-  if (locationStack.empty()) {
-    emitDiagnostic(diag.getLocation(), diag.str(), diag.getSeverity());
-
-    // Otherwise, use the location stack.
-  } else {
-    emitDiagnostic(locationStack.front().first, diag.str(), diag.getSeverity());
-    for (auto &it : llvm::drop_begin(locationStack))
-      emitDiagnostic(it.first, it.second, DiagnosticSeverity::Note);
   }
 
   // Emit each of the notes. Only display the source code if the location is
@@ -525,52 +495,17 @@ SourceMgrDiagnosticHandler::getBufferForFile(StringRef filename) {
   return nullptr;
 }
 
-Optional<Location> SourceMgrDiagnosticHandler::findLocToShow(Location loc) {
-  if (!shouldShowLocFn)
-    return loc;
-  if (!shouldShowLocFn(loc))
-    return llvm::None;
-
-  // Recurse into the child locations of some of location types.
-  return TypeSwitch<LocationAttr, Optional<Location>>(loc)
-      .Case([&](CallSiteLoc callLoc) -> Optional<Location> {
-        // We recurse into the callee of a call site, as the caller will be
-        // emitted in a different note on the main diagnostic.
-        return findLocToShow(callLoc.getCallee());
-      })
-      .Case([&](FileLineColLoc) -> Optional<Location> { return loc; })
-      .Case([&](FusedLoc fusedLoc) -> Optional<Location> {
-        // Fused location is unique in that we try to find a sub-location to
-        // show, rather than the top-level location itself.
-        for (Location childLoc : fusedLoc.getLocations())
-          if (Optional<Location> showableLoc = findLocToShow(childLoc))
-            return showableLoc;
-        return llvm::None;
-      })
-      .Case([&](NameLoc nameLoc) -> Optional<Location> {
-        return findLocToShow(nameLoc.getChildLoc());
-      })
-      .Case([&](OpaqueLoc opaqueLoc) -> Optional<Location> {
-        // OpaqueLoc always falls back to a different source location.
-        return findLocToShow(opaqueLoc.getFallbackLocation());
-      })
-      .Case([](UnknownLoc) -> Optional<Location> {
-        // Prefer not to show unknown locations.
-        return llvm::None;
-      });
-}
-
 /// Get a memory buffer for the given file, or the main file of the source
 /// manager if one doesn't exist. This always returns non-null.
-SMLoc SourceMgrDiagnosticHandler::convertLocToSMLoc(FileLineColLoc loc) {
+llvm::SMLoc SourceMgrDiagnosticHandler::convertLocToSMLoc(FileLineColLoc loc) {
   // The column and line may be zero to represent unknown column and/or unknown
   /// line/column information.
   if (loc.getLine() == 0 || loc.getColumn() == 0)
-    return SMLoc();
+    return llvm::SMLoc();
 
   unsigned bufferId = impl->getSourceMgrBufferIDForFile(mgr, loc.getFilename());
   if (!bufferId)
-    return SMLoc();
+    return llvm::SMLoc();
   return mgr.FindLocForLineAndColumn(bufferId, loc.getLine(), loc.getColumn());
 }
 
@@ -586,7 +521,7 @@ struct ExpectedDiag {
   DiagnosticSeverity kind;
   unsigned lineNo;
   StringRef substring;
-  SMLoc fileLoc;
+  llvm::SMLoc fileLoc;
   bool matched;
 };
 
@@ -610,8 +545,8 @@ struct SourceMgrDiagnosticVerifierHandlerImpl {
   llvm::Regex expected = llvm::Regex("expected-(error|note|remark|warning) "
                                      "*(@([+-][0-9]+|above|below))? *{{(.*)}}");
 };
-} // namespace detail
-} // namespace mlir
+} // end namespace detail
+} // end namespace mlir
 
 /// Given a diagnostic kind, return a human readable string for it.
 static StringRef getDiagKindStr(DiagnosticSeverity kind) {
@@ -669,7 +604,7 @@ SourceMgrDiagnosticVerifierHandlerImpl::computeExpectedDiags(
     }
 
     // Point to the start of expected-*.
-    auto expectedStart = SMLoc::getFromPointer(matches[0].data());
+    auto expectedStart = llvm::SMLoc::getFromPointer(matches[0].data());
 
     DiagnosticSeverity kind;
     if (matches[1] == "error")
@@ -755,8 +690,8 @@ LogicalResult SourceMgrDiagnosticVerifierHandler::verify() {
     for (auto &err : expectedDiagsPair.second) {
       if (err.matched)
         continue;
-      SMRange range(err.fileLoc,
-                          SMLoc::getFromPointer(err.fileLoc.getPointer() +
+      llvm::SMRange range(err.fileLoc,
+                          llvm::SMLoc::getFromPointer(err.fileLoc.getPointer() +
                                                       err.substring.size()));
       mgr.PrintMessage(os, err.fileLoc, llvm::SourceMgr::DK_Error,
                        "expected " + getDiagKindStr(err.kind) + " \"" +
@@ -869,13 +804,13 @@ struct ParallelDiagnosticHandlerImpl : public llvm::PrettyStackTraceEntry {
       return;
 
     // Emit the diagnostics back to the context.
-    emitDiagnostics([&](Diagnostic &diag) {
+    emitDiagnostics([&](Diagnostic diag) {
       return context->getDiagEngine().emit(std::move(diag));
     });
   }
 
   /// Utility method to emit any held diagnostics.
-  void emitDiagnostics(llvm::function_ref<void(Diagnostic &)> emitFn) const {
+  void emitDiagnostics(std::function<void(Diagnostic)> emitFn) const {
     // Stable sort all of the diagnostics that were emitted. This creates a
     // deterministic ordering for the diagnostics based upon which order id they
     // were emitted for.
@@ -883,7 +818,7 @@ struct ParallelDiagnosticHandlerImpl : public llvm::PrettyStackTraceEntry {
 
     // Emit each diagnostic to the context again.
     for (ThreadDiagnostic &diag : diagnostics)
-      emitFn(diag.diag);
+      emitFn(std::move(diag.diag));
   }
 
   /// Set the order id for the current thread.
@@ -907,7 +842,7 @@ struct ParallelDiagnosticHandlerImpl : public llvm::PrettyStackTraceEntry {
       return;
 
     os << "In-Flight Diagnostics:\n";
-    emitDiagnostics([&](const Diagnostic &diag) {
+    emitDiagnostics([&](Diagnostic diag) {
       os.indent(4);
 
       // Print each diagnostic with the format:
@@ -947,12 +882,12 @@ struct ParallelDiagnosticHandlerImpl : public llvm::PrettyStackTraceEntry {
   /// The context to emit the diagnostics to.
   MLIRContext *context;
 };
-} // namespace detail
-} // namespace mlir
+} // end namespace detail
+} // end namespace mlir
 
 ParallelDiagnosticHandler::ParallelDiagnosticHandler(MLIRContext *ctx)
     : impl(new ParallelDiagnosticHandlerImpl(ctx)) {}
-ParallelDiagnosticHandler::~ParallelDiagnosticHandler() = default;
+ParallelDiagnosticHandler::~ParallelDiagnosticHandler() {}
 
 /// Set the order id for the current thread.
 void ParallelDiagnosticHandler::setOrderIDForThread(size_t orderID) {

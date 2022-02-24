@@ -21,13 +21,10 @@
 namespace llvm {
 
 class TargetInstrInfo;
-class ARCSubtarget;
 
 struct ARCRegisterInfo : public ARCGenRegisterInfo {
-  const ARCSubtarget &ST;
-
 public:
-  ARCRegisterInfo(const ARCSubtarget &);
+  ARCRegisterInfo();
 
   /// Code Generation virtual methods...
 

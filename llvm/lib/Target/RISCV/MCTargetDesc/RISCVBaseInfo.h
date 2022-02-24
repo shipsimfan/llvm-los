@@ -18,7 +18,6 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/SubtargetFeature.h"
-#include "llvm/Support/RISCVISAInfo.h"
 
 namespace llvm {
 
@@ -46,9 +45,8 @@ enum {
   InstFormatOther = 17,
 
   InstFormatMask = 31,
-  InstFormatShift = 0,
 
-  ConstraintShift = InstFormatShift + 5,
+  ConstraintShift = 5,
   ConstraintMask = 0b111 << ConstraintShift,
 
   VLMulShift = ConstraintShift + 3,
@@ -69,93 +67,23 @@ enum {
   HasMergeOpMask = 1 << HasMergeOpShift,
 
   // Does this instruction have a SEW operand. It will be the last explicit
-  // operand unless there is a vector policy operand. Used by RVV Pseudos.
+  // operand. Used by RVV Pseudos.
   HasSEWOpShift = HasMergeOpShift + 1,
   HasSEWOpMask = 1 << HasSEWOpShift,
 
   // Does this instruction have a VL operand. It will be the second to last
-  // explicit operand unless there is a vector policy operand. Used by RVV
-  // Pseudos.
+  // explicit operand. Used by RVV Pseudos.
   HasVLOpShift = HasSEWOpShift + 1,
   HasVLOpMask = 1 << HasVLOpShift,
-
-  // Does this instruction have a vector policy operand. It will be the last
-  // explicit operand. Used by RVV Pseudos.
-  HasVecPolicyOpShift = HasVLOpShift + 1,
-  HasVecPolicyOpMask = 1 << HasVecPolicyOpShift,
-
-  // Is this instruction a vector widening reduction instruction. Used by RVV
-  // Pseudos.
-  IsRVVWideningReductionShift = HasVecPolicyOpShift + 1,
-  IsRVVWideningReductionMask = 1 << IsRVVWideningReductionShift,
 };
 
 // Match with the definitions in RISCVInstrFormatsV.td
-enum VConstraintType {
+enum RVVConstraintType {
   NoConstraint = 0,
   VS2Constraint = 0b001,
   VS1Constraint = 0b010,
   VMConstraint = 0b100,
 };
-
-enum VLMUL : uint8_t {
-  LMUL_1 = 0,
-  LMUL_2,
-  LMUL_4,
-  LMUL_8,
-  LMUL_RESERVED,
-  LMUL_F8,
-  LMUL_F4,
-  LMUL_F2
-};
-
-enum {
-  TAIL_UNDISTURBED = 0,
-  TAIL_AGNOSTIC = 1,
-};
-
-// Helper functions to read TSFlags.
-/// \returns the format of the instruction.
-static inline unsigned getFormat(uint64_t TSFlags) {
-  return (TSFlags & InstFormatMask) >> InstFormatShift;
-}
-/// \returns the constraint for the instruction.
-static inline VConstraintType getConstraint(uint64_t TSFlags) {
-  return static_cast<VConstraintType>
-             ((TSFlags & ConstraintMask) >> ConstraintShift);
-}
-/// \returns the LMUL for the instruction.
-static inline VLMUL getLMul(uint64_t TSFlags) {
-  return static_cast<VLMUL>((TSFlags & VLMulMask) >> VLMulShift);
-}
-/// \returns true if there is a dummy mask operand for the instruction.
-static inline bool hasDummyMaskOp(uint64_t TSFlags) {
-  return TSFlags & HasDummyMaskOpMask;
-}
-/// \returns true if tail agnostic is enforced for the instruction.
-static inline bool doesForceTailAgnostic(uint64_t TSFlags) {
-  return TSFlags & ForceTailAgnosticMask;
-}
-/// \returns true if there is a merge operand for the instruction.
-static inline bool hasMergeOp(uint64_t TSFlags) {
-  return TSFlags & HasMergeOpMask;
-}
-/// \returns true if there is a SEW operand for the instruction.
-static inline bool hasSEWOp(uint64_t TSFlags) {
-  return TSFlags & HasSEWOpMask;
-}
-/// \returns true if there is a VL operand for the instruction.
-static inline bool hasVLOp(uint64_t TSFlags) {
-  return TSFlags & HasVLOpMask;
-}
-/// \returns true if there is a vector policy operand for this instruction.
-static inline bool hasVecPolicyOp(uint64_t TSFlags) {
-  return TSFlags & HasVecPolicyOpMask;
-}
-/// \returns true if it is a vector widening reduction instruction.
-static inline bool isRVVWideningReduction(uint64_t TSFlags) {
-  return TSFlags & IsRVVWideningReductionMask;
-}
 
 // RISC-V Specific Machine Operand Flags
 enum {
@@ -183,17 +111,13 @@ enum {
 namespace RISCVOp {
 enum OperandType : unsigned {
   OPERAND_FIRST_RISCV_IMM = MCOI::OPERAND_FIRST_TARGET,
-  OPERAND_UIMM2 = OPERAND_FIRST_RISCV_IMM,
-  OPERAND_UIMM3,
-  OPERAND_UIMM4,
+  OPERAND_UIMM4 = OPERAND_FIRST_RISCV_IMM,
   OPERAND_UIMM5,
-  OPERAND_UIMM7,
   OPERAND_UIMM12,
   OPERAND_SIMM12,
   OPERAND_UIMM20,
   OPERAND_UIMMLOG2XLEN,
-  OPERAND_RVKRNUM,
-  OPERAND_LAST_RISCV_IMM = OPERAND_RVKRNUM,
+  OPERAND_LAST_RISCV_IMM = OPERAND_UIMMLOG2XLEN,
   // Operand is either a register or uimm5, this is used by V extension pseudo
   // instructions to represent a value that be passed as AVL to either vsetvli
   // or vsetivli.
@@ -271,9 +195,8 @@ inline static bool isValidRoundingMode(unsigned Mode) {
 namespace RISCVSysReg {
 struct SysReg {
   const char *Name;
-  const char *AltName;
-  const char *DeprecatedName;
   unsigned Encoding;
+  const char *AltName;
   // FIXME: add these additional fields when needed.
   // Privilege Access: Read, Write, Read-Only.
   // unsigned ReadWrite;
@@ -286,7 +209,7 @@ struct SysReg {
   FeatureBitset FeaturesRequired;
   bool isRV32Only;
 
-  bool haveRequiredFeatures(const FeatureBitset &ActiveFeatures) const {
+  bool haveRequiredFeatures(FeatureBitset ActiveFeatures) const {
     // Not in 32-bit mode.
     if (isRV32Only && ActiveFeatures[RISCV::Feature64Bit])
       return false;
@@ -300,16 +223,6 @@ struct SysReg {
 #define GET_SysRegsList_DECL
 #include "RISCVGenSearchableTables.inc"
 } // end namespace RISCVSysReg
-
-namespace RISCVInsnOpcode {
-struct RISCVOpcode {
-  const char *Name;
-  unsigned Value;
-};
-
-#define GET_RISCVOpcodesList_DECL
-#include "RISCVGenSearchableTables.inc"
-} // end namespace RISCVInsnOpcode
 
 namespace RISCVABI {
 
@@ -345,10 +258,29 @@ namespace RISCVFeatures {
 // triple. Exits with report_fatal_error if not.
 void validate(const Triple &TT, const FeatureBitset &FeatureBits);
 
-llvm::Expected<std::unique_ptr<RISCVISAInfo>>
-parseFeatureBits(bool IsRV64, const FeatureBitset &FeatureBits);
-
 } // namespace RISCVFeatures
+
+enum class RISCVVSEW {
+  SEW_8 = 0,
+  SEW_16,
+  SEW_32,
+  SEW_64,
+  SEW_128,
+  SEW_256,
+  SEW_512,
+  SEW_1024,
+};
+
+enum class RISCVVLMUL {
+  LMUL_1 = 0,
+  LMUL_2,
+  LMUL_4,
+  LMUL_8,
+  LMUL_RESERVED,
+  LMUL_F8,
+  LMUL_F4,
+  LMUL_F2
+};
 
 namespace RISCVVType {
 // Is this a SEW value that can be encoded into the VTYPE format.
@@ -361,25 +293,36 @@ inline static bool isValidLMUL(unsigned LMUL, bool Fractional) {
   return isPowerOf2_32(LMUL) && LMUL <= 8 && (!Fractional || LMUL != 1);
 }
 
-unsigned encodeVTYPE(RISCVII::VLMUL VLMUL, unsigned SEW, bool TailAgnostic,
-                     bool MaskAgnostic);
+// Encode VTYPE into the binary format used by the the VSETVLI instruction which
+// is used by our MC layer representation.
+//
+// Bits | Name       | Description
+// -----+------------+------------------------------------------------
+// 7    | vma        | Vector mask agnostic
+// 6    | vta        | Vector tail agnostic
+// 5:3  | vsew[2:0]  | Standard element width (SEW) setting
+// 2:0  | vlmul[2:0] | Vector register group multiplier (LMUL) setting
+inline static unsigned encodeVTYPE(RISCVVLMUL VLMUL, RISCVVSEW VSEW,
+                                   bool TailAgnostic, bool MaskAgnostic) {
+  unsigned VLMULBits = static_cast<unsigned>(VLMUL);
+  unsigned VSEWBits = static_cast<unsigned>(VSEW);
+  unsigned VTypeI = (VSEWBits << 3) | (VLMULBits & 0x7);
+  if (TailAgnostic)
+    VTypeI |= 0x40;
+  if (MaskAgnostic)
+    VTypeI |= 0x80;
 
-inline static RISCVII::VLMUL getVLMUL(unsigned VType) {
+  return VTypeI;
+}
+
+inline static RISCVVLMUL getVLMUL(unsigned VType) {
   unsigned VLMUL = VType & 0x7;
-  return static_cast<RISCVII::VLMUL>(VLMUL);
+  return static_cast<RISCVVLMUL>(VLMUL);
 }
 
-// Decode VLMUL into 1,2,4,8 and fractional indicator.
-std::pair<unsigned, bool> decodeVLMUL(RISCVII::VLMUL VLMUL);
-
-inline static unsigned decodeVSEW(unsigned VSEW) {
-  assert(VSEW < 8 && "Unexpected VSEW value");
-  return 1 << (VSEW + 3);
-}
-
-inline static unsigned getSEW(unsigned VType) {
+inline static RISCVVSEW getVSEW(unsigned VType) {
   unsigned VSEW = (VType >> 3) & 0x7;
-  return decodeVSEW(VSEW);
+  return static_cast<RISCVVSEW>(VSEW);
 }
 
 inline static bool isTailAgnostic(unsigned VType) { return VType & 0x40; }

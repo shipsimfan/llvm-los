@@ -17,7 +17,6 @@
 #include "clang/Basic/TargetOptions.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/Compiler.h"
-#include "llvm/Support/RISCVISAInfo.h"
 
 namespace clang {
 namespace targets {
@@ -26,7 +25,28 @@ namespace targets {
 class RISCVTargetInfo : public TargetInfo {
 protected:
   std::string ABI, CPU;
-  std::unique_ptr<llvm::RISCVISAInfo> ISAInfo;
+  bool HasM = false;
+  bool HasA = false;
+  bool HasF = false;
+  bool HasD = false;
+  bool HasC = false;
+  bool HasB = false;
+  bool HasV = false;
+  bool HasZba = false;
+  bool HasZbb = false;
+  bool HasZbc = false;
+  bool HasZbe = false;
+  bool HasZbf = false;
+  bool HasZbm = false;
+  bool HasZbp = false;
+  bool HasZbproposedc = false;
+  bool HasZbr = false;
+  bool HasZbs = false;
+  bool HasZbt = false;
+  bool HasZfh = false;
+  bool HasZvamo = false;
+  bool HasZvlsseg = false;
+
   static const Builtin::Info BuiltinInfo[];
 
 public:
@@ -40,7 +60,6 @@ public:
     WIntType = UnsignedInt;
     HasRISCVVTypes = true;
     MCountName = "_mcount";
-    HasFloat16 = true;
   }
 
   bool setCPU(const std::string &Name) override {
@@ -61,11 +80,6 @@ public:
   }
 
   const char *getClobbers() const override { return ""; }
-
-  StringRef getConstraintRegister(StringRef Constraint,
-                                  StringRef Expression) const override {
-    return Expression;
-  }
 
   ArrayRef<const char *> getGCCRegNames() const override;
 
@@ -95,7 +109,7 @@ public:
   bool handleTargetFeatures(std::vector<std::string> &Features,
                             DiagnosticsEngine &Diags) override;
 
-  bool hasBitIntType() const override { return true; }
+  bool hasExtIntType() const override { return true; }
 };
 class LLVM_LIBRARY_VISIBILITY RISCV32TargetInfo : public RISCVTargetInfo {
 public:
@@ -123,7 +137,7 @@ public:
   void setMaxAtomicWidth() override {
     MaxAtomicPromoteWidth = 128;
 
-    if (ISAInfo->hasExtension("a"))
+    if (HasA)
       MaxAtomicInlineWidth = 32;
   }
 };
@@ -152,7 +166,7 @@ public:
   void setMaxAtomicWidth() override {
     MaxAtomicPromoteWidth = 128;
 
-    if (ISAInfo->hasExtension("a"))
+    if (HasA)
       MaxAtomicInlineWidth = 64;
   }
 };

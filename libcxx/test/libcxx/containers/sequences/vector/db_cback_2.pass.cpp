@@ -13,10 +13,14 @@
 // UNSUPPORTED: libcxx-no-debug-mode
 
 // ADDITIONAL_COMPILE_FLAGS: -D_LIBCPP_DEBUG=1
+#define _LIBCPP_ASSERT(x, m) ((x) ? (void)0 : std::exit(0))
 
 #include <vector>
+#include <cassert>
+#include <iterator>
+#include <exception>
+#include <cstdlib>
 
-#include "debug_macros.h"
 #include "test_macros.h"
 #include "min_allocator.h"
 
@@ -24,7 +28,8 @@ int main(int, char**) {
   typedef int T;
   typedef std::vector<T, min_allocator<T> > C;
   const C c;
-  TEST_LIBCPP_ASSERT_FAILURE(c.back(), "back() called on an empty vector");
+  assert(c.back() == 0);
+  assert(false);
 
   return 0;
 }

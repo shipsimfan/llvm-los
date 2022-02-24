@@ -59,7 +59,7 @@ public:
   GetExternalCXXBaseSpecifiers(uint64_t Offset) override {
     return nullptr;
   }
-  void MaterializeVisibleDecls(const clang::DeclContext *DC) {}
+  void MaterializeVisibleDecls(const clang::DeclContext *DC) { return; }
 
   void InstallASTContext(TypeSystemClang &ast_context);
 
@@ -313,8 +313,6 @@ protected:
   /// \return
   ///     The imported type.
   CompilerType GuardedCopyType(const CompilerType &src_type);
-
-  std::shared_ptr<ClangModulesDeclVendor> GetClangModulesDeclVendor();
 
 public:
   /// Returns true if a name should be ignored by name lookup.

@@ -13,6 +13,7 @@
 #include "llvm/IR/Metadata.h"
 #include "LLVMContextImpl.h"
 #include "MetadataImpl.h"
+#include "SymbolTableListTraitsImpl.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -43,6 +44,7 @@
 #include "llvm/IR/TrackingMDRef.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
+#include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
@@ -50,6 +52,8 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -191,22 +195,16 @@ bool MetadataTracking::isReplaceable(const Metadata &MD) {
   return ReplaceableMetadataImpl::isReplaceable(MD);
 }
 
-SmallVector<Metadata *> ReplaceableMetadataImpl::getAllArgListUsers() {
-  SmallVector<std::pair<OwnerTy, uint64_t> *> MDUsersWithID;
+SmallVector<Metadata *, 4> ReplaceableMetadataImpl::getAllArgListUsers() {
+  SmallVector<Metadata *, 4> MDUsers;
   for (auto Pair : UseMap) {
     OwnerTy Owner = Pair.second.first;
     if (!Owner.is<Metadata *>())
       continue;
     Metadata *OwnerMD = Owner.get<Metadata *>();
     if (OwnerMD->getMetadataID() == Metadata::DIArgListKind)
-      MDUsersWithID.push_back(&UseMap[Pair.first]);
+      MDUsers.push_back(OwnerMD);
   }
-  llvm::sort(MDUsersWithID, [](auto UserA, auto UserB) {
-    return UserA->second < UserB->second;
-  });
-  SmallVector<Metadata *> MDUsers;
-  for (auto UserWithID : MDUsersWithID)
-    MDUsers.push_back(UserWithID->first.get<Metadata *>());
   return MDUsers;
 }
 
@@ -341,7 +339,7 @@ ReplaceableMetadataImpl *ReplaceableMetadataImpl::getIfExists(Metadata &MD) {
 bool ReplaceableMetadataImpl::isReplaceable(const Metadata &MD) {
   if (auto *N = dyn_cast<MDNode>(&MD))
     return !N->isResolved();
-  return isa<ValueAsMetadata>(&MD);
+  return dyn_cast<ValueAsMetadata>(&MD);
 }
 
 static DISubprogram *getLocalFunctionMetadata(Value *V) {
@@ -1361,15 +1359,6 @@ void Instruction::addAnnotationMetadata(StringRef Name) {
 
   MDNode *MD = MDTuple::get(getContext(), Names);
   setMetadata(LLVMContext::MD_annotation, MD);
-}
-
-AAMDNodes Instruction::getAAMetadata() const {
-  AAMDNodes Result;
-  Result.TBAA = getMetadata(LLVMContext::MD_tbaa);
-  Result.TBAAStruct = getMetadata(LLVMContext::MD_tbaa_struct);
-  Result.Scope = getMetadata(LLVMContext::MD_alias_scope);
-  Result.NoAlias = getMetadata(LLVMContext::MD_noalias);
-  return Result;
 }
 
 void Instruction::setAAMetadata(const AAMDNodes &N) {

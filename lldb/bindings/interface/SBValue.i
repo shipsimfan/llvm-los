@@ -410,9 +410,6 @@ public:
     bool
     SetData (lldb::SBData &data, lldb::SBError& error);
 
-    lldb::SBValue
-    Clone(const char *new_name);
-
   lldb::addr_t
   GetLoadAddress();
 

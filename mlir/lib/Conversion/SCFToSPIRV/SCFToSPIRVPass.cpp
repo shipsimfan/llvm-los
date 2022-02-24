@@ -13,8 +13,6 @@
 #include "mlir/Conversion/SCFToSPIRV/SCFToSPIRVPass.h"
 
 #include "../PassDetail.h"
-#include "mlir/Conversion/ArithmeticToSPIRV/ArithmeticToSPIRV.h"
-#include "mlir/Conversion/MemRefToSPIRV/MemRefToSPIRV.h"
 #include "mlir/Conversion/SCFToSPIRV/SCFToSPIRV.h"
 #include "mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h"
 #include "mlir/Dialect/SCF/SCF.h"
@@ -41,12 +39,7 @@ void SCFToSPIRVPass::runOnOperation() {
   ScfToSPIRVContext scfContext;
   RewritePatternSet patterns(context);
   populateSCFToSPIRVPatterns(typeConverter, scfContext, patterns);
-
-  // TODO: Change SPIR-V conversion to be progressive and remove the following
-  // patterns.
-  mlir::arith::populateArithmeticToSPIRVPatterns(typeConverter, patterns);
   populateStandardToSPIRVPatterns(typeConverter, patterns);
-  populateMemRefToSPIRVPatterns(typeConverter, patterns);
   populateBuiltinFuncToSPIRVPatterns(typeConverter, patterns);
 
   if (failed(applyPartialConversion(module, *target, std::move(patterns))))

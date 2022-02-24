@@ -35,18 +35,15 @@ static cl::opt<std::string> input(cl::Positional, cl::desc("filename"),
 static cl::opt<std::string> output(cl::Positional, cl::desc("directory"),
                                    cl::value_desc("directory"), cl::cat(cat));
 
-static cl::opt<bool> leadingLines("leading-lines",
-                                    cl::desc("Preserve line numbers"),
-                                    cl::cat(cat));
-
 static cl::opt<bool> noLeadingLines("no-leading-lines",
-                                    cl::desc("Don't preserve line numbers (default)"),
+                                    cl::desc("Don't preserve line numbers"),
                                     cl::cat(cat));
 
 static StringRef toolName;
 static int errorCount;
 
-[[noreturn]] static void fatal(StringRef filename, const Twine &message) {
+LLVM_ATTRIBUTE_NORETURN static void fatal(StringRef filename,
+                                          const Twine &message) {
   if (filename.empty())
     WithColor::error(errs(), toolName) << message << '\n';
   else
@@ -71,7 +68,6 @@ struct Part {
 static int handle(MemoryBuffer &inputBuf, StringRef input) {
   DenseMap<StringRef, Part> partToBegin;
   StringRef lastPart, separator;
-  StringRef EOL = inputBuf.getBuffer().detectEOL();
   for (line_iterator i(inputBuf, /*SkipBlanks=*/false, '\0'); !i.is_at_eof();) {
     const int64_t lineNo = i.line_number();
     const StringRef line = *i++;
@@ -101,9 +97,9 @@ static int handle(MemoryBuffer &inputBuf, StringRef input) {
     Part &cur = res.first->second;
     if (!i.is_at_eof())
       cur.begin = i->data();
-    // If --leading-lines is specified, numEmptyLines is 0. Append newlines so
-    // that the extracted part preserves line numbers.
-    cur.leadingLines = leadingLines ? i.line_number() - 1 : 0;
+    // If --no-leading-lines is not specified, numEmptyLines is 0. Append
+    // newlines so that the extracted part preserves line numbers.
+    cur.leadingLines = noLeadingLines ? 0 : i.line_number() - 1;
 
     lastPart = partName;
   }
@@ -129,7 +125,7 @@ static int handle(MemoryBuffer &inputBuf, StringRef input) {
 
     Part &part = keyValue.second;
     for (int64_t i = 0; i != part.leadingLines; ++i)
-      (*f).os() << EOL;
+      (*f).os().write('\n');
     if (part.begin)
       (*f).os().write(part.begin, part.end - part.begin);
     outputFiles.push_back(std::move(f));

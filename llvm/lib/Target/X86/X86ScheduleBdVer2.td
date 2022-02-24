@@ -269,7 +269,6 @@ def : WriteRes<WriteLoad,    [PdLoad]> { let Latency = 5; let ResourceCycles = [
 def : WriteRes<WriteStore,   [PdStore]>;
 def : WriteRes<WriteStoreNT, [PdStore]>;
 def : WriteRes<WriteMove,    [PdEX01]> { let ResourceCycles = [2]; }
-defm : X86WriteResUnsupported<WriteVecMaskedGatherWriteback>;
 
 // Load/store MXCSR.
 // FIXME: These are copy and pasted from WriteLoad/Store.
@@ -435,12 +434,7 @@ defm : PdWriteResExPair<WriteIMul32Reg, [PdEX1, PdMul],          4,  [1, 2]>;
 defm : PdWriteResExPair<WriteIMul64,    [PdEX1, PdMul],          6,  [1, 6]>;
 defm : PdWriteResExPair<WriteIMul64Imm, [PdEX1, PdMul],          6,  [1, 4],1, 1>;
 defm : PdWriteResExPair<WriteIMul64Reg, [PdEX1, PdMul],          6,  [1, 4]>;
-
-// BMI2 MULX
-defm : X86WriteResUnsupported<WriteIMulH>;
-defm : X86WriteResUnsupported<WriteIMulHLd>;
-defm : X86WriteResPairUnsupported<WriteMULX32>;
-defm : X86WriteResPairUnsupported<WriteMULX64>;
+defm : X86WriteResUnsupported<WriteIMulH>; // BMI2 MULX
 
 defm : PdWriteResExPair<WriteDiv8,    [PdEX1, PdDiv],           12,  [1, 12]>;
 defm : PdWriteResExPair<WriteDiv16,   [PdEX1, PdDiv],           15,  [1, 15],   2>;
@@ -772,7 +766,6 @@ defm : PdWriteRes<WriteFMaskedStore64Y,    [PdStore, PdFPU01, PdFPFMA], 6, [2, 2
 defm : PdWriteRes<WriteFMove,              [PdFPU01, PdFPFMA]>;
 defm : PdWriteRes<WriteFMoveX,             [PdFPU01, PdFPFMA], 1, [1, 2]>;
 defm : PdWriteRes<WriteFMoveY,             [PdFPU01, PdFPFMA], 2, [2, 2], 2>;
-defm : X86WriteResUnsupported<WriteFMoveZ>;
 
 defm : PdWriteRes<WriteEMMS,               [PdFPU01, PdFPFMA], 2>;
 
@@ -1009,11 +1002,11 @@ defm : PdWriteResXMMPair<WriteCvtPD2I,   [PdFPU0, PdFPCVT, PdFPSTO],          8,
 defm : PdWriteResYMMPair<WriteCvtPD2IY,  [PdFPU0, PdFPCVT, PdFPSTO, PdFPFMA], 8, [1, 2, 1, 1], 4>;
 defm : X86WriteResPairUnsupported<WriteCvtPD2IZ>;
 
-def PdWriteMMX_CVTTPD2PIrr : SchedWriteRes<[PdFPU0, PdFPCVT, PdFPSTO]> {
+def PdWriteMMX_CVTTPD2PIirr : SchedWriteRes<[PdFPU0, PdFPCVT, PdFPSTO]> {
   let Latency = 6;
   let NumMicroOps = 2;
 }
-def : InstRW<[PdWriteMMX_CVTTPD2PIrr], (instrs MMX_CVTTPD2PIrr)>;
+def : InstRW<[PdWriteMMX_CVTTPD2PIirr], (instrs MMX_CVTTPD2PIirr)>;
 
 // FIXME: f+3 ST, LD+STC latency
 defm : PdWriteResXMMPair<WriteCvtI2SS,   [PdFPU0, PdFPCVT, PdFPSTO], 4, [], 2>;
@@ -1049,18 +1042,18 @@ defm : PdWriteResXMMPair<WriteCvtPD2PS,  [PdFPU0, PdFPCVT, PdFPSTO],          8,
 defm : PdWriteResYMMPair<WriteCvtPD2PSY, [PdFPU0, PdFPCVT, PdFPSTO, PdFPFMA], 8, [1, 2, 1, 1], 4>;
 defm : X86WriteResPairUnsupported<WriteCvtPD2PSZ>;
 
-def PdWriteMMX_CVTPD2PIrrMMX_CVTPI2PDrr : SchedWriteRes<[PdFPU0, PdFPCVT, PdFPSTO]> {
+def PdWriteMMX_CVTPD2PIirrMMX_CVTPI2PDirr : SchedWriteRes<[PdFPU0, PdFPCVT, PdFPSTO]> {
   let Latency = 6;
   let NumMicroOps = 2;
 }
-def : InstRW<[PdWriteMMX_CVTPD2PIrrMMX_CVTPI2PDrr], (instrs MMX_CVTPD2PIrr,
-                                                            MMX_CVTPI2PDrr)>;
+def : InstRW<[PdWriteMMX_CVTPD2PIirrMMX_CVTPI2PDirr], (instrs MMX_CVTPD2PIirr,
+                                                            MMX_CVTPI2PDirr)>;
 
-def PdWriteMMX_CVTPI2PSrr : SchedWriteRes<[PdFPU0, PdFPCVT, PdFPSTO]> {
+def PdWriteMMX_CVTPI2PSirr : SchedWriteRes<[PdFPU0, PdFPCVT, PdFPSTO]> {
   let Latency = 4;
   let NumMicroOps = 2;
 }
-def : InstRW<[PdWriteMMX_CVTPI2PSrr], (instrs MMX_CVTPI2PSrr)>;
+def : InstRW<[PdWriteMMX_CVTPI2PSirr], (instrs MMX_CVTPI2PSirr)>;
 
 defm : PdWriteResXMMPair<WriteCvtPH2PS,  [PdFPU0, PdFPCVT, PdFPSTO], 8, [1, 2, 1], 2, 1>;
 defm : PdWriteResYMMPair<WriteCvtPH2PSY, [PdFPU0, PdFPCVT, PdFPSTO], 8, [1, 2, 1], 4, 3>;
@@ -1108,7 +1101,6 @@ defm : X86WriteResUnsupported<WriteVecMaskedStore64Y>;
 defm : PdWriteRes<WriteVecMove,             [PdFPU01, PdFPMAL], 2>;
 defm : PdWriteRes<WriteVecMoveX,            [PdFPU01, PdFPMAL], 1, [1, 2]>;
 defm : PdWriteRes<WriteVecMoveY,            [PdFPU01, PdFPMAL], 2, [2, 2], 2>;
-defm : X86WriteResUnsupported<WriteVecMoveZ>;
 
 def PdWriteMOVDQArr : SchedWriteRes<[PdFPU01, PdFPMAL]> {
 }
@@ -1367,7 +1359,7 @@ def PdWriteVZeroIdiomLogic : SchedWriteVariant<[
   SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [PdWriteZeroLatency]>,
   SchedVar<MCSchedPredicate<TruePred>,           [WriteVecLogic]>
 ]>;
-def : InstRW<[PdWriteVZeroIdiomLogic], (instrs MMX_PXORrr, MMX_PANDNrr)>;
+def : InstRW<[PdWriteVZeroIdiomLogic], (instrs MMX_PXORirr, MMX_PANDNirr)>;
 
 def PdWriteVZeroIdiomLogicX : SchedWriteVariant<[
   SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [PdWriteZeroLatency]>,
@@ -1380,11 +1372,11 @@ def PdWriteVZeroIdiomALU : SchedWriteVariant<[
   SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [PdWriteZeroLatency]>,
   SchedVar<MCSchedPredicate<TruePred>,           [WriteVecALU]>
 ]>;
-def : InstRW<[PdWriteVZeroIdiomALU], (instrs MMX_PSUBBrr,   MMX_PSUBDrr,
-                                             MMX_PSUBQrr,   MMX_PSUBWrr,
-                                             MMX_PCMPGTBrr,
-                                             MMX_PCMPGTDrr,
-                                             MMX_PCMPGTWrr)>;
+def : InstRW<[PdWriteVZeroIdiomALU], (instrs MMX_PSUBBirr,   MMX_PSUBDirr,
+                                             MMX_PSUBQirr,   MMX_PSUBWirr,
+                                             MMX_PCMPGTBirr,
+                                             MMX_PCMPGTDirr,
+                                             MMX_PCMPGTWirr)>;
 
 def PdWriteVZeroIdiomALUX : SchedWriteVariant<[
     SchedVar<MCSchedPredicate<ZeroIdiomPredicate>, [PdWriteZeroLatency]>,
@@ -1410,10 +1402,10 @@ def : IsZeroIdiomFunction<[
 
   // MMX Zero-idioms.
   DepBreakingClass<[
-    MMX_PXORrr, MMX_PANDNrr, MMX_PSUBBrr,
-    MMX_PSUBDrr, MMX_PSUBQrr, MMX_PSUBWrr,
-    MMX_PSUBSBrr, MMX_PSUBSWrr, MMX_PSUBUSBrr, MMX_PSUBUSWrr,
-    MMX_PCMPGTBrr, MMX_PCMPGTDrr, MMX_PCMPGTWrr
+    MMX_PXORirr, MMX_PANDNirr, MMX_PSUBBirr,
+    MMX_PSUBDirr, MMX_PSUBQirr, MMX_PSUBWirr,
+    MMX_PSUBSBirr, MMX_PSUBSWirr, MMX_PSUBUSBirr, MMX_PSUBUSWirr,
+    MMX_PCMPGTBirr, MMX_PCMPGTDirr, MMX_PCMPGTWirr
   ], ZeroIdiomPredicate>,
 
   // SSE Zero-idioms.
@@ -1451,7 +1443,7 @@ def : IsDepBreakingFunction<[
 
   // MMX
   DepBreakingClass<[
-    MMX_PCMPEQBrr, MMX_PCMPEQDrr, MMX_PCMPEQWrr
+    MMX_PCMPEQBirr, MMX_PCMPEQDirr, MMX_PCMPEQWirr
   ], ZeroIdiomPredicate>,
 
   // SSE

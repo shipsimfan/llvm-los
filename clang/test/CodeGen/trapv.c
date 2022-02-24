@@ -4,7 +4,7 @@ unsigned int ui, uj, uk;
 int i, j, k;
 
 // CHECK-LABEL: define{{.*}} void @test0()
-void test0(void) {
+void test0() {
   // -ftrapv doesn't affect unsigned arithmetic.
   // CHECK:      [[T1:%.*]] = load i32, i32* @uj
   // CHECK-NEXT: [[T2:%.*]] = load i32, i32* @uk
@@ -24,7 +24,7 @@ void test0(void) {
 }
 
 // CHECK-LABEL: define{{.*}} void @test1()
-void test1(void) {
+void test1() {
   extern void opaque(int);
   opaque(i++);
 
@@ -38,7 +38,7 @@ void test1(void) {
 }
 
 // CHECK-LABEL: define{{.*}} void @test2()
-void test2(void) {
+void test2() {
   extern void opaque(int);
   opaque(++i);
 

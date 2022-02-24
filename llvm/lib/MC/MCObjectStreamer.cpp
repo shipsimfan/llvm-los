@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCObjectStreamer.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCAssembler.h"
@@ -36,7 +37,7 @@ MCObjectStreamer::MCObjectStreamer(MCContext &Context,
     setAllowAutoPadding(Assembler->getBackend().allowAutoPadding());
 }
 
-MCObjectStreamer::~MCObjectStreamer() = default;
+MCObjectStreamer::~MCObjectStreamer() {}
 
 // AssemblerPtr is used for evaluation of expressions and causes
 // difference between asm and object outputs. Return nullptr to in
@@ -118,40 +119,20 @@ void MCObjectStreamer::resolvePendingFixups() {
       continue;
     }
     flushPendingLabels(PendingFixup.DF, PendingFixup.DF->getContents().size());
-    PendingFixup.Fixup.setOffset(PendingFixup.Sym->getOffset() +
-                                 PendingFixup.Fixup.getOffset());
-
-    // If the location symbol to relocate is in MCEncodedFragmentWithFixups,
-    // put the Fixup into location symbol's fragment. Otherwise
-    // put into PendingFixup.DF
-    MCFragment *SymFragment = PendingFixup.Sym->getFragment();
-    switch (SymFragment->getKind()) {
-    case MCFragment::FT_Relaxable:
-    case MCFragment::FT_Dwarf:
-    case MCFragment::FT_PseudoProbe:
-      cast<MCEncodedFragmentWithFixups<8, 1>>(SymFragment)
-          ->getFixups()
-          .push_back(PendingFixup.Fixup);
-      break;
-    case MCFragment::FT_Data:
-    case MCFragment::FT_CVDefRange:
-      cast<MCEncodedFragmentWithFixups<32, 4>>(SymFragment)
-          ->getFixups()
-          .push_back(PendingFixup.Fixup);
-      break;
-    default:
-      PendingFixup.DF->getFixups().push_back(PendingFixup.Fixup);
-      break;
-    }
+    PendingFixup.Fixup.setOffset(PendingFixup.Sym->getOffset());
+    PendingFixup.DF->getFixups().push_back(PendingFixup.Fixup);
   }
   PendingFixups.clear();
 }
 
 // As a compile-time optimization, avoid allocating and evaluating an MCExpr
 // tree for (Hi - Lo) when Hi and Lo are offsets into the same fragment.
-static Optional<uint64_t> absoluteSymbolDiff(const MCSymbol *Hi,
-                                             const MCSymbol *Lo) {
+static Optional<uint64_t>
+absoluteSymbolDiff(MCAssembler &Asm, const MCSymbol *Hi, const MCSymbol *Lo) {
   assert(Hi && Lo);
+  if (Asm.getBackendPtr()->requiresDiffExpressionRelocations())
+    return None;
+
   if (!Hi->getFragment() || Hi->getFragment() != Lo->getFragment() ||
       Hi->isVariable() || Lo->isVariable())
     return None;
@@ -162,17 +143,19 @@ static Optional<uint64_t> absoluteSymbolDiff(const MCSymbol *Hi,
 void MCObjectStreamer::emitAbsoluteSymbolDiff(const MCSymbol *Hi,
                                               const MCSymbol *Lo,
                                               unsigned Size) {
-  if (!getAssembler().getContext().getTargetTriple().isRISCV())
-    if (Optional<uint64_t> Diff = absoluteSymbolDiff(Hi, Lo))
-      return emitIntValue(*Diff, Size);
+  if (Optional<uint64_t> Diff = absoluteSymbolDiff(getAssembler(), Hi, Lo)) {
+    emitIntValue(*Diff, Size);
+    return;
+  }
   MCStreamer::emitAbsoluteSymbolDiff(Hi, Lo, Size);
 }
 
 void MCObjectStreamer::emitAbsoluteSymbolDiffAsULEB128(const MCSymbol *Hi,
                                                        const MCSymbol *Lo) {
-  if (!getAssembler().getContext().getTargetTriple().isRISCV())
-    if (Optional<uint64_t> Diff = absoluteSymbolDiff(Hi, Lo))
-      return emitULEB128IntValue(*Diff);
+  if (Optional<uint64_t> Diff = absoluteSymbolDiff(getAssembler(), Hi, Lo)) {
+    emitULEB128IntValue(*Diff);
+    return;
+  }
   MCStreamer::emitAbsoluteSymbolDiffAsULEB128(Hi, Lo);
 }
 
@@ -303,18 +286,6 @@ void MCObjectStreamer::emitLabel(MCSymbol *Symbol, SMLoc Loc) {
     Symbol->setOffset(0);
     addPendingLabel(Symbol);
   }
-
-  emitPendingAssignments(Symbol);
-}
-
-void MCObjectStreamer::emitPendingAssignments(MCSymbol *Symbol) {
-  auto Assignments = pendingAssignments.find(Symbol);
-  if (Assignments != pendingAssignments.end()) {
-    for (const PendingAssignment &A : Assignments->second)
-      emitAssignment(A.Symbol, A.Value);
-
-    pendingAssignments.erase(Assignments);
-  }
 }
 
 // Emit a label at a previously emitted fragment/offset position. This must be
@@ -387,19 +358,6 @@ bool MCObjectStreamer::changeSectionImpl(MCSection *Section,
 void MCObjectStreamer::emitAssignment(MCSymbol *Symbol, const MCExpr *Value) {
   getAssembler().registerSymbol(*Symbol);
   MCStreamer::emitAssignment(Symbol, Value);
-  emitPendingAssignments(Symbol);
-}
-
-void MCObjectStreamer::emitConditionalAssignment(MCSymbol *Symbol,
-                                                 const MCExpr *Value) {
-  const MCSymbol *Target = &cast<MCSymbolRefExpr>(*Value).getSymbol();
-
-  // If the symbol already exists, emit the assignment. Otherwise, emit it
-  // later only if the symbol is also emitted.
-  if (Target->isRegistered())
-    emitAssignment(Symbol, Value);
-  else
-    pendingAssignments[Target].push_back({Symbol, Value});
 }
 
 bool MCObjectStreamer::mayHaveInstructions(MCSection &Sec) const {
@@ -415,7 +373,7 @@ void MCObjectStreamer::emitInstruction(const MCInst &Inst,
                                                 "' cannot have instructions");
     return;
   }
-  getAssembler().getBackend().emitInstructionBegin(*this, Inst, STI);
+  getAssembler().getBackend().emitInstructionBegin(*this, Inst);
   emitInstructionImpl(Inst, STI);
   getAssembler().getBackend().emitInstructionEnd(*this, Inst);
 }
@@ -656,10 +614,9 @@ void MCObjectStreamer::emitValueToAlignment(unsigned ByteAlignment,
 }
 
 void MCObjectStreamer::emitCodeAlignment(unsigned ByteAlignment,
-                                         const MCSubtargetInfo *STI,
                                          unsigned MaxBytesToEmit) {
   emitValueToAlignment(ByteAlignment, 0, 1, MaxBytesToEmit);
-  cast<MCAlignFragment>(getCurrentFragment())->setEmitNops(true, STI);
+  cast<MCAlignFragment>(getCurrentFragment())->setEmitNops(true);
 }
 
 void MCObjectStreamer::emitValueToOffset(const MCExpr *Offset,
@@ -838,9 +795,8 @@ MCObjectStreamer::emitRelocDirective(const MCExpr &Offset, StringRef Name,
     return None;
   }
 
-  PendingFixups.emplace_back(
-      &SRE.getSymbol(), DF,
-      MCFixup::create(OffsetVal.getConstant(), Expr, Kind, Loc));
+  PendingFixups.emplace_back(&SRE.getSymbol(), DF,
+                             MCFixup::create(-1, Expr, Kind, Loc));
   return None;
 }
 
@@ -884,26 +840,17 @@ void MCObjectStreamer::emitFill(const MCExpr &NumValues, int64_t Size,
 }
 
 void MCObjectStreamer::emitNops(int64_t NumBytes, int64_t ControlledNopLength,
-                                SMLoc Loc, const MCSubtargetInfo &STI) {
+                                SMLoc Loc) {
   // Emit an NOP fragment.
   MCDataFragment *DF = getOrCreateDataFragment();
   flushPendingLabels(DF, DF->getContents().size());
 
   assert(getCurrentSectionOnly() && "need a section");
-
-  insert(new MCNopsFragment(NumBytes, ControlledNopLength, Loc, STI));
+  insert(new MCNopsFragment(NumBytes, ControlledNopLength, Loc));
 }
 
 void MCObjectStreamer::emitFileDirective(StringRef Filename) {
   getAssembler().addFileName(Filename);
-}
-
-void MCObjectStreamer::emitFileDirective(StringRef Filename,
-                                         StringRef CompilerVerion,
-                                         StringRef TimeStamp,
-                                         StringRef Description) {
-  getAssembler().addFileName(Filename);
-  // TODO: add additional info to integrated assembler.
 }
 
 void MCObjectStreamer::emitAddrsig() {

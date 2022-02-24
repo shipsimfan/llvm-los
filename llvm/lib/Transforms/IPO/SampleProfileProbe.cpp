@@ -23,7 +23,6 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instruction.h"
-#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/ProfileData/SampleProf.h"
 #include "llvm/Support/CRC.h"
@@ -50,27 +49,6 @@ static cl::list<std::string> VerifyPseudoProbeFuncList(
 static cl::opt<bool>
     UpdatePseudoProbe("update-pseudo-probe", cl::init(true), cl::Hidden,
                       cl::desc("Update pseudo probe distribution factor"));
-
-static uint64_t getCallStackHash(const DILocation *DIL) {
-  uint64_t Hash = 0;
-  const DILocation *InlinedAt = DIL ? DIL->getInlinedAt() : nullptr;
-  while (InlinedAt) {
-    Hash ^= MD5Hash(std::to_string(InlinedAt->getLine()));
-    Hash ^= MD5Hash(std::to_string(InlinedAt->getColumn()));
-    const DISubprogram *SP = InlinedAt->getScope()->getSubprogram();
-    // Use linkage name for C++ if possible.
-    auto Name = SP->getLinkageName();
-    if (Name.empty())
-      Name = SP->getName();
-    Hash ^= MD5Hash(Name);
-    InlinedAt = InlinedAt->getInlinedAt();
-  }
-  return Hash;
-}
-
-static uint64_t computeCallStackHash(const Instruction &Inst) {
-  return getCallStackHash(Inst.getDebugLoc());
-}
 
 bool PseudoProbeVerifier::shouldVerifyFunction(const Function *F) {
   // Skip function declaration.
@@ -139,10 +117,8 @@ void PseudoProbeVerifier::runAfterPass(const Loop *L) {
 void PseudoProbeVerifier::collectProbeFactors(const BasicBlock *Block,
                                               ProbeFactorMap &ProbeFactors) {
   for (const auto &I : *Block) {
-    if (Optional<PseudoProbe> Probe = extractProbe(I)) {
-      uint64_t Hash = computeCallStackHash(I);
-      ProbeFactors[{Probe->Id, Hash}] += Probe->Factor;
-    }
+    if (Optional<PseudoProbe> Probe = extractProbe(I))
+      ProbeFactors[Probe->Id] += Probe->Factor;
   }
 }
 
@@ -160,7 +136,7 @@ void PseudoProbeVerifier::verifyProbeFactors(
           dbgs() << "Function " << F->getName() << ":\n";
           BannerPrinted = true;
         }
-        dbgs() << "Probe " << I.first.first << "\tprevious factor "
+        dbgs() << "Probe " << I.first << "\tprevious factor "
                << format("%0.2f", PrevProbeFactor) << "\tcurrent factor "
                << format("%0.2f", CurProbeFactor) << "\n";
       }
@@ -416,7 +392,9 @@ void PseudoProbeUpdatePass::runOnFunction(Function &F,
                                           FunctionAnalysisManager &FAM) {
   BlockFrequencyInfo &BFI = FAM.getResult<BlockFrequencyAnalysis>(F);
   auto BBProfileCount = [&BFI](BasicBlock *BB) {
-    return BFI.getBlockProfileCount(BB).getValueOr(0);
+    return BFI.getBlockProfileCount(BB)
+               ? BFI.getBlockProfileCount(BB).getValue()
+               : 0;
   };
 
   // Collect the sum of execution weight for each probe.
@@ -424,8 +402,13 @@ void PseudoProbeUpdatePass::runOnFunction(Function &F,
   for (auto &Block : F) {
     for (auto &I : Block) {
       if (Optional<PseudoProbe> Probe = extractProbe(I)) {
-        uint64_t Hash = computeCallStackHash(I);
-        ProbeFactors[{Probe->Id, Hash}] += BBProfileCount(&Block);
+        // Do not count dangling probes since they are logically deleted and the
+        // current block that a dangling probe resides in doesn't reflect the
+        // execution count of the probe. The original samples of the probe will
+        // be distributed among the rest probes if there are any, this is
+        // less-than-deal but at least we don't lose any samples.
+        if (!Probe->isDangling())
+          ProbeFactors[Probe->Id] += BBProfileCount(&Block);
       }
     }
   }
@@ -434,10 +417,13 @@ void PseudoProbeUpdatePass::runOnFunction(Function &F,
   for (auto &Block : F) {
     for (auto &I : Block) {
       if (Optional<PseudoProbe> Probe = extractProbe(I)) {
-        uint64_t Hash = computeCallStackHash(I);
-        float Sum = ProbeFactors[{Probe->Id, Hash}];
-        if (Sum != 0)
-          setProbeDistributionFactor(I, BBProfileCount(&Block) / Sum);
+        // Ignore danling probes since they are logically deleted and should do
+        // not consume any profile samples in the subsequent profile annotation.
+        if (!Probe->isDangling()) {
+          float Sum = ProbeFactors[Probe->Id];
+          if (Sum != 0)
+            setProbeDistributionFactor(I, BBProfileCount(&Block) / Sum);
+        }
       }
     }
   }

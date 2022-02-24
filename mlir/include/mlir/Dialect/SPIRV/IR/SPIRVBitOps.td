@@ -17,15 +17,13 @@
 include "mlir/Dialect/SPIRV/IR/SPIRVBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-class SPV_BitBinaryOp<string mnemonic, list<Trait> traits = []> :
+class SPV_BitBinaryOp<string mnemonic, list<OpTrait> traits = []> :
       // All the operands type used in bit instructions are SPV_Integer.
       SPV_BinaryOp<mnemonic, SPV_Integer, SPV_Integer,
                    !listconcat(traits,
-                               [NoSideEffect, SameOperandsAndResultType])> {                                 
-  let assemblyFormat = "operands attr-dict `:` type($result)";
-}
+                               [NoSideEffect, SameOperandsAndResultType])>;
 
-class SPV_BitFieldExtractOp<string mnemonic, list<Trait> traits = []> :
+class SPV_BitFieldExtractOp<string mnemonic, list<OpTrait> traits = []> :
       SPV_Op<mnemonic, !listconcat(traits,
              [NoSideEffect, AllTypesMatch<["base", "result"]>])> {
   let arguments = (ins
@@ -38,27 +36,25 @@ class SPV_BitFieldExtractOp<string mnemonic, list<Trait> traits = []> :
     SPV_ScalarOrVectorOf<SPV_Integer>:$result
   );
 
-  let hasVerifier = 0;
+  let verifier = [{ return success(); }];
 
   let assemblyFormat = [{
     operands attr-dict `:` type($base) `,` type($offset) `,` type($count)
   }];
 }
 
-class SPV_BitUnaryOp<string mnemonic, list<Trait> traits = []> :
+class SPV_BitUnaryOp<string mnemonic, list<OpTrait> traits = []> :
       SPV_UnaryOp<mnemonic, SPV_Integer, SPV_Integer,
                    !listconcat(traits,
                                [NoSideEffect, SameOperandsAndResultType])>;
 
-class SPV_ShiftOp<string mnemonic, list<Trait> traits = []> :
+class SPV_ShiftOp<string mnemonic, list<OpTrait> traits = []> :
       SPV_BinaryOp<mnemonic, SPV_Integer, SPV_Integer,
                    !listconcat(traits,
-                               [NoSideEffect, SameOperandsAndResultShape,
-                                AllTypesMatch<["operand1", "result"]>])> {
-  let assemblyFormat = [{
-    operands attr-dict `:` type($operand1) `,` type($operand2)
-  }];
-  let hasVerifier = 1;
+                               [NoSideEffect, SameOperandsAndResultShape])> {
+  let parser = [{ return ::parseShiftOp(parser, result); }];
+  let printer = [{ ::printShiftOp(this->getOperation(), p); }];
+  let verifier = [{ return ::verifyShiftOp(this->getOperation()); }];
 }
 
 // -----
@@ -166,7 +162,7 @@ def SPV_BitFieldInsertOp : SPV_Op<"BitFieldInsert",
     SPV_ScalarOrVectorOf<SPV_Integer>:$result
   );
 
-  let hasVerifier = 0;
+  let verifier = [{ return success(); }];
 
   let assemblyFormat = [{
     operands attr-dict `:` type($base) `,` type($offset) `,` type($count)

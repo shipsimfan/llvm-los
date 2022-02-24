@@ -5,19 +5,17 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-///  This file provides Any, a non-template class modeled in the spirit of
-///  std::any.  The idea is to provide a type-safe replacement for C's void*.
-///  It can hold a value of any copy-constructible copy-assignable type
-///
+//
+//  This file provides Any, a non-template class modeled in the spirit of
+//  std::any.  The idea is to provide a type-safe replacement for C's void*.
+//  It can hold a value of any copy-constructible copy-assignable type
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_ANY_H
 #define LLVM_ADT_ANY_H
 
-#include "llvm/ADT/STLForwardCompat.h"
-#include "llvm/Support/Compiler.h"
+#include "llvm/ADT/STLExtras.h"
 
 #include <cassert>
 #include <memory>
@@ -25,12 +23,7 @@
 
 namespace llvm {
 
-class LLVM_EXTERNAL_VISIBILITY Any {
-
-  // The `Typeid<T>::Id` static data member below is a globally unique
-  // identifier for the type `T`. It is explicitly marked with default
-  // visibility so that when `-fvisibility=hidden` is used, the loader still
-  // merges duplicate definitions across DSO boundaries.
+class Any {
   template <typename T> struct TypeId { static const char Id; };
 
   struct StorageBase {

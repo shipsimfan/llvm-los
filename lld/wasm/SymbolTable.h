@@ -41,7 +41,7 @@ public:
 
   void addFile(InputFile *file);
 
-  void compileBitcodeFiles();
+  void addCombinedLTOObject();
 
   ArrayRef<Symbol *> getSymbols() const { return symVector; }
 
@@ -54,11 +54,12 @@ public:
   Symbol *addDefinedFunction(StringRef name, uint32_t flags, InputFile *file,
                              InputFunction *function);
   Symbol *addDefinedData(StringRef name, uint32_t flags, InputFile *file,
-                         InputChunk *segment, uint64_t address, uint64_t size);
+                         InputSegment *segment, uint64_t address,
+                         uint64_t size);
   Symbol *addDefinedGlobal(StringRef name, uint32_t flags, InputFile *file,
                            InputGlobal *g);
-  Symbol *addDefinedTag(StringRef name, uint32_t flags, InputFile *file,
-                        InputTag *t);
+  Symbol *addDefinedEvent(StringRef name, uint32_t flags, InputFile *file,
+                          InputEvent *e);
   Symbol *addDefinedTable(StringRef name, uint32_t flags, InputFile *file,
                           InputTable *t);
 
@@ -79,10 +80,6 @@ public:
                             llvm::Optional<StringRef> importModule,
                             uint32_t flags, InputFile *file,
                             const WasmTableType *type);
-  Symbol *addUndefinedTag(StringRef name, llvm::Optional<StringRef> importName,
-                          llvm::Optional<StringRef> importModule,
-                          uint32_t flags, InputFile *file,
-                          const WasmSignature *sig);
 
   TableSymbol *resolveIndirectFunctionTable(bool required);
 

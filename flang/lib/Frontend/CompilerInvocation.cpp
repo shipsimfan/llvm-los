@@ -23,7 +23,6 @@
 #include "llvm/Option/OptTable.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FileUtilities.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
@@ -90,15 +89,15 @@ bool Fortran::frontend::ParseDiagnosticArgs(clang::DiagnosticOptions &opts,
 
 // Tweak the frontend configuration based on the frontend action
 static void setUpFrontendBasedOnAction(FrontendOptions &opts) {
-  assert(opts.programAction != Fortran::frontend::InvalidAction &&
+  assert(opts.programAction_ != Fortran::frontend::InvalidAction &&
       "Fortran frontend action not set!");
 
-  if (opts.programAction == DebugDumpParsingLog)
-    opts.instrumentedParse = true;
+  if (opts.programAction_ == DebugDumpParsingLog)
+    opts.instrumentedParse_ = true;
 
-  if (opts.programAction == DebugDumpProvenance ||
-      opts.programAction == Fortran::frontend::GetDefinition)
-    opts.needProvenanceRangeToCharBlockMappings = true;
+  if (opts.programAction_ == DebugDumpProvenance ||
+      opts.programAction_ == Fortran::frontend::GetDefinition)
+    opts.needProvenanceRangeToCharBlockMappings_ = true;
 }
 
 static bool ParseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
@@ -106,17 +105,7 @@ static bool ParseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
   unsigned numErrorsBefore = diags.getNumErrors();
 
   // By default the frontend driver creates a ParseSyntaxOnly action.
-  opts.programAction = ParseSyntaxOnly;
-
-  // Treat multiple action options as an invocation error. Note that `clang
-  // -cc1` does accept multiple action options, but will only consider the
-  // rightmost one.
-  if (args.hasMultipleArgs(clang::driver::options::OPT_Action_Group)) {
-    const unsigned diagID = diags.getCustomDiagID(
-        clang::DiagnosticsEngine::Error, "Only one action option is allowed");
-    diags.Report(diagID);
-    return false;
-  }
+  opts.programAction_ = ParseSyntaxOnly;
 
   // Identify the action (i.e. opts.ProgramAction)
   if (const llvm::opt::Arg *a =
@@ -126,68 +115,56 @@ static bool ParseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
       llvm_unreachable("Invalid option in group!");
     }
     case clang::driver::options::OPT_test_io:
-      opts.programAction = InputOutputTest;
+      opts.programAction_ = InputOutputTest;
       break;
     case clang::driver::options::OPT_E:
-      opts.programAction = PrintPreprocessedInput;
+      opts.programAction_ = PrintPreprocessedInput;
       break;
     case clang::driver::options::OPT_fsyntax_only:
-      opts.programAction = ParseSyntaxOnly;
-      break;
-    case clang::driver::options::OPT_emit_mlir:
-      opts.programAction = EmitMLIR;
-      break;
-    case clang::driver::options::OPT_emit_llvm:
-      opts.programAction = EmitLLVM;
+      opts.programAction_ = ParseSyntaxOnly;
       break;
     case clang::driver::options::OPT_emit_obj:
-      opts.programAction = EmitObj;
+      opts.programAction_ = EmitObj;
       break;
     case clang::driver::options::OPT_fdebug_unparse:
-      opts.programAction = DebugUnparse;
+      opts.programAction_ = DebugUnparse;
       break;
     case clang::driver::options::OPT_fdebug_unparse_no_sema:
-      opts.programAction = DebugUnparseNoSema;
+      opts.programAction_ = DebugUnparseNoSema;
       break;
     case clang::driver::options::OPT_fdebug_unparse_with_symbols:
-      opts.programAction = DebugUnparseWithSymbols;
+      opts.programAction_ = DebugUnparseWithSymbols;
       break;
     case clang::driver::options::OPT_fdebug_dump_symbols:
-      opts.programAction = DebugDumpSymbols;
+      opts.programAction_ = DebugDumpSymbols;
       break;
     case clang::driver::options::OPT_fdebug_dump_parse_tree:
-      opts.programAction = DebugDumpParseTree;
-      break;
-    case clang::driver::options::OPT_fdebug_dump_all:
-      opts.programAction = DebugDumpAll;
+      opts.programAction_ = DebugDumpParseTree;
       break;
     case clang::driver::options::OPT_fdebug_dump_parse_tree_no_sema:
-      opts.programAction = DebugDumpParseTreeNoSema;
+      opts.programAction_ = DebugDumpParseTreeNoSema;
       break;
     case clang::driver::options::OPT_fdebug_dump_provenance:
-      opts.programAction = DebugDumpProvenance;
+      opts.programAction_ = DebugDumpProvenance;
       break;
     case clang::driver::options::OPT_fdebug_dump_parsing_log:
-      opts.programAction = DebugDumpParsingLog;
+      opts.programAction_ = DebugDumpParsingLog;
       break;
     case clang::driver::options::OPT_fdebug_measure_parse_tree:
-      opts.programAction = DebugMeasureParseTree;
+      opts.programAction_ = DebugMeasureParseTree;
       break;
     case clang::driver::options::OPT_fdebug_pre_fir_tree:
-      opts.programAction = DebugPreFIRTree;
+      opts.programAction_ = DebugPreFIRTree;
       break;
     case clang::driver::options::OPT_fget_symbols_sources:
-      opts.programAction = GetSymbolsSources;
+      opts.programAction_ = GetSymbolsSources;
       break;
     case clang::driver::options::OPT_fget_definition:
-      opts.programAction = GetDefinition;
-      break;
-    case clang::driver::options::OPT_init_only:
-      opts.programAction = InitOnly;
+      opts.programAction_ = GetDefinition;
       break;
 
       // TODO:
-      // case clang::driver::options::OPT_emit_llvm:
+      // case calng::driver::options::OPT_emit_llvm:
       // case clang::driver::options::OPT_emit_llvm_only:
       // case clang::driver::options::OPT_emit_codegen_only:
       // case clang::driver::options::OPT_emit_module:
@@ -210,27 +187,15 @@ static bool ParseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
           break;
         }
       }
-      opts.getDefVals.line = optVals[0];
-      opts.getDefVals.startColumn = optVals[1];
-      opts.getDefVals.endColumn = optVals[2];
+      opts.getDefVals_.line = optVals[0];
+      opts.getDefVals_.startColumn = optVals[1];
+      opts.getDefVals_.endColumn = optVals[2];
     }
   }
 
-  // Parsing -load <dsopath> option and storing shared object path
-  if (llvm::opt::Arg *a = args.getLastArg(clang::driver::options::OPT_load)) {
-    opts.plugins.push_back(a->getValue());
-  }
-
-  // Parsing -plugin <name> option and storing plugin name and setting action
-  if (const llvm::opt::Arg *a =
-          args.getLastArg(clang::driver::options::OPT_plugin)) {
-    opts.programAction = PluginAction;
-    opts.ActionName = a->getValue();
-  }
-
-  opts.outputFile = args.getLastArgValue(clang::driver::options::OPT_o);
-  opts.showHelp = args.hasArg(clang::driver::options::OPT_help);
-  opts.showVersion = args.hasArg(clang::driver::options::OPT_version);
+  opts.outputFile_ = args.getLastArgValue(clang::driver::options::OPT_o);
+  opts.showHelp_ = args.hasArg(clang::driver::options::OPT_help);
+  opts.showVersion_ = args.hasArg(clang::driver::options::OPT_version);
 
   // Get the input kind (from the value passed via `-x`)
   InputKind dashX(Language::Unknown);
@@ -256,7 +221,7 @@ static bool ParseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
   // Collect the input files and save them in our instance of FrontendOptions.
   std::vector<std::string> inputs =
       args.getAllArgValues(clang::driver::options::OPT_INPUT);
-  opts.inputs.clear();
+  opts.inputs_.clear();
   if (inputs.empty())
     // '-' is the default input if none is given.
     inputs.push_back("-");
@@ -271,19 +236,19 @@ static bool ParseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
         dashX = ik;
     }
 
-    opts.inputs.emplace_back(std::move(inputs[i]), ik);
+    opts.inputs_.emplace_back(std::move(inputs[i]), ik);
   }
 
-  // Set fortranForm based on options -ffree-form and -ffixed-form.
+  // Set fortranForm_ based on options -ffree-form and -ffixed-form.
   if (const auto *arg = args.getLastArg(clang::driver::options::OPT_ffixed_form,
           clang::driver::options::OPT_ffree_form)) {
-    opts.fortranForm =
+    opts.fortranForm_ =
         arg->getOption().matches(clang::driver::options::OPT_ffixed_form)
         ? FortranForm::FixedForm
         : FortranForm::FreeForm;
   }
 
-  // Set fixedFormColumns based on -ffixed-line-length=<value>
+  // Set fixedFormColumns_ based on -ffixed-line-length=<value>
   if (const auto *arg =
           args.getLastArg(clang::driver::options::OPT_ffixed_line_length_EQ)) {
     llvm::StringRef argValue = llvm::StringRef(arg->getValue());
@@ -294,55 +259,58 @@ static bool ParseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
       columns = -1;
     }
     if (columns < 0) {
-      diags.Report(clang::diag::err_drv_negative_columns)
-          << arg->getOption().getName() << arg->getValue();
+      diags.Report(clang::diag::err_drv_invalid_value_with_suggestion)
+          << arg->getOption().getName() << arg->getValue()
+          << "value must be 'none' or a non-negative integer";
     } else if (columns == 0) {
-      opts.fixedFormColumns = 1000000;
+      opts.fixedFormColumns_ = 1000000;
     } else if (columns < 7) {
-      diags.Report(clang::diag::err_drv_small_columns)
-          << arg->getOption().getName() << arg->getValue() << "7";
+      diags.Report(clang::diag::err_drv_invalid_value_with_suggestion)
+          << arg->getOption().getName() << arg->getValue()
+          << "value must be at least seven";
     } else {
-      opts.fixedFormColumns = columns;
+      opts.fixedFormColumns_ = columns;
     }
   }
 
-  // -f{no-}implicit-none
-  opts.features.Enable(
-      Fortran::common::LanguageFeature::ImplicitNoneTypeAlways,
-      args.hasFlag(clang::driver::options::OPT_fimplicit_none,
-          clang::driver::options::OPT_fno_implicit_none, false));
-
-  // -f{no-}backslash
-  opts.features.Enable(Fortran::common::LanguageFeature::BackslashEscapes,
-      args.hasFlag(clang::driver::options::OPT_fbackslash,
-          clang::driver::options::OPT_fno_backslash, false));
-
-  // -f{no-}logical-abbreviations
-  opts.features.Enable(Fortran::common::LanguageFeature::LogicalAbbreviations,
-      args.hasFlag(clang::driver::options::OPT_flogical_abbreviations,
-          clang::driver::options::OPT_fno_logical_abbreviations, false));
-
-  // -f{no-}xor-operator
-  opts.features.Enable(Fortran::common::LanguageFeature::XOROperator,
-      args.hasFlag(clang::driver::options::OPT_fxor_operator,
-          clang::driver::options::OPT_fno_xor_operator, false));
-
-  // -fno-automatic
-  if (args.hasArg(clang::driver::options::OPT_fno_automatic)) {
-    opts.features.Enable(Fortran::common::LanguageFeature::DefaultSave);
+  if (const llvm::opt::Arg *arg =
+          args.getLastArg(clang::driver::options::OPT_fimplicit_none,
+              clang::driver::options::OPT_fno_implicit_none)) {
+    opts.features_.Enable(
+        Fortran::common::LanguageFeature::ImplicitNoneTypeAlways,
+        arg->getOption().matches(clang::driver::options::OPT_fimplicit_none));
   }
-
+  if (const llvm::opt::Arg *arg =
+          args.getLastArg(clang::driver::options::OPT_fbackslash,
+              clang::driver::options::OPT_fno_backslash)) {
+    opts.features_.Enable(Fortran::common::LanguageFeature::BackslashEscapes,
+        arg->getOption().matches(clang::driver::options::OPT_fbackslash));
+  }
+  if (const llvm::opt::Arg *arg =
+          args.getLastArg(clang::driver::options::OPT_flogical_abbreviations,
+              clang::driver::options::OPT_fno_logical_abbreviations)) {
+    opts.features_.Enable(
+        Fortran::common::LanguageFeature::LogicalAbbreviations,
+        arg->getOption().matches(
+            clang::driver::options::OPT_flogical_abbreviations));
+  }
+  if (const llvm::opt::Arg *arg =
+          args.getLastArg(clang::driver::options::OPT_fxor_operator,
+              clang::driver::options::OPT_fno_xor_operator)) {
+    opts.features_.Enable(Fortran::common::LanguageFeature::XOROperator,
+        arg->getOption().matches(clang::driver::options::OPT_fxor_operator));
+  }
   if (args.hasArg(
           clang::driver::options::OPT_falternative_parameter_statement)) {
-    opts.features.Enable(Fortran::common::LanguageFeature::OldStyleParameter);
+    opts.features_.Enable(Fortran::common::LanguageFeature::OldStyleParameter);
   }
   if (const llvm::opt::Arg *arg =
           args.getLastArg(clang::driver::options::OPT_finput_charset_EQ)) {
     llvm::StringRef argValue = arg->getValue();
     if (argValue == "utf-8") {
-      opts.encoding = Fortran::parser::Encoding::UTF_8;
+      opts.encoding_ = Fortran::parser::Encoding::UTF_8;
     } else if (argValue == "latin-1") {
-      opts.encoding = Fortran::parser::Encoding::LATIN_1;
+      opts.encoding_ = Fortran::parser::Encoding::LATIN_1;
     } else {
       diags.Report(clang::diag::err_drv_invalid_value)
           << arg->getAsString(args) << argValue;
@@ -350,7 +318,7 @@ static bool ParseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
   }
 
   setUpFrontendBasedOnAction(opts);
-  opts.dashX = dashX;
+  opts.dashX_ = dashX;
 
   return diags.getNumErrors() == numErrorsBefore;
 }
@@ -395,13 +363,10 @@ static void parsePreprocessorArgs(
   // -cpp/-nocpp
   if (const auto *currentArg = args.getLastArg(
           clang::driver::options::OPT_cpp, clang::driver::options::OPT_nocpp))
-    opts.macrosFlag =
+    opts.macrosFlag_ =
         (currentArg->getOption().matches(clang::driver::options::OPT_cpp))
         ? PPMacrosFlag::Include
         : PPMacrosFlag::Exclude;
-
-  opts.noReformat = args.hasArg(clang::driver::options::OPT_fno_reformat);
-  opts.noLineDirectives = args.hasArg(clang::driver::options::OPT_P);
 }
 
 /// Parses all semantic related arguments and populates the variables
@@ -428,17 +393,6 @@ static bool parseSemaArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
   if (args.hasArg(clang::driver::options::OPT_fdebug_module_writer)) {
     res.SetDebugModuleDir(true);
   }
-
-  // -module-suffix
-  if (const auto *moduleSuffix =
-          args.getLastArg(clang::driver::options::OPT_module_suffix)) {
-    res.SetModuleFileSuffix(moduleSuffix->getValue());
-  }
-
-  // -f{no-}analyzed-objects-for-unparse
-  res.SetUseAnalyzedObjectsForUnparse(
-      args.hasFlag(clang::driver::options::OPT_fanalyzed_objects_for_unparse,
-          clang::driver::options::OPT_fno_analyzed_objects_for_unparse, true));
 
   return diags.getNumErrors() == numErrorsBefore;
 }
@@ -500,11 +454,11 @@ static bool parseDialectArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
 
   // -fopenmp and -fopenacc
   if (args.hasArg(clang::driver::options::OPT_fopenacc)) {
-    res.frontendOpts().features.Enable(
+    res.frontendOpts().features_.Enable(
         Fortran::common::LanguageFeature::OpenACC);
   }
   if (args.hasArg(clang::driver::options::OPT_fopenmp)) {
-    res.frontendOpts().features.Enable(
+    res.frontendOpts().features_.Enable(
         Fortran::common::LanguageFeature::OpenMP);
   }
 
@@ -543,13 +497,6 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &res,
   llvm::opt::InputArgList args = opts.ParseArgs(
       commandLineArgs, missingArgIndex, missingArgCount, includedFlagsBitmask);
 
-  // Check for missing argument error.
-  if (missingArgCount) {
-    diags.Report(clang::diag::err_drv_missing_argument)
-        << args.getArgString(missingArgIndex) << missingArgCount;
-    success = false;
-  }
-
   // Issue errors on unknown arguments
   for (const auto *a : args.filtered(clang::driver::options::OPT_UNKNOWN)) {
     auto argString = a->getAsString(args);
@@ -571,7 +518,7 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &res,
   return success;
 }
 
-void CompilerInvocation::CollectMacroDefinitions() {
+void CompilerInvocation::collectMacroDefinitions() {
   auto &ppOpts = this->preprocessorOpts();
 
   for (unsigned i = 0, n = ppOpts.macros.size(); i != n; ++i) {
@@ -605,6 +552,7 @@ void CompilerInvocation::CollectMacroDefinitions() {
 void CompilerInvocation::SetDefaultFortranOpts() {
   auto &fortranOptions = fortranOpts();
 
+  // These defaults are based on the defaults in f18/f18.cpp.
   std::vector<std::string> searchDirectories{"."s};
   fortranOptions.searchDirectories = searchDirectories;
   fortranOptions.isFixedForm = false;
@@ -613,7 +561,7 @@ void CompilerInvocation::SetDefaultFortranOpts() {
 // TODO: When expanding this method, consider creating a dedicated API for
 // this. Also at some point we will need to differentiate between different
 // targets and add dedicated predefines for each.
-void CompilerInvocation::SetDefaultPredefinitions() {
+void CompilerInvocation::setDefaultPredefinitions() {
   auto &fortranOptions = fortranOpts();
   const auto &frontendOptions = frontendOpts();
 
@@ -627,30 +575,30 @@ void CompilerInvocation::SetDefaultPredefinitions() {
       "__flang_patchlevel__", FLANG_VERSION_PATCHLEVEL_STRING);
 
   // Add predefinitions based on extensions enabled
-  if (frontendOptions.features.IsEnabled(
+  if (frontendOptions.features_.IsEnabled(
           Fortran::common::LanguageFeature::OpenACC)) {
     fortranOptions.predefinitions.emplace_back("_OPENACC", "202011");
   }
-  if (frontendOptions.features.IsEnabled(
+  if (frontendOptions.features_.IsEnabled(
           Fortran::common::LanguageFeature::OpenMP)) {
     fortranOptions.predefinitions.emplace_back("_OPENMP", "201511");
   }
 }
 
-void CompilerInvocation::SetFortranOpts() {
+void CompilerInvocation::setFortranOpts() {
   auto &fortranOptions = fortranOpts();
   const auto &frontendOptions = frontendOpts();
   const auto &preprocessorOptions = preprocessorOpts();
   auto &moduleDirJ = moduleDir();
 
-  if (frontendOptions.fortranForm != FortranForm::Unknown) {
+  if (frontendOptions.fortranForm_ != FortranForm::Unknown) {
     fortranOptions.isFixedForm =
-        frontendOptions.fortranForm == FortranForm::FixedForm;
+        frontendOptions.fortranForm_ == FortranForm::FixedForm;
   }
-  fortranOptions.fixedFormColumns = frontendOptions.fixedFormColumns;
+  fortranOptions.fixedFormColumns = frontendOptions.fixedFormColumns_;
 
-  fortranOptions.features = frontendOptions.features;
-  fortranOptions.encoding = frontendOptions.encoding;
+  fortranOptions.features = frontendOptions.features_;
+  fortranOptions.encoding = frontendOptions.encoding_;
 
   // Adding search directories specified by -I
   fortranOptions.searchDirectories.insert(
@@ -664,18 +612,18 @@ void CompilerInvocation::SetFortranOpts() {
       preprocessorOptions.searchDirectoriesFromIntrModPath.begin(),
       preprocessorOptions.searchDirectoriesFromIntrModPath.end());
 
-  //  Add the default intrinsic module directory
-  fortranOptions.intrinsicModuleDirectories.emplace_back(getIntrinsicDir());
+  //  Add the default intrinsic module directory at the end
+  fortranOptions.searchDirectories.emplace_back(getIntrinsicDir());
 
   // Add the directory supplied through -J/-module-dir to the list of search
   // directories
   if (moduleDirJ.compare(".") != 0)
     fortranOptions.searchDirectories.emplace_back(moduleDirJ);
 
-  if (frontendOptions.instrumentedParse)
+  if (frontendOptions.instrumentedParse_)
     fortranOptions.instrumentedParse = true;
 
-  if (frontendOptions.needProvenanceRangeToCharBlockMappings)
+  if (frontendOptions.needProvenanceRangeToCharBlockMappings_)
     fortranOptions.needProvenanceRangeToCharBlockMappings = true;
 
   if (enableConformanceChecks()) {
@@ -683,7 +631,7 @@ void CompilerInvocation::SetFortranOpts() {
   }
 }
 
-void CompilerInvocation::SetSemanticsOpts(
+void CompilerInvocation::setSemanticsOpts(
     Fortran::parser::AllCookedSources &allCookedSources) {
   const auto &fortranOptions = fortranOpts();
 
@@ -692,8 +640,6 @@ void CompilerInvocation::SetSemanticsOpts(
 
   semanticsContext_->set_moduleDirectory(moduleDir())
       .set_searchDirectories(fortranOptions.searchDirectories)
-      .set_intrinsicModuleDirectories(fortranOptions.intrinsicModuleDirectories)
       .set_warnOnNonstandardUsage(enableConformanceChecks())
-      .set_warningsAreErrors(warnAsErr())
-      .set_moduleFileSuffix(moduleFileSuffix());
+      .set_warningsAreErrors(warnAsErr());
 }

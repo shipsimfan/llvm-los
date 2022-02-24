@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/StaticAnalyzer/Core/PathSensitive/SValBuilder.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/APSIntType.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExprEngine.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState.h"
@@ -21,39 +22,10 @@ using namespace ento;
 
 namespace {
 class SimpleSValBuilder : public SValBuilder {
-
-  // With one `simplifySValOnce` call, a compound symbols might collapse to
-  // simpler symbol tree that is still possible to further simplify. Thus, we
-  // do the simplification on a new symbol tree until we reach the simplest
-  // form, i.e. the fixpoint.
-  // Consider the following symbol `(b * b) * b * b` which has this tree:
-  //       *
-  //      / \
-  //     *   b
-  //    /  \
-  //   /    b
-  // (b * b)
-  // Now, if the `b * b == 1` new constraint is added then during the first
-  // iteration we have the following transformations:
-  //       *                  *
-  //      / \                / \
-  //     *   b     -->      b   b
-  //    /  \
-  //   /    b
-  //  1
-  // We need another iteration to reach the final result `1`.
-  SVal simplifyUntilFixpoint(ProgramStateRef State, SVal Val);
-
-  // Recursively descends into symbolic expressions and replaces symbols
-  // with their known values (in the sense of the getKnownValue() method).
-  // We traverse the symbol tree and query the constraint values for the
-  // sub-trees and if a value is a constant we do the constant folding.
-  SVal simplifySValOnce(ProgramStateRef State, SVal V);
-
 public:
   SimpleSValBuilder(llvm::BumpPtrAllocator &alloc, ASTContext &context,
                     ProgramStateManager &stateMgr)
-      : SValBuilder(alloc, context, stateMgr) {}
+                    : SValBuilder(alloc, context, stateMgr) {}
   ~SimpleSValBuilder() override {}
 
   SVal evalMinus(NonLoc val) override;
@@ -69,6 +41,8 @@ public:
   ///  (integer) value, that value is returned. Otherwise, returns NULL.
   const llvm::APSInt *getKnownValue(ProgramStateRef state, SVal V) override;
 
+  /// Recursively descends into symbolic expressions and replaces symbols
+  /// with their known values (in the sense of the getKnownValue() method).
   SVal simplifySVal(ProgramStateRef State, SVal V) override;
 
   SVal MakeSymIntVal(const SymExpr *LHS, BinaryOperator::Opcode op,
@@ -155,14 +129,14 @@ SVal SimpleSValBuilder::MakeSymIntVal(const SymExpr *LHS,
     // a&0 and a&(~0)
     if (RHS == 0)
       return makeIntVal(0, resultTy);
-    else if (RHS.isAllOnes())
+    else if (RHS.isAllOnesValue())
       isIdempotent = true;
     break;
   case BO_Or:
     // a|0 and a|(~0)
     if (RHS == 0)
       isIdempotent = true;
-    else if (RHS.isAllOnes()) {
+    else if (RHS.isAllOnesValue()) {
       const llvm::APSInt &Result = BasicVals.Convert(resultTy, RHS);
       return nonloc::ConcreteInt(Result);
     }
@@ -346,10 +320,13 @@ static Optional<NonLoc> tryRearrange(ProgramStateRef State,
   // We expect everything to be of the same type - this type.
   QualType SingleTy;
 
+  auto &Opts =
+    StateMgr.getOwningEngine().getAnalysisManager().getAnalyzerOptions();
+
   // FIXME: After putting complexity threshold to the symbols we can always
   //        rearrange additive operations but rearrange comparisons only if
   //        option is set.
-  if (!SVB.getAnalyzerOptions().ShouldAggressivelySimplifyBinaryOperation)
+  if(!Opts.ShouldAggressivelySimplifyBinaryOperation)
     return None;
 
   SymbolRef LSym = Lhs.getAsSymbol();
@@ -399,15 +376,6 @@ SVal SimpleSValBuilder::evalBinOpNN(ProgramStateRef state,
   NonLoc InputLHS = lhs;
   NonLoc InputRHS = rhs;
 
-  // Constraints may have changed since the creation of a bound SVal. Check if
-  // the values can be simplified based on those new constraints.
-  SVal simplifiedLhs = simplifySVal(state, lhs);
-  SVal simplifiedRhs = simplifySVal(state, rhs);
-  if (auto simplifiedLhsAsNonLoc = simplifiedLhs.getAs<NonLoc>())
-    lhs = *simplifiedLhsAsNonLoc;
-  if (auto simplifiedRhsAsNonLoc = simplifiedRhs.getAs<NonLoc>())
-    rhs = *simplifiedRhsAsNonLoc;
-
   // Handle trivial case where left-side and right-side are the same.
   if (lhs == rhs)
     switch (op) {
@@ -432,7 +400,7 @@ SVal SimpleSValBuilder::evalBinOpNN(ProgramStateRef state,
         return evalCast(lhs, resultTy, QualType{});
     }
 
-  while (true) {
+  while (1) {
     switch (lhs.getSubKind()) {
     default:
       return makeSymExprValNN(op, lhs, rhs, resultTy);
@@ -545,7 +513,7 @@ SVal SimpleSValBuilder::evalBinOpNN(ProgramStateRef state,
         continue;
       case BO_Shr:
         // (~0)>>a
-        if (LHSValue.isAllOnes() && LHSValue.isSigned())
+        if (LHSValue.isAllOnesValue() && LHSValue.isSigned())
           return evalCast(lhs, resultTy, QualType{});
         LLVM_FALLTHROUGH;
       case BO_Shl:
@@ -654,6 +622,16 @@ SVal SimpleSValBuilder::evalBinOpNN(ProgramStateRef state,
           return MakeSymIntVal(symIntExpr, op, *RHSValue, resultTy);
         }
       }
+
+      // Does the symbolic expression simplify to a constant?
+      // If so, "fold" the constant by setting 'lhs' to a ConcreteInt
+      // and try again.
+      SVal simplifiedLhs = simplifySVal(state, lhs);
+      if (simplifiedLhs != lhs)
+        if (auto simplifiedLhsAsNonLoc = simplifiedLhs.getAs<NonLoc>()) {
+          lhs = *simplifiedLhsAsNonLoc;
+          continue;
+        }
 
       // Is the RHS a constant?
       if (const llvm::APSInt *RHSValue = getKnownValue(state, rhs))
@@ -1129,23 +1107,11 @@ const llvm::APSInt *SimpleSValBuilder::getKnownValue(ProgramStateRef state,
   if (SymbolRef Sym = V.getAsSymbol())
     return state->getConstraintManager().getSymVal(state, Sym);
 
+  // FIXME: Add support for SymExprs.
   return nullptr;
 }
 
-SVal SimpleSValBuilder::simplifyUntilFixpoint(ProgramStateRef State, SVal Val) {
-  SVal SimplifiedVal = simplifySValOnce(State, Val);
-  while (SimplifiedVal != Val) {
-    Val = SimplifiedVal;
-    SimplifiedVal = simplifySValOnce(State, Val);
-  }
-  return SimplifiedVal;
-}
-
 SVal SimpleSValBuilder::simplifySVal(ProgramStateRef State, SVal V) {
-  return simplifyUntilFixpoint(State, V);
-}
-
-SVal SimpleSValBuilder::simplifySValOnce(ProgramStateRef State, SVal V) {
   // For now, this function tries to constant-fold symbols inside a
   // nonloc::SymbolVal, and does nothing else. More simplifications should
   // be possible, such as constant-folding an index in an ElementRegion.
@@ -1173,24 +1139,6 @@ SVal SimpleSValBuilder::simplifySValOnce(ProgramStateRef State, SVal V) {
       return cache(Sym, SVB.makeSymbolVal(Sym));
     }
 
-    // Return the known const value for the Sym if available, or return Undef
-    // otherwise.
-    SVal getConst(SymbolRef Sym) {
-      const llvm::APSInt *Const =
-          State->getConstraintManager().getSymVal(State, Sym);
-      if (Const)
-        return Loc::isLocType(Sym->getType()) ? (SVal)SVB.makeIntLocVal(*Const)
-                                              : (SVal)SVB.makeIntVal(*Const);
-      return UndefinedVal();
-    }
-
-    SVal getConstOrVisit(SymbolRef Sym) {
-      const SVal Ret = getConst(Sym);
-      if (Ret.isUndef())
-        return Visit(Sym);
-      return Ret;
-    }
-
   public:
     Simplifier(ProgramStateRef State)
         : State(State), SVB(State->getStateManager().getSValBuilder()) {}
@@ -1204,14 +1152,15 @@ SVal SimpleSValBuilder::simplifySValOnce(ProgramStateRef State, SVal V) {
       return SVB.makeSymbolVal(S);
     }
 
-    // TODO: Support SymbolCast.
+    // TODO: Support SymbolCast. Support IntSymExpr when/if we actually
+    // start producing them.
 
     SVal VisitSymIntExpr(const SymIntExpr *S) {
       auto I = Cached.find(S);
       if (I != Cached.end())
         return I->second;
 
-      SVal LHS = getConstOrVisit(S->getLHS());
+      SVal LHS = Visit(S->getLHS());
       if (isUnchanged(S->getLHS(), LHS))
         return skip(S);
 
@@ -1238,20 +1187,6 @@ SVal SimpleSValBuilder::simplifySValOnce(ProgramStateRef State, SVal V) {
           S, SVB.evalBinOp(State, S->getOpcode(), LHS, RHS, S->getType()));
     }
 
-    SVal VisitIntSymExpr(const IntSymExpr *S) {
-      auto I = Cached.find(S);
-      if (I != Cached.end())
-        return I->second;
-
-      SVal RHS = getConstOrVisit(S->getRHS());
-      if (isUnchanged(S->getRHS(), RHS))
-        return skip(S);
-
-      SVal LHS = SVB.makeIntVal(S->getLHS());
-      return cache(
-          S, SVB.evalBinOp(State, S->getOpcode(), LHS, RHS, S->getType()));
-    }
-
     SVal VisitSymSymExpr(const SymSymExpr *S) {
       auto I = Cached.find(S);
       if (I != Cached.end())
@@ -1265,9 +1200,8 @@ SVal SimpleSValBuilder::simplifySValOnce(ProgramStateRef State, SVal V) {
           Loc::isLocType(S->getRHS()->getType()))
         return skip(S);
 
-      SVal LHS = getConstOrVisit(S->getLHS());
-      SVal RHS = getConstOrVisit(S->getRHS());
-
+      SVal LHS = Visit(S->getLHS());
+      SVal RHS = Visit(S->getRHS());
       if (isUnchanged(S->getLHS(), LHS) && isUnchanged(S->getRHS(), RHS))
         return skip(S);
 

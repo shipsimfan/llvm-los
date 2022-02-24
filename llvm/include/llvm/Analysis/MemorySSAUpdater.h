@@ -44,6 +44,7 @@
 namespace llvm {
 
 class BasicBlock;
+class BranchInst;
 class DominatorTree;
 class Instruction;
 class LoopBlocksRPO;
@@ -238,6 +239,11 @@ public:
   /// I's block that follow I (inclusive), and update the Phis in the blocks'
   /// successors.
   void changeToUnreachable(const Instruction *I);
+
+  /// Conditional branch BI is changed or replaced with an unconditional branch
+  /// to `To`. Update Phis in BI's successors to remove BI's BB.
+  void changeCondBranchToUnconditionalTo(const BranchInst *BI,
+                                         const BasicBlock *To);
 
   /// Get handle on MemorySSA.
   MemorySSA* getMemorySSA() const { return MSSA; }

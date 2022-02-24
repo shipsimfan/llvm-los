@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <fstream>
-#include <sstream>
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
@@ -30,159 +29,36 @@ using namespace llvm;
 const char *kOSEventIntelPTTypeFile =
     "/sys/bus/event_source/devices/intel_pt/type";
 
-const char *kPSBPeriodCapFile =
-    "/sys/bus/event_source/devices/intel_pt/caps/psb_cyc";
-
-const char *kPSBPeriodValidValuesFile =
-    "/sys/bus/event_source/devices/intel_pt/caps/psb_periods";
-
-const char *kTSCBitOffsetFile =
-    "/sys/bus/event_source/devices/intel_pt/format/tsc";
-
-const char *kPSBPeriodBitOffsetFile =
-    "/sys/bus/event_source/devices/intel_pt/format/psb_period";
-
-enum IntelPTConfigFileType {
-  Hex = 0,
-  // 0 or 1
-  ZeroOne,
-  Decimal,
-  // a bit index file always starts with the prefix config: following by an int,
-  // which represents the offset of the perf_event_attr.config value where to
-  // store a given configuration.
-  BitOffset
-};
-
-static Expected<uint32_t> ReadIntelPTConfigFile(const char *file,
-                                                IntelPTConfigFileType type) {
-  ErrorOr<std::unique_ptr<MemoryBuffer>> stream =
-      MemoryBuffer::getFileAsStream(file);
-
-  if (!stream)
-    return createStringError(inconvertibleErrorCode(),
-                             "Can't open the file '%s'", file);
-
-  uint32_t value = 0;
-  StringRef text_buffer = stream.get()->getBuffer();
-
-  if (type == BitOffset) {
-    const char *prefix = "config:";
-    if (!text_buffer.startswith(prefix))
-      return createStringError(inconvertibleErrorCode(),
-                               "The file '%s' contents doesn't start with '%s'",
-                               file, prefix);
-    text_buffer = text_buffer.substr(strlen(prefix));
-  }
-
-  auto getRadix = [&]() {
-    switch (type) {
-    case Hex:
-      return 16;
-    case ZeroOne:
-    case Decimal:
-    case BitOffset:
-      return 10;
-    }
-  };
-
-  auto createError = [&](const char *expected_value_message) {
-    return createStringError(
-        inconvertibleErrorCode(),
-        "The file '%s' has an invalid value. It should be %s.", file,
-        expected_value_message);
-  };
-
-  if (text_buffer.trim().consumeInteger(getRadix(), value) ||
-      (type == ZeroOne && value != 0 && value != 1)) {
-    switch (type) {
-    case Hex:
-      return createError("an unsigned hexadecimal int");
-    case ZeroOne:
-      return createError("0 or 1");
-    case Decimal:
-    case BitOffset:
-      return createError("an unsigned decimal int");
-    }
-  }
-  return value;
-}
 /// Return the Linux perf event type for Intel PT.
 static Expected<uint32_t> GetOSEventType() {
-  return ReadIntelPTConfigFile(kOSEventIntelPTTypeFile,
-                               IntelPTConfigFileType::Decimal);
-}
+  auto intel_pt_type_text =
+      llvm::MemoryBuffer::getFileAsStream(kOSEventIntelPTTypeFile);
 
-static Error CheckPsbPeriod(size_t psb_period) {
-  Expected<uint32_t> cap =
-      ReadIntelPTConfigFile(kPSBPeriodCapFile, IntelPTConfigFileType::ZeroOne);
-  if (!cap)
-    return cap.takeError();
-  if (*cap == 0)
+  if (!intel_pt_type_text)
     return createStringError(inconvertibleErrorCode(),
-                             "psb_period is unsupported in the system.");
+                             "Can't open the file '%s'",
+                             kOSEventIntelPTTypeFile);
 
-  Expected<uint32_t> valid_values = ReadIntelPTConfigFile(
-      kPSBPeriodValidValuesFile, IntelPTConfigFileType::Hex);
-  if (!valid_values)
-    return valid_values.takeError();
-
-  if (valid_values.get() & (1 << psb_period))
-    return Error::success();
-
-  std::ostringstream error;
-  // 0 is always a valid value
-  error << "Invalid psb_period. Valid values are: 0";
-  uint32_t mask = valid_values.get();
-  while (mask) {
-    int index = __builtin_ctz(mask);
-    if (index > 0)
-      error << ", " << index;
-    // clear the lowest bit
-    mask &= mask - 1;
-  }
-  error << ".";
-  return createStringError(inconvertibleErrorCode(), error.str().c_str());
+  uint32_t intel_pt_type = 0;
+  StringRef buffer = intel_pt_type_text.get()->getBuffer();
+  if (buffer.trim().getAsInteger(10, intel_pt_type))
+    return createStringError(
+        inconvertibleErrorCode(),
+        "The file '%s' has a invalid value. It should be an unsigned int.",
+        kOSEventIntelPTTypeFile);
+  return intel_pt_type;
 }
 
 size_t IntelPTThreadTrace::GetTraceBufferSize() const {
-#ifndef PERF_ATTR_SIZE_VER5
-  llvm_unreachable("Intel PT Linux perf event not supported");
-#else
   return m_mmap_meta->aux_size;
-#endif
-}
-
-static Expected<uint64_t>
-GeneratePerfEventConfigValue(bool enable_tsc, Optional<size_t> psb_period) {
-  uint64_t config = 0;
-  // tsc is always supported
-  if (enable_tsc) {
-    if (Expected<uint32_t> offset = ReadIntelPTConfigFile(
-            kTSCBitOffsetFile, IntelPTConfigFileType::BitOffset))
-      config |= 1 << *offset;
-    else
-      return offset.takeError();
-  }
-  if (psb_period) {
-    if (Error error = CheckPsbPeriod(*psb_period))
-      return std::move(error);
-
-    if (Expected<uint32_t> offset = ReadIntelPTConfigFile(
-            kPSBPeriodBitOffsetFile, IntelPTConfigFileType::BitOffset))
-      config |= *psb_period << *offset;
-    else
-      return offset.takeError();
-  }
-  return config;
 }
 
 Error IntelPTThreadTrace::StartTrace(lldb::pid_t pid, lldb::tid_t tid,
-                                     uint64_t buffer_size, bool enable_tsc,
-                                     Optional<size_t> psb_period) {
+                                     uint64_t buffer_size) {
 #ifndef PERF_ATTR_SIZE_VER5
   llvm_unreachable("Intel PT Linux perf event not supported");
 #else
-  Log *log = GetLog(POSIXLog::Ptrace);
+  Log *log(ProcessPOSIXLog::GetLogIfAllCategoriesSet(POSIX_LOG_PTRACE));
 
   m_tid = tid;
   LLDB_LOG(log, "called thread id {0}", tid);
@@ -209,21 +85,15 @@ Error IntelPTThreadTrace::StartTrace(lldb::pid_t pid, lldb::tid_t tid,
   attr.exclude_hv = 1;
   attr.exclude_idle = 1;
   attr.mmap = 1;
+  attr.config = 0;
 
-  if (Expected<uint64_t> config_value =
-          GeneratePerfEventConfigValue(enable_tsc, psb_period)) {
-    attr.config = *config_value;
-    LLDB_LOG(log, "intel pt config {0}", attr.config);
-  } else {
-    return config_value.takeError();
-  }
+  Expected<uint32_t> intel_pt_type = GetOSEventType();
 
-  if (Expected<uint32_t> intel_pt_type = GetOSEventType()) {
-    attr.type = *intel_pt_type;
-    LLDB_LOG(log, "intel pt type {0}", attr.type);
-  } else {
+  if (!intel_pt_type)
     return intel_pt_type.takeError();
-  }
+
+  LLDB_LOG(log, "intel pt type {0}", *intel_pt_type);
+  attr.type = *intel_pt_type;
 
   LLDB_LOG(log, "buffer size {0} ", buffer_size);
 
@@ -304,12 +174,11 @@ Expected<ArrayRef<uint8_t>> IntelPTThreadTrace::GetCPUInfo() {
 }
 
 llvm::Expected<IntelPTThreadTraceUP>
-IntelPTThreadTrace::Create(lldb::pid_t pid, lldb::tid_t tid, size_t buffer_size,
-                           bool enable_tsc, Optional<size_t> psb_period) {
+IntelPTThreadTrace::Create(lldb::pid_t pid, lldb::tid_t tid,
+                           size_t buffer_size) {
   IntelPTThreadTraceUP thread_trace_up(new IntelPTThreadTrace());
 
-  if (llvm::Error err = thread_trace_up->StartTrace(pid, tid, buffer_size,
-                                                    enable_tsc, psb_period))
+  if (llvm::Error err = thread_trace_up->StartTrace(pid, tid, buffer_size))
     return std::move(err);
 
   return std::move(thread_trace_up);
@@ -348,7 +217,7 @@ IntelPTThreadTrace::ReadPerfTraceAux(llvm::MutableArrayRef<uint8_t> &buffer,
   // in the man page of perf_event_open.
   ioctl(*m_fd, PERF_EVENT_IOC_DISABLE);
 
-  Log *log = GetLog(POSIXLog::Ptrace);
+  Log *log(ProcessPOSIXLog::GetLogIfAllCategoriesSet(POSIX_LOG_PTRACE));
   Status error;
   uint64_t head = m_mmap_meta->aux_head;
 
@@ -381,7 +250,7 @@ IntelPTThreadTrace::ReadPerfTraceData(llvm::MutableArrayRef<uint8_t> &buffer,
 #ifndef PERF_ATTR_SIZE_VER5
   llvm_unreachable("perf event not supported");
 #else
-  Log *log = GetLog(POSIXLog::Ptrace);
+  Log *log(ProcessPOSIXLog::GetLogIfAllCategoriesSet(POSIX_LOG_PTRACE));
   uint64_t bytes_remaining = buffer.size();
   Status error;
 
@@ -427,7 +296,7 @@ void IntelPTThreadTrace::ReadCyclicBuffer(llvm::MutableArrayRef<uint8_t> &dst,
                                           llvm::MutableArrayRef<uint8_t> src,
                                           size_t src_cyc_index, size_t offset) {
 
-  Log *log = GetLog(POSIXLog::Ptrace);
+  Log *log(ProcessPOSIXLog::GetLogIfAllCategoriesSet(POSIX_LOG_PTRACE));
 
   if (dst.empty() || src.empty()) {
     dst = dst.drop_back(dst.size());
@@ -499,9 +368,8 @@ Error IntelPTThreadTraceCollection::TraceStart(
     return createStringError(inconvertibleErrorCode(),
                              "Thread %" PRIu64 " already traced", tid);
 
-  Expected<IntelPTThreadTraceUP> trace_up = IntelPTThreadTrace::Create(
-      m_pid, tid, request.threadBufferSize, request.enableTsc,
-      request.psbPeriod.map([](int64_t period) { return (size_t)period; }));
+  Expected<IntelPTThreadTraceUP> trace_up =
+      IntelPTThreadTrace::Create(m_pid, tid, request.threadBufferSize);
   if (!trace_up)
     return trace_up.takeError();
 
@@ -574,7 +442,11 @@ Error IntelPTManager::TraceStop(lldb::tid_t tid) {
 
 Error IntelPTManager::TraceStop(const TraceStopRequest &request) {
   if (request.IsProcessTracing()) {
-    Clear();
+    if (!IsProcessTracingEnabled()) {
+      return createStringError(inconvertibleErrorCode(),
+                               "Process not currently traced");
+    }
+    ClearProcessTracing();
     return Error::success();
   } else {
     Error error = Error::success();

@@ -40,7 +40,8 @@ using namespace llvm;
 
 CriticalAntiDepBreaker::CriticalAntiDepBreaker(MachineFunction &MFi,
                                                const RegisterClassInfo &RCI)
-    : MF(MFi), MRI(MF.getRegInfo()), TII(MF.getSubtarget().getInstrInfo()),
+    : AntiDepBreaker(), MF(MFi), MRI(MF.getRegInfo()),
+      TII(MF.getSubtarget().getInstrInfo()),
       TRI(MF.getSubtarget().getRegisterInfo()), RegClassInfo(RCI),
       Classes(TRI->getNumRegs(), nullptr), KillIndices(TRI->getNumRegs(), 0),
       DefIndices(TRI->getNumRegs(), 0), KeepRegs(TRI->getNumRegs(), false) {}
@@ -211,21 +212,6 @@ void CriticalAntiDepBreaker::PrescanInstruction(MachineInstr &MI) {
     if (Classes[Reg] != reinterpret_cast<TargetRegisterClass *>(-1))
       RegRefs.insert(std::make_pair(Reg, &MO));
 
-    if (MO.isUse() && Special) {
-      if (!KeepRegs.test(Reg)) {
-        for (MCSubRegIterator SubRegs(Reg, TRI, /*IncludeSelf=*/true);
-             SubRegs.isValid(); ++SubRegs)
-          KeepRegs.set(*SubRegs);
-      }
-    }
-  }
-
-  for (unsigned I = 0, E = MI.getNumOperands(); I != E; ++I) {
-    const MachineOperand &MO = MI.getOperand(I);
-    if (!MO.isReg()) continue;
-    Register Reg = MO.getReg();
-    if (!Reg.isValid())
-      continue;
     // If this reg is tied and live (Classes[Reg] is set to -1), we can't change
     // it or any of its sub or super regs. We need to use KeepRegs to mark the
     // reg because not all uses of the same reg within an instruction are
@@ -236,7 +222,7 @@ void CriticalAntiDepBreaker::PrescanInstruction(MachineInstr &MI) {
     // of a register? In the above 'xor' example, the uses of %eax are undef, so
     // earlier instructions could still replace %eax even though the 'xor'
     // itself can't be changed.
-    if (MI.isRegTiedToUseOperand(I) &&
+    if (MI.isRegTiedToUseOperand(i) &&
         Classes[Reg] == reinterpret_cast<TargetRegisterClass *>(-1)) {
       for (MCSubRegIterator SubRegs(Reg, TRI, /*IncludeSelf=*/true);
            SubRegs.isValid(); ++SubRegs) {
@@ -245,6 +231,14 @@ void CriticalAntiDepBreaker::PrescanInstruction(MachineInstr &MI) {
       for (MCSuperRegIterator SuperRegs(Reg, TRI);
            SuperRegs.isValid(); ++SuperRegs) {
         KeepRegs.set(*SuperRegs);
+      }
+    }
+
+    if (MO.isUse() && Special) {
+      if (!KeepRegs.test(Reg)) {
+        for (MCSubRegIterator SubRegs(Reg, TRI, /*IncludeSelf=*/true);
+             SubRegs.isValid(); ++SubRegs)
+          KeepRegs.set(*SubRegs);
       }
     }
   }
@@ -369,7 +363,9 @@ CriticalAntiDepBreaker::isNewRegClobberedByRefs(RegRefIter RegRefBegin,
 
     // Handle cases in which this instruction defines NewReg.
     MachineInstr *MI = RefOper->getParent();
-    for (const MachineOperand &CheckOper : MI->operands()) {
+    for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
+      const MachineOperand &CheckOper = MI->getOperand(i);
+
       if (CheckOper.isRegMask() && CheckOper.clobbersPhysReg(NewReg))
         return true;
 
@@ -404,7 +400,8 @@ findSuitableFreeRegister(RegRefIter RegRefBegin,
                          const TargetRegisterClass *RC,
                          SmallVectorImpl<unsigned> &Forbid) {
   ArrayRef<MCPhysReg> Order = RegClassInfo.getOrder(RC);
-  for (unsigned NewReg : Order) {
+  for (unsigned i = 0; i != Order.size(); ++i) {
+    unsigned NewReg = Order[i];
     // Don't replace a register with itself.
     if (NewReg == AntiDepReg) continue;
     // Don't replace a register with one that was recently used to repair
@@ -458,10 +455,11 @@ BreakAntiDependencies(const std::vector<SUnit> &SUnits,
 
   // Find the node at the bottom of the critical path.
   const SUnit *Max = nullptr;
-  for (const SUnit &SU : SUnits) {
-    MISUnitMap[SU.getInstr()] = &SU;
-    if (!Max || SU.getDepth() + SU.Latency > Max->getDepth() + Max->Latency)
-      Max = &SU;
+  for (unsigned i = 0, e = SUnits.size(); i != e; ++i) {
+    const SUnit *SU = &SUnits[i];
+    MISUnitMap[SU->getInstr()] = SU;
+    if (!Max || SU->getDepth() + SU->Latency > Max->getDepth() + Max->Latency)
+      Max = SU;
   }
   assert(Max && "Failed to find bottom of the critical path");
 
@@ -616,7 +614,8 @@ BreakAntiDependencies(const std::vector<SUnit> &SUnits,
       // is invalid.  If the instruction defines other registers,
       // save a list of them so that we don't pick a new register
       // that overlaps any of them.
-      for (const MachineOperand &MO : MI.operands()) {
+      for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
+        MachineOperand &MO = MI.getOperand(i);
         if (!MO.isReg()) continue;
         Register Reg = MO.getReg();
         if (Reg == 0) continue;

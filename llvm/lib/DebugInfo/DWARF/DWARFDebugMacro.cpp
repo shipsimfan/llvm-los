@@ -7,12 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/DebugInfo/DWARF/DWARFDebugMacro.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/BinaryFormat/Dwarf.h"
+#include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFDataExtractor.h"
-#include "llvm/DebugInfo/DWARF/DWARFDie.h"
-#include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
-#include "llvm/Support/Errc.h"
 #include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cstdint>
@@ -197,11 +194,13 @@ Error DWARFDebugMacro::parseImpl(
       if (MacroContributionOffset == MacroToUnits.end())
         return createStringError(errc::invalid_argument,
                                  "Macro contribution of the unit not found");
-      Expected<uint64_t> StrOffset =
+      Optional<uint64_t> StrOffset =
           MacroContributionOffset->second->getStringOffsetSectionItem(
               Data.getULEB128(&Offset));
       if (!StrOffset)
-        return StrOffset.takeError();
+        return createStringError(
+            errc::invalid_argument,
+            "String offsets contribution of the unit not found");
       E.MacroStr =
           MacroContributionOffset->second->getStringExtractor().getCStr(
               &*StrOffset);

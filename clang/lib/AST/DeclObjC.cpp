@@ -232,18 +232,6 @@ ObjCPropertyDecl::getDefaultSynthIvarName(ASTContext &Ctx) const {
   return &Ctx.Idents.get(ivarName.str());
 }
 
-ObjCPropertyDecl *ObjCContainerDecl::getProperty(const IdentifierInfo *Id,
-                                                 bool IsInstance) const {
-  for (auto *LookupResult : lookup(Id)) {
-    if (auto *Prop = dyn_cast<ObjCPropertyDecl>(LookupResult)) {
-      if (Prop->isInstanceProperty() == IsInstance) {
-        return Prop;
-      }
-    }
-  }
-  return nullptr;
-}
-
 /// FindPropertyDeclaration - Finds declaration of the property given its name
 /// in 'PropertyId' and returns it. It returns 0, if not found.
 ObjCPropertyDecl *ObjCContainerDecl::FindPropertyDeclaration(
@@ -615,6 +603,10 @@ void ObjCInterfaceDecl::allocateDefinitionData() {
   assert(!hasDefinition() && "ObjC class already has a definition");
   Data.setPointer(new (getASTContext()) DefinitionData());
   Data.getPointer()->Definition = this;
+
+  // Make the type point at the definition, now that we have one.
+  if (TypeForDecl)
+    cast<ObjCInterfaceType>(TypeForDecl)->Decl = this;
 }
 
 void ObjCInterfaceDecl::startDefinition() {
@@ -860,14 +852,6 @@ bool ObjCMethodDecl::isDesignatedInitializerForTheInterface(
     return false;
   if (const ObjCInterfaceDecl *ID = getClassInterface())
     return ID->isDesignatedInitializer(getSelector(), InitMethod);
-  return false;
-}
-
-bool ObjCMethodDecl::hasParamDestroyedInCallee() const {
-  for (auto param : parameters()) {
-    if (param->isDestroyedInCallee())
-      return true;
-  }
   return false;
 }
 

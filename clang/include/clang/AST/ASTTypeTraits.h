@@ -17,7 +17,6 @@
 
 #include "clang/AST/ASTFwd.h"
 #include "clang/AST/DeclCXX.h"
-#include "clang/AST/LambdaCapture.h"
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/TemplateBase.h"
 #include "clang/AST/TypeLoc.h"
@@ -26,8 +25,10 @@
 #include "llvm/Support/AlignOf.h"
 
 namespace llvm {
+
 class raw_ostream;
-} // namespace llvm
+
+}
 
 namespace clang {
 
@@ -64,10 +65,7 @@ public:
   static ASTNodeKind getFromNode(const Decl &D);
   static ASTNodeKind getFromNode(const Stmt &S);
   static ASTNodeKind getFromNode(const Type &T);
-  static ASTNodeKind getFromNode(const TypeLoc &T);
-  static ASTNodeKind getFromNode(const LambdaCapture &L);
   static ASTNodeKind getFromNode(const OMPClause &C);
-  static ASTNodeKind getFromNode(const Attr &A);
   /// \}
 
   /// Returns \c true if \c this and \c Other represent the same kind.
@@ -133,12 +131,9 @@ private:
     NKI_None,
     NKI_TemplateArgument,
     NKI_TemplateArgumentLoc,
-    NKI_LambdaCapture,
     NKI_TemplateName,
     NKI_NestedNameSpecifierLoc,
     NKI_QualType,
-#define TYPELOC(CLASS, PARENT) NKI_##CLASS##TypeLoc,
-#include "clang/AST/TypeLocNodes.def"
     NKI_TypeLoc,
     NKI_LastKindWithoutPointerIdentity = NKI_TypeLoc,
     NKI_CXXBaseSpecifier,
@@ -157,10 +152,6 @@ private:
 #define GEN_CLANG_CLAUSE_CLASS
 #define CLAUSE_CLASS(Enum, Str, Class) NKI_##Class,
 #include "llvm/Frontend/OpenMP/OMP.inc"
-    NKI_Attr,
-#define ATTR(A) NKI_##A##Attr,
-#include "clang/Basic/AttrList.inc"
-    NKI_ObjCProtocolLoc,
     NKI_NumberOfKinds
   };
 
@@ -201,20 +192,15 @@ private:
 KIND_TO_KIND_ID(CXXCtorInitializer)
 KIND_TO_KIND_ID(TemplateArgument)
 KIND_TO_KIND_ID(TemplateArgumentLoc)
-KIND_TO_KIND_ID(LambdaCapture)
 KIND_TO_KIND_ID(TemplateName)
 KIND_TO_KIND_ID(NestedNameSpecifier)
 KIND_TO_KIND_ID(NestedNameSpecifierLoc)
 KIND_TO_KIND_ID(QualType)
-#define TYPELOC(CLASS, PARENT) KIND_TO_KIND_ID(CLASS##TypeLoc)
-#include "clang/AST/TypeLocNodes.def"
 KIND_TO_KIND_ID(TypeLoc)
 KIND_TO_KIND_ID(Decl)
 KIND_TO_KIND_ID(Stmt)
 KIND_TO_KIND_ID(Type)
 KIND_TO_KIND_ID(OMPClause)
-KIND_TO_KIND_ID(Attr)
-KIND_TO_KIND_ID(ObjCProtocolLoc)
 KIND_TO_KIND_ID(CXXBaseSpecifier)
 #define DECL(DERIVED, BASE) KIND_TO_KIND_ID(DERIVED##Decl)
 #include "clang/AST/DeclNodes.inc"
@@ -225,8 +211,6 @@ KIND_TO_KIND_ID(CXXBaseSpecifier)
 #define GEN_CLANG_CLAUSE_CLASS
 #define CLAUSE_CLASS(Enum, Str, Class) KIND_TO_KIND_ID(Class)
 #include "llvm/Frontend/OpenMP/OMP.inc"
-#define ATTR(A) KIND_TO_KIND_ID(A##Attr)
-#include "clang/Basic/AttrList.inc"
 #undef KIND_TO_KIND_ID
 
 inline raw_ostream &operator<<(raw_ostream &OS, ASTNodeKind K) {
@@ -315,7 +299,7 @@ public:
       return getUnchecked<QualType>().getAsOpaquePtr() <
              Other.getUnchecked<QualType>().getAsOpaquePtr();
 
-    if (ASTNodeKind::getFromNodeKind<TypeLoc>().isBaseOf(NodeKind)) {
+    if (ASTNodeKind::getFromNodeKind<TypeLoc>().isSame(NodeKind)) {
       auto TLA = getUnchecked<TypeLoc>();
       auto TLB = Other.getUnchecked<TypeLoc>();
       return std::make_pair(TLA.getType().getAsOpaquePtr(),
@@ -347,7 +331,7 @@ public:
     if (ASTNodeKind::getFromNodeKind<QualType>().isSame(NodeKind))
       return getUnchecked<QualType>() == Other.getUnchecked<QualType>();
 
-    if (ASTNodeKind::getFromNodeKind<TypeLoc>().isBaseOf(NodeKind))
+    if (ASTNodeKind::getFromNodeKind<TypeLoc>().isSame(NodeKind))
       return getUnchecked<TypeLoc>() == Other.getUnchecked<TypeLoc>();
 
     if (ASTNodeKind::getFromNodeKind<NestedNameSpecifierLoc>().isSame(NodeKind))
@@ -376,7 +360,7 @@ public:
     }
     static unsigned getHashValue(const DynTypedNode &Val) {
       // FIXME: Add hashing support for the remaining types.
-      if (ASTNodeKind::getFromNodeKind<TypeLoc>().isBaseOf(Val.NodeKind)) {
+      if (ASTNodeKind::getFromNodeKind<TypeLoc>().isSame(Val.NodeKind)) {
         auto TL = Val.getUnchecked<TypeLoc>();
         return llvm::hash_combine(TL.getType().getAsOpaquePtr(),
                                   TL.getOpaqueData());
@@ -466,29 +450,6 @@ private:
     }
   };
 
-  /// Converter that stores nodes by value. It must be possible to dynamically
-  /// cast the stored node within a type hierarchy without breaking (especially
-  /// through slicing).
-  template <typename T, typename BaseT,
-            typename = std::enable_if_t<(sizeof(T) == sizeof(BaseT))>>
-  struct DynCastValueConverter {
-    static const T *get(ASTNodeKind NodeKind, const void *Storage) {
-      if (ASTNodeKind::getFromNodeKind<T>().isBaseOf(NodeKind))
-        return &getUnchecked(NodeKind, Storage);
-      return nullptr;
-    }
-    static const T &getUnchecked(ASTNodeKind NodeKind, const void *Storage) {
-      assert(ASTNodeKind::getFromNodeKind<T>().isBaseOf(NodeKind));
-      return *static_cast<const T *>(reinterpret_cast<const BaseT *>(Storage));
-    }
-    static DynTypedNode create(const T &Node) {
-      DynTypedNode Result;
-      Result.NodeKind = ASTNodeKind::getFromNode(Node);
-      new (&Result.Storage) T(Node);
-      return Result;
-    }
-  };
-
   ASTNodeKind NodeKind;
 
   /// Stores the data of the node.
@@ -501,7 +462,7 @@ private:
   /// have storage or unique pointers and thus need to be stored by value.
   llvm::AlignedCharArrayUnion<const void *, TemplateArgument,
                               TemplateArgumentLoc, NestedNameSpecifierLoc,
-                              QualType, TypeLoc, ObjCProtocolLoc>
+                              QualType, TypeLoc>
       Storage;
 };
 
@@ -525,11 +486,6 @@ struct DynTypedNode::BaseConverter<
     T, std::enable_if_t<std::is_base_of<OMPClause, T>::value>>
     : public DynCastPtrConverter<T, OMPClause> {};
 
-template <typename T>
-struct DynTypedNode::BaseConverter<
-    T, std::enable_if_t<std::is_base_of<Attr, T>::value>>
-    : public DynCastPtrConverter<T, Attr> {};
-
 template <>
 struct DynTypedNode::BaseConverter<
     NestedNameSpecifier, void> : public PtrConverter<NestedNameSpecifier> {};
@@ -547,10 +503,6 @@ struct DynTypedNode::BaseConverter<TemplateArgumentLoc, void>
     : public ValueConverter<TemplateArgumentLoc> {};
 
 template <>
-struct DynTypedNode::BaseConverter<LambdaCapture, void>
-    : public ValueConverter<LambdaCapture> {};
-
-template <>
 struct DynTypedNode::BaseConverter<
     TemplateName, void> : public ValueConverter<TemplateName> {};
 
@@ -563,18 +515,13 @@ template <>
 struct DynTypedNode::BaseConverter<QualType,
                                    void> : public ValueConverter<QualType> {};
 
-template <typename T>
+template <>
 struct DynTypedNode::BaseConverter<
-    T, std::enable_if_t<std::is_base_of<TypeLoc, T>::value>>
-    : public DynCastValueConverter<T, TypeLoc> {};
+    TypeLoc, void> : public ValueConverter<TypeLoc> {};
 
 template <>
 struct DynTypedNode::BaseConverter<CXXBaseSpecifier, void>
     : public PtrConverter<CXXBaseSpecifier> {};
-
-template <>
-struct DynTypedNode::BaseConverter<ObjCProtocolLoc, void>
-    : public ValueConverter<ObjCProtocolLoc> {};
 
 // The only operation we allow on unsupported types is \c get.
 // This allows to conveniently use \c DynTypedNode when having an arbitrary

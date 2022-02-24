@@ -29,7 +29,6 @@
 ; RUN:   -r %t2.bc,_another_dead_func,pl \
 ; RUN:   -r %t2.bc,_linkonceodrfuncwithalias,pl \
 ; RUN:   -thinlto-threads=1 \
-; RUN:   -disable-thinlto-funcattrs=0 \
 ; RUN:	 -debug-only=function-import 2>&1 | FileCheck %s --check-prefix=DEBUG --check-prefix=STATS
 ; RUN: llvm-dis < %t.out.1.3.import.bc | FileCheck %s --check-prefix=LTO2
 ; RUN: llvm-dis < %t.out.2.3.import.bc | FileCheck %s --check-prefix=LTO2-CHECK2
@@ -67,7 +66,7 @@
 ; LTO2-NOT: available_externally {{.*}} @baz()
 ; LTO2: @llvm.global_ctors =
 ; LTO2: define internal void @_GLOBAL__I_a()
-; LTO2: define internal void @bar() [[ATTR:#[0-9]+]] {
+; LTO2: define internal void @bar() {
 ; LTO2: define internal void @bar_internal()
 ; LTO2-NOT: @dead_func()
 ; LTO2-NOT: available_externally {{.*}} @baz()
@@ -79,7 +78,7 @@
 
 ; Make sure we keep @linkonceodrfuncwithalias in Input/deadstrip.ll alive as it
 ; is reachable from @main.
-; LTO2-CHECK2: define weak_odr dso_local void @linkonceodrfuncwithalias() [[ATTR:#[0-9]+]] {
+; LTO2-CHECK2: define weak_odr dso_local void @linkonceodrfuncwithalias() {
 
 ; We should have eventually removed @baz since it was internalized and unused
 ; CHECK2-NM-NOT: _baz
@@ -98,8 +97,6 @@
 ; DEBUG-DAG: Ignores Dead GUID: 7546896869197086323 (baz)
 ; DEBUG-DAG: Initialize import for 15611644523426561710 (boo)
 ; DEBUG-DAG: Ignores Dead GUID: 2384416018110111308 (another_dead_func)
-
-; LTO2-DAG: attributes [[ATTR]] = { norecurse nounwind }
 
 ; STATS: 3 function-import  - Number of dead stripped symbols in index
 

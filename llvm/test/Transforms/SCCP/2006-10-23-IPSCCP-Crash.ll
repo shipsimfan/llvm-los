@@ -1,4 +1,4 @@
-; RUN: opt < %s -passes=sccp -disable-output
+; RUN: opt < %s -sccp -disable-output
 ; END.
 target datalayout = "E-p:32:32"
 target triple = "powerpc-unknown-linux-gnu"

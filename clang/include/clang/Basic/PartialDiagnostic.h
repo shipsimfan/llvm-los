@@ -28,6 +28,9 @@
 
 namespace clang {
 
+class DeclContext;
+class IdentifierInfo;
+
 class PartialDiagnostic : public StreamingDiagnostic {
 private:
   // NOTE: Sema assumes that PartialDiagnostic is location-invariant

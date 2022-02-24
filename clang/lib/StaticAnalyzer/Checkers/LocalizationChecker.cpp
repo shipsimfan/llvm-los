@@ -949,7 +949,7 @@ void NonLocalizedStringChecker::checkPostCall(const CallEvent &Call,
   const IdentifierInfo *Identifier = Call.getCalleeIdentifier();
 
   SVal sv = Call.getReturnValue();
-  if (isAnnotatedAsReturningLocalized(D) || LSF.contains(Identifier)) {
+  if (isAnnotatedAsReturningLocalized(D) || LSF.count(Identifier) != 0) {
     setLocalizedState(sv, C);
   } else if (isNSStringType(RT, C.getASTContext()) &&
              !hasLocalizedState(sv, C)) {
@@ -1339,10 +1339,7 @@ bool PluralMisuseChecker::MethodCrawler::EndVisitIfStmt(IfStmt *I) {
 }
 
 bool PluralMisuseChecker::MethodCrawler::VisitIfStmt(const IfStmt *I) {
-  const Expr *Condition = I->getCond();
-  if (!Condition)
-    return true;
-  Condition = Condition->IgnoreParenImpCasts();
+  const Expr *Condition = I->getCond()->IgnoreParenImpCasts();
   if (isCheckingPlurality(Condition)) {
     MatchingStatements.push_back(I);
     InMatchingStatement = true;

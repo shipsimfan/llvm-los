@@ -91,10 +91,7 @@
 
 #include <cstddef>
 #include <string>
-
-#if defined(_WIN32)
 #include <system_error>
-#endif
 
 // Wrap everything in namespace llvm so that programs can link with llvm and
 // their own version of the unicode libraries.

@@ -39,7 +39,6 @@ namespace ISD {
     unsigned IsPreallocated : 1; ///< ByVal without the copy
     unsigned IsSplitEnd : 1;   ///< Last part of a split
     unsigned IsSwiftSelf : 1;  ///< Swift self parameter
-    unsigned IsSwiftAsync : 1;  ///< Swift async context parameter
     unsigned IsSwiftError : 1; ///< Swift error parameter
     unsigned IsCFGuardTarget : 1; ///< Control Flow Guard target
     unsigned IsHva : 1;        ///< HVA field for
@@ -53,19 +52,19 @@ namespace ISD {
     unsigned IsCopyElisionCandidate : 1; ///< Argument copy elision candidate
     unsigned IsPointer : 1;
 
-    unsigned ByValOrByRefSize = 0; ///< Byval or byref struct size
+    unsigned ByValOrByRefSize; ///< Byval or byref struct size
 
-    unsigned PointerAddrSpace = 0; ///< Address space of pointer argument
+    unsigned PointerAddrSpace; ///< Address space of pointer argument
 
   public:
     ArgFlagsTy()
-        : IsZExt(0), IsSExt(0), IsInReg(0), IsSRet(0), IsByVal(0), IsByRef(0),
-          IsNest(0), IsReturned(0), IsSplit(0), IsInAlloca(0),
-          IsPreallocated(0), IsSplitEnd(0), IsSwiftSelf(0), IsSwiftAsync(0),
-          IsSwiftError(0), IsCFGuardTarget(0), IsHva(0), IsHvaStart(0),
-          IsSecArgPass(0), MemAlign(0), OrigAlign(0),
-          IsInConsecutiveRegsLast(0), IsInConsecutiveRegs(0),
-          IsCopyElisionCandidate(0), IsPointer(0) {
+      : IsZExt(0), IsSExt(0), IsInReg(0), IsSRet(0), IsByVal(0), IsByRef(0),
+          IsNest(0), IsReturned(0), IsSplit(0), IsInAlloca(0), IsPreallocated(0),
+          IsSplitEnd(0), IsSwiftSelf(0), IsSwiftError(0), IsCFGuardTarget(0),
+          IsHva(0), IsHvaStart(0), IsSecArgPass(0), MemAlign(0),
+          OrigAlign(0), IsInConsecutiveRegsLast(0), IsInConsecutiveRegs(0),
+          IsCopyElisionCandidate(0), IsPointer(0), ByValOrByRefSize(0),
+          PointerAddrSpace(0) {
       static_assert(sizeof(*this) == 3 * sizeof(unsigned), "flags are too big");
     }
 
@@ -95,9 +94,6 @@ namespace ISD {
 
     bool isSwiftSelf() const { return IsSwiftSelf; }
     void setSwiftSelf() { IsSwiftSelf = 1; }
-
-    bool isSwiftAsync() const { return IsSwiftAsync; }
-    void setSwiftAsync() { IsSwiftAsync = 1; }
 
     bool isSwiftError() const { return IsSwiftError; }
     void setSwiftError() { IsSwiftError = 1; }
@@ -246,11 +242,11 @@ namespace ISD {
     unsigned PartOffset;
 
     OutputArg() = default;
-    OutputArg(ArgFlagsTy flags, MVT vt, EVT argvt, bool isfixed,
+    OutputArg(ArgFlagsTy flags, EVT vt, EVT argvt, bool isfixed,
               unsigned origIdx, unsigned partOffs)
-        : Flags(flags), IsFixed(isfixed), OrigArgIndex(origIdx),
-          PartOffset(partOffs) {
-      VT = vt;
+      : Flags(flags), IsFixed(isfixed), OrigArgIndex(origIdx),
+        PartOffset(partOffs) {
+      VT = vt.getSimpleVT();
       ArgVT = argvt;
     }
   };

@@ -16,6 +16,7 @@
 
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/Support/DataTypes.h"
 #include <utility>
@@ -27,7 +28,6 @@ template <typename T> class ArrayRef;
 class LLVMContext;
 class Constant;
 class ConstantAsMetadata;
-class Function;
 class MDNode;
 class MDString;
 class Metadata;

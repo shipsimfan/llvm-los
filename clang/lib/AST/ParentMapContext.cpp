@@ -330,9 +330,6 @@ template <>
 DynTypedNode createDynTypedNode(const NestedNameSpecifierLoc &Node) {
   return DynTypedNode::create(Node);
 }
-template <> DynTypedNode createDynTypedNode(const ObjCProtocolLoc &Node) {
-  return DynTypedNode::create(Node);
-}
 /// @}
 
 /// A \c RecursiveASTVisitor that builds a map from nodes to their
@@ -392,23 +389,21 @@ private:
       auto *Vector = NodeOrVector.template get<ParentVector *>();
       // Skip duplicates for types that have memoization data.
       // We must check that the type has memoization data before calling
-      // llvm::is_contained() because DynTypedNode::operator== can't compare all
+      // std::find() because DynTypedNode::operator== can't compare all
       // types.
       bool Found = ParentStack.back().getMemoizationData() &&
-                   llvm::is_contained(*Vector, ParentStack.back());
+                   std::find(Vector->begin(), Vector->end(),
+                             ParentStack.back()) != Vector->end();
       if (!Found)
         Vector->push_back(ParentStack.back());
     }
   }
 
-  template <typename T> static bool isNull(T Node) { return !Node; }
-  static bool isNull(ObjCProtocolLoc Node) { return false; }
-
   template <typename T, typename MapNodeTy, typename BaseTraverseFn,
             typename MapTy>
   bool TraverseNode(T Node, MapNodeTy MapNode, BaseTraverseFn BaseTraverse,
                     MapTy *Parents) {
-    if (isNull(Node))
+    if (!Node)
       return true;
     addParent(MapNode, Parents);
     ParentStack.push_back(createDynTypedNode(Node));
@@ -432,17 +427,6 @@ private:
     return TraverseNode(
         NNSLocNode, DynTypedNode::create(NNSLocNode),
         [&] { return VisitorBase::TraverseNestedNameSpecifierLoc(NNSLocNode); },
-        &Map.OtherParents);
-  }
-  bool TraverseAttr(Attr *AttrNode) {
-    return TraverseNode(
-        AttrNode, AttrNode, [&] { return VisitorBase::TraverseAttr(AttrNode); },
-        &Map.PointerParents);
-  }
-  bool TraverseObjCProtocolLoc(ObjCProtocolLoc ProtocolLocNode) {
-    return TraverseNode(
-        ProtocolLocNode, DynTypedNode::create(ProtocolLocNode),
-        [&] { return VisitorBase::TraverseObjCProtocolLoc(ProtocolLocNode); },
         &Map.OtherParents);
   }
 

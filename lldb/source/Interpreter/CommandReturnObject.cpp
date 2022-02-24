@@ -41,11 +41,11 @@ static void DumpStringToStreamWithNewline(Stream &strm, const std::string &s) {
 }
 
 CommandReturnObject::CommandReturnObject(bool colors)
-    : m_out_stream(colors), m_err_stream(colors) {}
+    : m_out_stream(colors), m_err_stream(colors),
+      m_status(eReturnStatusStarted), m_did_change_process_state(false),
+      m_interactive(true) {}
 
 void CommandReturnObject::AppendErrorWithFormat(const char *format, ...) {
-  SetStatus(eReturnStatusFailed);
-
   if (!format)
     return;
   va_list args;
@@ -98,7 +98,6 @@ void CommandReturnObject::AppendWarning(llvm::StringRef in_string) {
 }
 
 void CommandReturnObject::AppendError(llvm::StringRef in_string) {
-  SetStatus(eReturnStatusFailed);
   if (in_string.empty())
     return;
   error(GetErrorStream()) << in_string.rtrim() << '\n';
@@ -106,32 +105,38 @@ void CommandReturnObject::AppendError(llvm::StringRef in_string) {
 
 void CommandReturnObject::SetError(const Status &error,
                                    const char *fallback_error_cstr) {
-  AppendError(error.AsCString(fallback_error_cstr));
+  const char *error_cstr = error.AsCString();
+  if (error_cstr == nullptr)
+    error_cstr = fallback_error_cstr;
+  SetError(error_cstr);
 }
 
-void CommandReturnObject::SetError(llvm::Error error) {
-  if (error)
-    AppendError(llvm::toString(std::move(error)));
+void CommandReturnObject::SetError(llvm::StringRef error_str) {
+  if (error_str.empty())
+    return;
+
+  AppendError(error_str);
+  SetStatus(eReturnStatusFailed);
 }
 
 // Similar to AppendError, but do not prepend 'Status: ' to message, and don't
 // append "\n" to the end of it.
 
 void CommandReturnObject::AppendRawError(llvm::StringRef in_string) {
-  SetStatus(eReturnStatusFailed);
-  assert(!in_string.empty() && "Expected a non-empty error message");
+  if (in_string.empty())
+    return;
   GetErrorStream() << in_string;
 }
 
 void CommandReturnObject::SetStatus(ReturnStatus status) { m_status = status; }
 
-ReturnStatus CommandReturnObject::GetStatus() const { return m_status; }
+ReturnStatus CommandReturnObject::GetStatus() { return m_status; }
 
-bool CommandReturnObject::Succeeded() const {
+bool CommandReturnObject::Succeeded() {
   return m_status <= eReturnStatusSuccessContinuingResult;
 }
 
-bool CommandReturnObject::HasResult() const {
+bool CommandReturnObject::HasResult() {
   return (m_status == eReturnStatusSuccessFinishResult ||
           m_status == eReturnStatusSuccessContinuingResult);
 }
@@ -146,11 +151,10 @@ void CommandReturnObject::Clear() {
     static_cast<StreamString *>(stream_sp.get())->Clear();
   m_status = eReturnStatusStarted;
   m_did_change_process_state = false;
-  m_suppress_immediate_output = false;
   m_interactive = true;
 }
 
-bool CommandReturnObject::GetDidChangeProcessState() const {
+bool CommandReturnObject::GetDidChangeProcessState() {
   return m_did_change_process_state;
 }
 
@@ -161,11 +165,3 @@ void CommandReturnObject::SetDidChangeProcessState(bool b) {
 bool CommandReturnObject::GetInteractive() const { return m_interactive; }
 
 void CommandReturnObject::SetInteractive(bool b) { m_interactive = b; }
-
-bool CommandReturnObject::GetSuppressImmediateOutput() const {
-  return m_suppress_immediate_output;
-}
-
-void CommandReturnObject::SetSuppressImmediateOutput(bool b) {
-  m_suppress_immediate_output = b;
-}

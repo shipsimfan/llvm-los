@@ -18,8 +18,10 @@
 
 namespace clang {
 
+class BlockExpr;
 class Decl;
 class FunctionDecl;
+class ObjCMethodDecl;
 class QualType;
 class Sema;
 namespace sema {

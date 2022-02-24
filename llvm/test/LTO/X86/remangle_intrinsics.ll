@@ -1,4 +1,3 @@
-; UNSUPPORTED: powerpc64-ibm-aix
 ; RUN: llvm-as < %s > %t1
 ; RUN: llvm-as < %p/Inputs/remangle_intrinsics.ll > %t2
 ; RUN: llvm-lto %t1 %t2 | FileCheck %s

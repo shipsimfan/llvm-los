@@ -48,11 +48,6 @@ namespace TailPredication {
   };
 }
 
-// For controlling conversion of memcpy into Tail Predicated loop.
-namespace TPLoop {
-enum MemTransfer { ForceDisabled = 0, ForceEnabled, Allow };
-}
-
 class ARMTTIImpl : public BasicTTIImplBase<ARMTTIImpl> {
   using BaseT = BasicTTIImplBase<ARMTTIImpl>;
   using TTI = TargetTransformInfo;
@@ -120,17 +115,12 @@ public:
 
   Optional<Instruction *> instCombineIntrinsic(InstCombiner &IC,
                                                IntrinsicInst &II) const;
-  Optional<Value *> simplifyDemandedVectorEltsIntrinsic(
-      InstCombiner &IC, IntrinsicInst &II, APInt DemandedElts, APInt &UndefElts,
-      APInt &UndefElts2, APInt &UndefElts3,
-      std::function<void(Instruction *, unsigned, APInt, APInt &)>
-          SimplifyAndSetOp) const;
 
   /// \name Scalar TTI Implementations
   /// @{
 
-  InstructionCost getIntImmCodeSizeCost(unsigned Opcode, unsigned Idx,
-                                        const APInt &Imm, Type *Ty);
+  int getIntImmCodeSizeCost(unsigned Opcode, unsigned Idx, const APInt &Imm,
+                            Type *Ty);
 
   using BaseT::getIntImmCost;
   InstructionCost getIntImmCost(const APInt &Imm, Type *Ty,
@@ -189,18 +179,6 @@ public:
     return isLegalMaskedLoad(DataTy, Alignment);
   }
 
-  bool forceScalarizeMaskedGather(VectorType *VTy, Align Alignment) {
-    // For MVE, we have a custom lowering pass that will already have custom
-    // legalised any gathers that we can lower to MVE intrinsics, and want to
-    // expand all the rest. The pass runs before the masked intrinsic lowering
-    // pass.
-    return true;
-  }
-
-  bool forceScalarizeMaskedScatter(VectorType *VTy, Align Alignment) {
-    return forceScalarizeMaskedGather(VTy, Alignment);
-  }
-
   bool isLegalMaskedGather(Type *Ty, Align Alignment);
 
   bool isLegalMaskedScatter(Type *Ty, Align Alignment) {
@@ -243,7 +221,8 @@ public:
                                             const SCEV *Ptr);
 
   InstructionCost getArithmeticInstrCost(
-      unsigned Opcode, Type *Ty, TTI::TargetCostKind CostKind,
+      unsigned Opcode, Type *Ty,
+      TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput,
       TTI::OperandValueKind Op1Info = TTI::OK_AnyValue,
       TTI::OperandValueKind Op2Info = TTI::OK_AnyValue,
       TTI::OperandValueProperties Opd1PropInfo = TTI::OP_None,
@@ -262,7 +241,8 @@ public:
 
   InstructionCost getInterleavedMemoryOpCost(
       unsigned Opcode, Type *VecTy, unsigned Factor, ArrayRef<unsigned> Indices,
-      Align Alignment, unsigned AddressSpace, TTI::TargetCostKind CostKind,
+      Align Alignment, unsigned AddressSpace,
+      TTI::TargetCostKind CostKind = TTI::TCK_SizeAndLatency,
       bool UseMaskForCond = false, bool UseMaskForGaps = false);
 
   InstructionCost getGatherScatterOpCost(unsigned Opcode, Type *DataTy,
@@ -272,7 +252,7 @@ public:
                                          const Instruction *I = nullptr);
 
   InstructionCost getArithmeticReductionCost(unsigned Opcode, VectorType *ValTy,
-                                             Optional<FastMathFlags> FMF,
+                                             bool IsPairwiseForm,
                                              TTI::TargetCostKind CostKind);
   InstructionCost getExtendedAddReductionCost(bool IsMLA, bool IsUnsigned,
                                               Type *ResTy, VectorType *ValTy,
@@ -294,8 +274,7 @@ public:
                                    DominatorTree *DT,
                                    const LoopAccessInfo *LAI);
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
-                               TTI::UnrollingPreferences &UP,
-                               OptimizationRemarkEmitter *ORE);
+                               TTI::UnrollingPreferences &UP);
 
   bool emitGetActiveLaneMask() const;
 

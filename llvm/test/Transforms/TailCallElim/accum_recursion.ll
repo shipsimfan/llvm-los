@@ -1,3 +1,4 @@
+; RUN: opt < %s -tailcallelim -verify-dom-info -S | FileCheck %s
 ; RUN: opt < %s -passes=tailcallelim -verify-dom-info -S | FileCheck %s
 
 define i32 @test1_factorial(i32 %x) {

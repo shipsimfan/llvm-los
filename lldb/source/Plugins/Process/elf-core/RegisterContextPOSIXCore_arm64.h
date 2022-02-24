@@ -42,6 +42,7 @@ protected:
       lldb_private::Thread &thread,
       std::unique_ptr<RegisterInfoPOSIX_arm64> register_info,
       const lldb_private::DataExtractor &gpregset,
+      const lldb_private::DataExtractor &sveregset,
       llvm::ArrayRef<lldb_private::CoreNote> notes);
 
   bool ReadGPR() override;
@@ -53,10 +54,10 @@ protected:
   bool WriteFPR() override;
 
 private:
-  lldb_private::DataExtractor m_gpr_data;
-  lldb_private::DataExtractor m_fpr_data;
-  lldb_private::DataExtractor m_sve_data;
-  lldb_private::DataExtractor m_pac_data;
+  lldb::DataBufferSP m_gpr_buffer;
+  lldb_private::DataExtractor m_gpr;
+  lldb_private::DataExtractor m_fpregset;
+  lldb_private::DataExtractor m_sveregset;
 
   SVEState m_sve_state;
   uint16_t m_sve_vector_length = 0;

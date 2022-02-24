@@ -123,8 +123,6 @@ const Symbol *ProcedureDesignator::GetInterfaceSymbol() const {
     } else if (const auto *binding{
                    ultimate.detailsIf<semantics::ProcBindingDetails>()}) {
       return &binding->symbol();
-    } else if (ultimate.has<semantics::SubprogramDetails>()) {
-      return &ultimate;
     }
   }
   return nullptr;
@@ -220,4 +218,5 @@ ProcedureRef::~ProcedureRef() {}
 
 void ProcedureRef::Deleter(ProcedureRef *p) { delete p; }
 
+FOR_EACH_SPECIFIC_TYPE(template class FunctionRef, )
 } // namespace Fortran::evaluate

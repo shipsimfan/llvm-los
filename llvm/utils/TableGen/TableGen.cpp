@@ -289,8 +289,7 @@ int main(int argc, char **argv) {
 #define __has_feature(x) 0
 #endif
 
-#if __has_feature(address_sanitizer) ||                                        \
-    (defined(__SANITIZE_ADDRESS__) && defined(__GNUC__)) ||                    \
+#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__) ||       \
     __has_feature(leak_sanitizer)
 
 #include <sanitizer/lsan_interface.h>

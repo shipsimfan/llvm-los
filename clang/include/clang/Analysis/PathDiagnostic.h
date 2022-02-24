@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_ANALYSIS_PATHDIAGNOSTIC_H
-#define LLVM_CLANG_ANALYSIS_PATHDIAGNOSTIC_H
+#ifndef LLVM_CLANG_STATICANALYZER_CORE_BUGREPORTER_PATHDIAGNOSTIC_H
+#define LLVM_CLANG_STATICANALYZER_CORE_BUGREPORTER_PATHDIAGNOSTIC_H
 
 #include "clang/AST/Stmt.h"
 #include "clang/Analysis/AnalysisDeclContext.h"
@@ -41,8 +41,10 @@ class AnalysisDeclContext;
 class BinaryOperator;
 class CallEnter;
 class CallExitEnd;
+class CallExpr;
 class ConditionalOperator;
 class Decl;
+class Expr;
 class LocationContext;
 class MemberExpr;
 class ProgramPoint;
@@ -73,8 +75,14 @@ struct PathDiagnosticConsumerOptions {
   bool ShouldSerializeStats = false;
 
   /// If the consumer intends to produce multiple output files, should it
-  /// use a pseudo-random file name name or a human-readable file name.
-  bool ShouldWriteVerboseReportFilename = false;
+  /// use randomly generated file names for these files (with the tiny risk of
+  /// having random collisions) or deterministic human-readable file names
+  /// (with a larger risk of deterministic collisions or invalid characters
+  /// in the file name). We should not really give this choice to the users
+  /// because deterministic mode is always superior when done right, but
+  /// for some consumers this mode is experimental and needs to be
+  /// off by default.
+  bool ShouldWriteStableReportFilename = false;
 
   /// Whether the consumer should treat consumed diagnostics as hard errors.
   /// Useful for breaking your build when issues are found.
@@ -143,14 +151,11 @@ public:
     /// Only runs visitors, no output generated.
     None,
 
-    /// Used for SARIF and text output.
+    /// Used for HTML, SARIF, and text output.
     Minimal,
 
     /// Used for plist output, used for "arrows" generation.
     Extensive,
-
-    /// Used for HTML, shows both "arrows" and control notes.
-    Everything
   };
 
   virtual PathGenerationScheme getGenerationScheme() const { return Minimal; }
@@ -159,11 +164,7 @@ public:
     return getGenerationScheme() != None;
   }
 
-  bool shouldAddPathEdges() const { return getGenerationScheme() >= Extensive; }
-  bool shouldAddControlNotes() const {
-    return getGenerationScheme() == Minimal ||
-           getGenerationScheme() == Everything;
-  }
+  bool shouldAddPathEdges() const { return getGenerationScheme() == Extensive; }
 
   virtual bool supportsLogicalOpControlFlow() const { return false; }
 
@@ -551,7 +552,7 @@ public:
 
   /// Return true if the diagnostic piece is prunable.
   bool isPrunable() const {
-    return IsPrunable.getValueOr(false);
+    return IsPrunable.hasValue() ? IsPrunable.getValue() : false;
   }
 
   void dump() const override;
@@ -903,4 +904,4 @@ public:
 } // namespace ento
 } // namespace clang
 
-#endif // LLVM_CLANG_ANALYSIS_PATHDIAGNOSTIC_H
+#endif // LLVM_CLANG_STATICANALYZER_CORE_BUGREPORTER_PATHDIAGNOSTIC_H

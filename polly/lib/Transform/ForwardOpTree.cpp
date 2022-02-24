@@ -363,11 +363,11 @@ public:
       Translator = makeIdentityMap(Known.range(), false);
     }
 
-    if (Known.is_null() || Translator.is_null() || NormalizeMap.is_null()) {
+    if (!Known || !Translator || !NormalizeMap) {
       assert(isl_ctx_last_error(IslCtx.get()) == isl_error_quota);
-      Known = {};
-      Translator = {};
-      NormalizeMap = {};
+      Known = nullptr;
+      Translator = nullptr;
+      NormalizeMap = nullptr;
       LLVM_DEBUG(dbgs() << "Known analysis exceeded max_operations\n");
       return false;
     }
@@ -525,7 +525,7 @@ public:
     isl::union_map Candidates = findSameContentElements(TranslatedExpectedVal);
 
     isl::map SameVal = singleLocation(Candidates, getDomainFor(TargetStmt));
-    if (SameVal.is_null())
+    if (!SameVal)
       return ForwardingAction::notApplicable();
 
     LLVM_DEBUG(dbgs() << "      expected values where " << TargetExpectedVal
@@ -571,7 +571,7 @@ public:
       LLVM_DEBUG(dbgs() << "      local translator is " << LocalTranslator
                         << "\n");
 
-      if (LocalTranslator.is_null())
+      if (!LocalTranslator)
         return ForwardingAction::notApplicable();
     }
 
@@ -583,8 +583,8 @@ public:
                         << Access << "\n");
       (void)Access;
 
-      if (!LocalTranslator.is_null())
-        Translator = Translator.unite(LocalTranslator);
+      if (LocalTranslator)
+        Translator = Translator.add_map(LocalTranslator);
 
       NumKnownLoadsForwarded++;
       TotalKnownLoadsForwarded++;
@@ -634,7 +634,7 @@ public:
 
     isl::map SameVal = singleLocation(Candidates, getDomainFor(TargetStmt));
     simplify(SameVal);
-    if (SameVal.is_null())
+    if (!SameVal)
       return ForwardingAction::notApplicable();
 
     auto ExecAction = [this, TargetStmt, Inst, SameVal]() {
@@ -1149,6 +1149,12 @@ Pass *polly::createForwardOpTreeWrapperPass() {
   return new ForwardOpTreeWrapperPass();
 }
 
+INITIALIZE_PASS_BEGIN(ForwardOpTreeWrapperPass, "polly-optree",
+                      "Polly - Forward operand tree", false, false)
+INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
+INITIALIZE_PASS_END(ForwardOpTreeWrapperPass, "polly-optree",
+                    "Polly - Forward operand tree", false, false)
+
 llvm::PreservedAnalyses ForwardOpTreePass::run(Scop &S,
                                                ScopAnalysisManager &SAM,
                                                ScopStandardAnalysisResults &SAR,
@@ -1161,9 +1167,3 @@ ForwardOpTreePrinterPass::run(Scop &S, ScopAnalysisManager &SAM,
                               ScopStandardAnalysisResults &SAR, SPMUpdater &U) {
   return runForwardOpTreeUsingNPM(S, SAM, SAR, U, &OS);
 }
-
-INITIALIZE_PASS_BEGIN(ForwardOpTreeWrapperPass, "polly-optree",
-                      "Polly - Forward operand tree", false, false)
-INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
-INITIALIZE_PASS_END(ForwardOpTreeWrapperPass, "polly-optree",
-                    "Polly - Forward operand tree", false, false)

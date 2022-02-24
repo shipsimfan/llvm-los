@@ -31,7 +31,7 @@ public:
   ///
   /// \return
   ///     A \a DecodedThread instance.
-  DecodedThreadSP Decode();
+  const DecodedThread &Decode();
 
   ThreadDecoder(const ThreadDecoder &other) = delete;
   ThreadDecoder &operator=(const ThreadDecoder &other) = delete;
@@ -41,9 +41,9 @@ protected:
   ///
   /// \return
   ///     A \a DecodedThread instance.
-  virtual DecodedThreadSP DoDecode() = 0;
+  virtual DecodedThread DoDecode() = 0;
 
-  llvm::Optional<DecodedThreadSP> m_decoded_thread;
+  llvm::Optional<DecodedThread> m_decoded_thread;
 };
 
 /// Decoder implementation for \a lldb_private::ThreadPostMortemTrace, which are
@@ -59,7 +59,7 @@ public:
                           TraceIntelPT &trace);
 
 private:
-  DecodedThreadSP DoDecode() override;
+  DecodedThread DoDecode() override;
 
   lldb::ThreadPostMortemTraceSP m_trace_thread;
   TraceIntelPT &m_trace;
@@ -75,7 +75,7 @@ public:
   LiveThreadDecoder(Thread &thread, TraceIntelPT &trace);
 
 private:
-  DecodedThreadSP DoDecode() override;
+  DecodedThread DoDecode() override;
 
   lldb::ThreadSP m_thread_sp;
   TraceIntelPT &m_trace;

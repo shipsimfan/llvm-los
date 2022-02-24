@@ -5,11 +5,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// This file defines an array type that can be indexed using scoped enum
-/// values.
-///
+//
+// This file defines an array type that can be indexed using scoped enum values.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_ENUMERATEDARRAY_H

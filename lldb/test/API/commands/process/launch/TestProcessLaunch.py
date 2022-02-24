@@ -29,6 +29,7 @@ class ProcessLaunchTestCase(TestBase):
         TestBase.tearDown(self)
 
     @skipIfRemote
+    @skipIfReproducer
     def test_io(self):
         """Test that process launch I/O redirection flags work properly."""
         self.build()
@@ -84,6 +85,7 @@ class ProcessLaunchTestCase(TestBase):
     @skipIfRemote
     @expectedFailureAll(oslist=["freebsd", "linux"], bugnumber="llvm.org/pr20265")
     @expectedFailureNetBSD
+    @skipIfReproducer
     def test_set_working_dir_nonexisting(self):
         """Test that '-w dir' fails to set the working dir when running the inferior with a dir which doesn't exist."""
         d = {'CXX_SOURCES': 'print_cwd.cpp'}
@@ -111,6 +113,7 @@ class ProcessLaunchTestCase(TestBase):
                 invalid_dir_path])
 
     @skipIfRemote
+    @skipIfReproducer
     def test_set_working_dir_existing(self):
         """Test that '-w dir' sets the working dir when running the inferior."""
         d = {'CXX_SOURCES': 'print_cwd.cpp'}
@@ -170,16 +173,18 @@ class ProcessLaunchTestCase(TestBase):
         if not success:
             self.fail(err_msg)
 
+    @skipIfReproducer
     def test_environment_with_special_char(self):
         """Test that environment variables containing '*' and '}' are handled correctly by the inferior."""
         source = 'print_env.cpp'
         d = {'CXX_SOURCES': source}
         self.build(dictionary=d)
         self.setTearDownCleanup(d)
+        exe = self.getBuildArtifact("a.out")
 
         evil_var = 'INIT*MIDDLE}TAIL'
 
-        target = self.createTestTarget()
+        target = self.dbg.CreateTarget(exe)
         main_source_spec = lldb.SBFileSpec(source)
         breakpoint = target.BreakpointCreateBySourceRegex(
             '// Set breakpoint here.', main_source_spec)

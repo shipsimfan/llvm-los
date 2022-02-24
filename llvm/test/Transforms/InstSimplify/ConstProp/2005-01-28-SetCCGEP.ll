@@ -1,4 +1,4 @@
-; RUN: opt < %s -passes=instsimplify -S | \
+; RUN: opt < %s -instsimplify -S | \
 ; RUN:    not grep "ret i1 false"
 
 @b = external global [2 x {  }]         ; <[2 x {  }]*> [#uses=2]

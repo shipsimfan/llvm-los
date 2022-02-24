@@ -19,7 +19,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/Dominators.h"
@@ -150,11 +149,11 @@ bool AMDGPUPrintfRuntimeBindingImpl::lowerPrintfForGpu(Module &M) {
   IRBuilder<> Builder(Ctx);
   Type *I32Ty = Type::getInt32Ty(Ctx);
   unsigned UniqID = 0;
-  // NB: This is important for this string size to be divisible by 4
+  // NB: This is important for this string size to be divizable by 4
   const char NonLiteralStr[4] = "???";
 
   for (auto CI : Printfs) {
-    unsigned NumOps = CI->arg_size();
+    unsigned NumOps = CI->getNumArgOperands();
 
     SmallString<16> OpConvSpecifiers;
     Value *Op = CI->getArgOperand(0);
@@ -202,10 +201,10 @@ bool AMDGPUPrintfRuntimeBindingImpl::lowerPrintfForGpu(Module &M) {
       std::string AStreamHolder;
       raw_string_ostream Sizes(AStreamHolder);
       int Sum = DWORD_ALIGN;
-      Sizes << CI->arg_size() - 1;
+      Sizes << CI->getNumArgOperands() - 1;
       Sizes << ':';
-      for (unsigned ArgCount = 1;
-           ArgCount < CI->arg_size() && ArgCount <= OpConvSpecifiers.size();
+      for (unsigned ArgCount = 1; ArgCount < CI->getNumArgOperands() &&
+                                  ArgCount <= OpConvSpecifiers.size();
            ArgCount++) {
         Value *Arg = CI->getArgOperand(ArgCount);
         Type *ArgType = Arg->getType();
@@ -281,10 +280,10 @@ bool AMDGPUPrintfRuntimeBindingImpl::lowerPrintfForGpu(Module &M) {
       }
       LLVM_DEBUG(dbgs() << "Printf format string in source = " << Str.str()
                         << '\n');
-      for (char C : Str) {
+      for (size_t I = 0; I < Str.size(); ++I) {
         // Rest of the C escape sequences (e.g. \') are handled correctly
         // by the MDParser
-        switch (C) {
+        switch (Str[I]) {
         case '\a':
           Sizes << "\\a";
           break;
@@ -309,7 +308,7 @@ bool AMDGPUPrintfRuntimeBindingImpl::lowerPrintfForGpu(Module &M) {
           Sizes << "\\72";
           break;
         default:
-          Sizes << C;
+          Sizes << Str[I];
           break;
         }
       }
@@ -324,14 +323,13 @@ bool AMDGPUPrintfRuntimeBindingImpl::lowerPrintfForGpu(Module &M) {
       Type *SizetTy = Type::getInt32Ty(Ctx);
 
       Type *Tys_alloc[1] = {SizetTy};
-      Type *I8Ty = Type::getInt8Ty(Ctx);
-      Type *I8Ptr = PointerType::get(I8Ty, 1);
+      Type *I8Ptr = PointerType::get(Type::getInt8Ty(Ctx), 1);
       FunctionType *FTy_alloc = FunctionType::get(I8Ptr, Tys_alloc, false);
       FunctionCallee PrintfAllocFn =
           M.getOrInsertFunction(StringRef("__printf_alloc"), FTy_alloc, Attr);
 
       LLVM_DEBUG(dbgs() << "Printf metadata = " << Sizes.str() << '\n');
-      std::string fmtstr = itostr(++UniqID) + ":" + Sizes.str();
+      std::string fmtstr = itostr(++UniqID) + ":" + Sizes.str().c_str();
       MDString *fmtStrArray = MDString::get(Ctx, fmtstr);
 
       // Instead of creating global variables, the
@@ -357,7 +355,7 @@ bool AMDGPUPrintfRuntimeBindingImpl::lowerPrintfForGpu(Module &M) {
       // basicblock splits after buffer overflow check
       //
       ConstantPointerNull *zeroIntPtr =
-          ConstantPointerNull::get(PointerType::get(I8Ty, 1));
+          ConstantPointerNull::get(PointerType::get(Type::getInt8Ty(Ctx), 1));
       auto *cmp = cast<ICmpInst>(Builder.CreateICmpNE(pcall, zeroIntPtr, ""));
       if (!CI->use_empty()) {
         Value *result =
@@ -372,9 +370,13 @@ bool AMDGPUPrintfRuntimeBindingImpl::lowerPrintfForGpu(Module &M) {
 
       // store unique printf id in the buffer
       //
+      SmallVector<Value *, 1> ZeroIdxList;
+      ConstantInt *zeroInt =
+          ConstantInt::get(Ctx, APInt(32, StringRef("0"), 10));
+      ZeroIdxList.push_back(zeroInt);
+
       GetElementPtrInst *BufferIdx = GetElementPtrInst::Create(
-          I8Ty, pcall, ConstantInt::get(Ctx, APInt(32, 0)), "PrintBuffID",
-          Brnch);
+          nullptr, pcall, ZeroIdxList, "PrintBuffID", Brnch);
 
       Type *idPointer = PointerType::get(I32Ty, AMDGPUAS::GLOBAL_ADDRESS);
       Value *id_gep_cast =
@@ -382,16 +384,19 @@ bool AMDGPUPrintfRuntimeBindingImpl::lowerPrintfForGpu(Module &M) {
 
       new StoreInst(ConstantInt::get(I32Ty, UniqID), id_gep_cast, Brnch);
 
-      // 1st 4 bytes hold the printf_id
+      SmallVector<Value *, 2> FourthIdxList;
+      ConstantInt *fourInt =
+          ConstantInt::get(Ctx, APInt(32, StringRef("4"), 10));
+
+      FourthIdxList.push_back(fourInt); // 1st 4 bytes hold the printf_id
       // the following GEP is the buffer pointer
-      BufferIdx = GetElementPtrInst::Create(
-          I8Ty, pcall, ConstantInt::get(Ctx, APInt(32, 4)), "PrintBuffGep",
-          Brnch);
+      BufferIdx = GetElementPtrInst::Create(nullptr, pcall, FourthIdxList,
+                                            "PrintBuffGep", Brnch);
 
       Type *Int32Ty = Type::getInt32Ty(Ctx);
       Type *Int64Ty = Type::getInt64Ty(Ctx);
-      for (unsigned ArgCount = 1;
-           ArgCount < CI->arg_size() && ArgCount <= OpConvSpecifiers.size();
+      for (unsigned ArgCount = 1; ArgCount < CI->getNumArgOperands() &&
+                                  ArgCount <= OpConvSpecifiers.size();
            ArgCount++) {
         Value *Arg = CI->getArgOperand(ArgCount);
         Type *ArgType = Arg->getType();
@@ -464,7 +469,7 @@ bool AMDGPUPrintfRuntimeBindingImpl::lowerPrintfForGpu(Module &M) {
             WhatToStore.push_back(Arg);
           }
         } else if (isa<FixedVectorType>(ArgType)) {
-          Type *IType = nullptr;
+          Type *IType = NULL;
           uint32_t EleCount = cast<FixedVectorType>(ArgType)->getNumElements();
           uint32_t EleSize = ArgType->getScalarSizeInBits();
           uint32_t TotalSize = EleCount * EleSize;
@@ -525,9 +530,9 @@ bool AMDGPUPrintfRuntimeBindingImpl::lowerPrintfForGpu(Module &M) {
           LLVM_DEBUG(dbgs() << "inserting store to printf buffer:\n"
                             << *StBuff << '\n');
           (void)StBuff;
-          if (I + 1 == E && ArgCount + 1 == CI->arg_size())
+          if (I + 1 == E && ArgCount + 1 == CI->getNumArgOperands())
             break;
-          BufferIdx = GetElementPtrInst::Create(I8Ty, BufferIdx, BuffOffset,
+          BufferIdx = GetElementPtrInst::Create(nullptr, BufferIdx, BuffOffset,
                                                 "PrintBuffNextPtr", Brnch);
           LLVM_DEBUG(dbgs() << "inserting gep to the printf buffer:\n"
                             << *BufferIdx << '\n');

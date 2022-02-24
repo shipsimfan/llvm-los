@@ -9,7 +9,7 @@
 ; CHECK: declare void @unknown()
 declare void @unknown()
 
-; Basic correctness check: this should get annotated as readnone.
+; Sanity check: this should get annotated as readnone.
 ; CHECK: Function Attrs: nounwind readnone
 ; CHECK-NEXT: declare void @readnone()
 declare void @readnone() readnone nounwind

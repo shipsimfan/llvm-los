@@ -115,10 +115,10 @@ void MachineInstr::addImplicitDefUseOperands(MachineFunction &MF) {
 /// MachineInstr ctor - This constructor creates a MachineInstr and adds the
 /// implicit operands. It reserves space for the number of operands specified by
 /// the MCInstrDesc.
-MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &TID,
-                           DebugLoc DL, bool NoImp)
-    : MCID(&TID), DbgLoc(std::move(DL)), DebugInstrNum(0) {
-  assert(DbgLoc.hasTrivialDestructor() && "Expected trivial destructor");
+MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &tid,
+                           DebugLoc dl, bool NoImp)
+    : MCID(&tid), debugLoc(std::move(dl)), DebugInstrNum(0) {
+  assert(debugLoc.hasTrivialDestructor() && "Expected trivial destructor");
 
   // Reserve space for the expected number of operands.
   if (unsigned NumOps = MCID->getNumOperands() +
@@ -135,9 +135,9 @@ MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &TID,
 /// Does not copy the number from debug instruction numbering, to preserve
 /// uniqueness.
 MachineInstr::MachineInstr(MachineFunction &MF, const MachineInstr &MI)
-    : MCID(&MI.getDesc()), Info(MI.Info), DbgLoc(MI.getDebugLoc()),
+    : MCID(&MI.getDesc()), Info(MI.Info), debugLoc(MI.getDebugLoc()),
       DebugInstrNum(0) {
-  assert(DbgLoc.hasTrivialDestructor() && "Expected trivial destructor");
+  assert(debugLoc.hasTrivialDestructor() && "Expected trivial destructor");
 
   CapOperands = OperandCapacity::get(MI.getNumOperands());
   Operands = MF.allocateOperandArray(CapOperands);
@@ -232,12 +232,16 @@ void MachineInstr::addOperand(MachineFunction &MF, const MachineOperand &Op) {
     }
   }
 
+#ifndef NDEBUG
+  bool isDebugOp = Op.getType() == MachineOperand::MO_Metadata ||
+                   Op.getType() == MachineOperand::MO_MCSymbol;
   // OpNo now points as the desired insertion point.  Unless this is a variadic
   // instruction, only implicit regs are allowed beyond MCID->getNumOperands().
   // RegMask operands go between the explicit and implicit operands.
-  assert((MCID->isVariadic() || OpNo < MCID->getNumOperands() ||
-          Op.isValidExcessOperand()) &&
+  assert((isImpReg || Op.isRegMask() || MCID->isVariadic() ||
+          OpNo < MCID->getNumOperands() || isDebugOp) &&
          "Trying to add an operand to a machine instr that is already done!");
+#endif
 
   MachineRegisterInfo *MRI = getRegInfo();
 
@@ -290,9 +294,6 @@ void MachineInstr::addOperand(MachineFunction &MF, const MachineOperand &Op) {
       if (MCID->getOperandConstraint(OpNo, MCOI::EARLY_CLOBBER) != -1)
         NewMO->setIsEarlyClobber(true);
     }
-    // Ensure debug instructions set debug flag on register uses.
-    if (NewMO->isUse() && isDebugInstr())
-      NewMO->setIsDebug();
   }
 }
 
@@ -676,6 +677,26 @@ MachineInstr *MachineInstr::removeFromBundle() {
 void MachineInstr::eraseFromParent() {
   assert(getParent() && "Not embedded in a basic block!");
   getParent()->erase(this);
+}
+
+void MachineInstr::eraseFromParentAndMarkDBGValuesForRemoval() {
+  assert(getParent() && "Not embedded in a basic block!");
+  MachineBasicBlock *MBB = getParent();
+  MachineFunction *MF = MBB->getParent();
+  assert(MF && "Not embedded in a function!");
+
+  MachineInstr *MI = (MachineInstr *)this;
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+
+  for (const MachineOperand &MO : MI->operands()) {
+    if (!MO.isReg() || !MO.isDef())
+      continue;
+    Register Reg = MO.getReg();
+    if (!Reg.isVirtual())
+      continue;
+    MRI.markUsesInDebugValueAsUndef(Reg);
+  }
+  MI->eraseFromParent();
 }
 
 void MachineInstr::eraseFromBundle() {
@@ -1466,10 +1487,12 @@ bool MachineInstr::allDefsAreDead() const {
 /// instruction to this instruction.
 void MachineInstr::copyImplicitOps(MachineFunction &MF,
                                    const MachineInstr &MI) {
-  for (const MachineOperand &MO :
-       llvm::drop_begin(MI.operands(), MI.getDesc().getNumOperands()))
+  for (unsigned i = MI.getDesc().getNumOperands(), e = MI.getNumOperands();
+       i != e; ++i) {
+    const MachineOperand &MO = MI.getOperand(i);
     if ((MO.isReg() && MO.isImplicit()) || MO.isRegMask())
       addOperand(MF, MO);
+  }
 }
 
 bool MachineInstr::hasComplexRegisterTies() const {
@@ -2060,7 +2083,7 @@ MachineInstrExpressionTrait::getHashValue(const MachineInstr* const &MI) {
 
 void MachineInstr::emitError(StringRef Msg) const {
   // Find the source location cookie.
-  uint64_t LocCookie = 0;
+  unsigned LocCookie = 0;
   const MDNode *LocMD = nullptr;
   for (unsigned i = getNumOperands(); i != 0; --i) {
     if (getOperand(i-1).isMetadata() &&
@@ -2088,11 +2111,11 @@ MachineInstrBuilder llvm::BuildMI(MachineFunction &MF, const DebugLoc &DL,
   assert(cast<DIExpression>(Expr)->isValid() && "not an expression");
   assert(cast<DILocalVariable>(Variable)->isValidLocationForIntrinsic(DL) &&
          "Expected inlined-at fields to agree");
-  auto MIB = BuildMI(MF, DL, MCID).addReg(Reg);
+  auto MIB = BuildMI(MF, DL, MCID).addReg(Reg, RegState::Debug);
   if (IsIndirect)
     MIB.addImm(0U);
   else
-    MIB.addReg(0U);
+    MIB.addReg(0U, RegState::Debug);
   return MIB.addMetadata(Variable).addMetadata(Expr);
 }
 
@@ -2111,7 +2134,7 @@ MachineInstrBuilder llvm::BuildMI(MachineFunction &MF, const DebugLoc &DL,
   if (IsIndirect)
     MIB.addImm(0U);
   else
-    MIB.addReg(0U);
+    MIB.addReg(0U, RegState::Debug);
   return MIB.addMetadata(Variable).addMetadata(Expr);
 }
 
@@ -2130,7 +2153,7 @@ MachineInstrBuilder llvm::BuildMI(MachineFunction &MF, const DebugLoc &DL,
   MIB.addMetadata(Variable).addMetadata(Expr);
   for (const MachineOperand &MO : MOs)
     if (MO.isReg())
-      MIB.addReg(MO.getReg());
+      MIB.addReg(MO.getReg(), RegState::Debug);
     else
       MIB.add(MO);
   return MIB;
@@ -2349,11 +2372,5 @@ MachineInstr::getFoldedRestoreSize(const TargetInstrInfo *TII) const {
 unsigned MachineInstr::getDebugInstrNum() {
   if (DebugInstrNum == 0)
     DebugInstrNum = getParent()->getParent()->getNewDebugInstrNum();
-  return DebugInstrNum;
-}
-
-unsigned MachineInstr::getDebugInstrNum(MachineFunction &MF) {
-  if (DebugInstrNum == 0)
-    DebugInstrNum = MF.getNewDebugInstrNum();
   return DebugInstrNum;
 }

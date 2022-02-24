@@ -6,9 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_UNITTESTS_LSPCLIENT_H
-#define LLVM_CLANG_TOOLS_EXTRA_CLANGD_UNITTESTS_LSPCLIENT_H
-
 #include <condition_variable>
 #include <deque>
 #include <llvm/ADT/Optional.h>
@@ -83,5 +80,3 @@ private:
 
 } // namespace clangd
 } // namespace clang
-
-#endif // LLVM_CLANG_TOOLS_EXTRA_CLANGD_UNITTESTS_LSPCLIENT_H

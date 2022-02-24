@@ -53,8 +53,9 @@ namespace {
       // instructions to fill delay slot.
       F.getRegInfo().invalidateLiveness();
 
-      for (MachineBasicBlock &MBB : F)
-        Changed |= runOnMachineBasicBlock(MBB);
+      for (MachineFunction::iterator FI = F.begin(), FE = F.end();
+           FI != FE; ++FI)
+        Changed |= runOnMachineBasicBlock(*FI);
       return Changed;
     }
 
@@ -318,7 +319,8 @@ void Filler::insertDefsUses(MachineBasicBlock::iterator MI,
                             SmallSet<unsigned, 32>& RegDefs,
                             SmallSet<unsigned, 32>& RegUses)
 {
-  for (const MachineOperand &MO : MI->operands()) {
+  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
+    const MachineOperand &MO = MI->getOperand(i);
     if (!MO.isReg())
       continue;
 

@@ -72,10 +72,8 @@ public:
     auto newIf = rewriter.create<scf::IfOp>(op.getLoc(), op.getResultTypes(),
                                             condition, true);
 
-    inlineIfCase(op.then_branch(), newIf.getThenRegion(), op.inputs(),
-                 rewriter);
-    inlineIfCase(op.else_branch(), newIf.getElseRegion(), op.inputs(),
-                 rewriter);
+    inlineIfCase(op.then_branch(), newIf.thenRegion(), op.inputs(), rewriter);
+    inlineIfCase(op.else_branch(), newIf.elseRegion(), op.inputs(), rewriter);
 
     rewriter.replaceOp(op, newIf.getResults());
     return success();
@@ -90,11 +88,11 @@ public:
                                 PatternRewriter &rewriter) const final {
     auto newWhile = rewriter.create<scf::WhileOp>(
         op.getLoc(), op.getResultTypes(), op.inputs());
-    rewriter.createBlock(&newWhile.getBefore());
-    rewriter.createBlock(&newWhile.getAfter());
+    rewriter.createBlock(&newWhile.before());
+    rewriter.createBlock(&newWhile.after());
 
-    inlineWhileCase(op.cond(), newWhile.getBefore(), rewriter, true);
-    inlineWhileCase(op.body(), newWhile.getAfter(), rewriter, false);
+    inlineWhileCase(op.cond(), newWhile.before(), rewriter, true);
+    inlineWhileCase(op.body(), newWhile.after(), rewriter, false);
 
     rewriter.replaceOp(op, newWhile.getResults());
 

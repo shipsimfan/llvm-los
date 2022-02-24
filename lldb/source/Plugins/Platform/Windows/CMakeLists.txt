@@ -6,7 +6,4 @@ add_lldb_library(lldbPluginPlatformWindows PLUGIN
     lldbCore
     lldbHost
     lldbTarget
-
-   LINK_COMPONENTS
-    Support
   )

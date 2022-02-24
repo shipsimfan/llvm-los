@@ -15,7 +15,6 @@
 
 #include "llvm/IR/PassManager.h"
 #include "llvm/InitializePasses.h"
-#include "llvm/Pass.h"
 
 namespace llvm {
 class InjectTLIMappings : public PassInfoMixin<InjectTLIMappings> {

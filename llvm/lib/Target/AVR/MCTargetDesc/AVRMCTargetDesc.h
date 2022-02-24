@@ -33,6 +33,7 @@ MCInstrInfo *createAVRMCInstrInfo();
 
 /// Creates a machine code emitter for AVR.
 MCCodeEmitter *createAVRMCCodeEmitter(const MCInstrInfo &MCII,
+                                      const MCRegisterInfo &MRI,
                                       MCContext &Ctx);
 
 /// Creates an assembly backend for AVR.

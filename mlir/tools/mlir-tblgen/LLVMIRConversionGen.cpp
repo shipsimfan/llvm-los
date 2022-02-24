@@ -121,7 +121,6 @@ static bool emitOneBuilder(const Record &record, raw_ostream &os) {
   llvm::raw_string_ostream bs(builder);
   while (auto loc = findNextVariable(builderStrRef)) {
     auto name = loc.in(builderStrRef).drop_front();
-    auto getterName = op.getGetterName(name);
     // First, insert the non-matched part as is.
     bs << builderStrRef.substr(0, loc.pos);
     // Then, rewrite the name based on its kind.
@@ -129,13 +128,13 @@ static bool emitOneBuilder(const Record &record, raw_ostream &os) {
     if (isOperandName(op, name)) {
       auto result =
           isVariadicOperand
-              ? formatv("moduleTranslation.lookupValues(op.{0}())", getterName)
-              : formatv("moduleTranslation.lookupValue(op.{0}())", getterName);
+              ? formatv("moduleTranslation.lookupValues(op.{0}())", name)
+              : formatv("moduleTranslation.lookupValue(op.{0}())", name);
       bs << result;
     } else if (isAttributeName(op, name)) {
-      bs << formatv("op.{0}()", getterName);
+      bs << formatv("op.{0}()", name);
     } else if (isResultName(op, name)) {
-      bs << formatv("moduleTranslation.mapValue(op.{0}())", getterName);
+      bs << formatv("moduleTranslation.mapValue(op.{0}())", name);
     } else if (name == "_resultType") {
       bs << "moduleTranslation.convertType(op.getResult().getType())";
     } else if (name == "_hasResult") {
@@ -205,7 +204,7 @@ public:
     std::vector<LLVMEnumAttrCase> cases;
 
     for (auto &c : tblgen::EnumAttr::getAllCases())
-      cases.emplace_back(c);
+      cases.push_back(LLVMEnumAttrCase(c));
 
     return cases;
   }

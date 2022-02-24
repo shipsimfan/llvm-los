@@ -359,8 +359,7 @@ define void @f36(i8* %dest) {
 define void @f37(i8* %dest) {
 ; CHECK-LABEL: f37:
 ; CHECK: mvi 0(%r2), 255
-; CHECK: mvc 1(255,%r2), 0(%r2)
-; CHECK: mvi 256(%r2), 255
+; CHECK: mvc 1(256,%r2), 0(%r2)
 ; CHECK: br %r14
   call void @llvm.memset.p0i8.i32(i8* %dest, i8 -1, i32 257, i1 false)
   ret void
@@ -370,8 +369,7 @@ define void @f37(i8* %dest) {
 define void @f38(i8* %dest) {
 ; CHECK-LABEL: f38:
 ; CHECK: mvi 0(%r2), 255
-; CHECK: mvc 1(255,%r2), 0(%r2)
-; CHECK: mvi 256(%r2), 255
+; CHECK: mvc 1(256,%r2), 0(%r2)
 ; CHECK: br %r14
   call void @llvm.memset.p0i8.i64(i8* %dest, i8 -1, i64 257, i1 false)
   ret void
@@ -381,8 +379,7 @@ define void @f38(i8* %dest) {
 define void @f39(i8* %dest) {
 ; CHECK-LABEL: f39:
 ; CHECK: mvi 0(%r2), 255
-; CHECK: mvc 1(255,%r2), 0(%r2)
-; CHECK: mvi 256(%r2), 255
+; CHECK: mvc 1(256,%r2), 0(%r2)
 ; CHECK: mvc 257(1,%r2), 256(%r2)
 ; CHECK: br %r14
   call void @llvm.memset.p0i8.i32(i8* %dest, i8 -1, i32 258, i1 false)
@@ -393,8 +390,7 @@ define void @f39(i8* %dest) {
 define void @f40(i8* %dest) {
 ; CHECK-LABEL: f40:
 ; CHECK: mvi 0(%r2), 255
-; CHECK: mvc 1(255,%r2), 0(%r2)
-; CHECK: mvi 256(%r2), 255
+; CHECK: mvc 1(256,%r2), 0(%r2)
 ; CHECK: mvc 257(1,%r2), 256(%r2)
 ; CHECK: br %r14
   call void @llvm.memset.p0i8.i64(i8* %dest, i8 -1, i64 258, i1 false)

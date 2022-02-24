@@ -65,40 +65,39 @@ class Module;
 /// such that it could levarage polymorphism to extract common code for
 /// DbgVariable and DbgLabel.
 class DbgEntity {
+  const DINode *Entity;
+  const DILocation *InlinedAt;
+  DIE *TheDIE = nullptr;
+  unsigned SubclassID;
+
 public:
   enum DbgEntityKind {
     DbgVariableKind,
     DbgLabelKind
   };
 
-private:
-  const DINode *Entity;
-  const DILocation *InlinedAt;
-  DIE *TheDIE = nullptr;
-  const DbgEntityKind SubclassID;
-
-public:
-  DbgEntity(const DINode *N, const DILocation *IA, DbgEntityKind ID)
-      : Entity(N), InlinedAt(IA), SubclassID(ID) {}
-  virtual ~DbgEntity() = default;
+  DbgEntity(const DINode *N, const DILocation *IA, unsigned ID)
+    : Entity(N), InlinedAt(IA), SubclassID(ID) {}
+  virtual ~DbgEntity() {}
 
   /// Accessors.
   /// @{
   const DINode *getEntity() const { return Entity; }
   const DILocation *getInlinedAt() const { return InlinedAt; }
   DIE *getDIE() const { return TheDIE; }
-  DbgEntityKind getDbgEntityID() const { return SubclassID; }
+  unsigned getDbgEntityID() const { return SubclassID; }
   /// @}
 
   void setDIE(DIE &D) { TheDIE = &D; }
 
   static bool classof(const DbgEntity *N) {
     switch (N->getDbgEntityID()) {
+    default:
+      return false;
     case DbgVariableKind:
     case DbgLabelKind:
       return true;
     }
-    llvm_unreachable("Invalid DbgEntityKind");
   }
 };
 
@@ -441,11 +440,7 @@ private:
   AccelTable<AppleAccelTableOffsetData> AccelNamespace;
   AccelTable<AppleAccelTableTypeData> AccelTypes;
 
-  /// Identify a debugger for "tuning" the debug info.
-  ///
-  /// The "tuning" should be used to set defaults for individual feature flags
-  /// in DwarfDebug; if a given feature has a more specific command-line option,
-  /// that option should take precedence over the tuning.
+  // Identify a debugger for "tuning" the debug info.
   DebuggerKind DebuggerTuning = DebuggerKind::Default;
 
   MCDwarfDwoLineTable *getDwoLineTable(const DwarfCompileUnit &);
@@ -471,6 +466,9 @@ private:
 
   /// Construct a DIE for this abstract scope.
   void constructAbstractSubprogramScopeDIE(DwarfCompileUnit &SrcCU, LexicalScope *Scope);
+
+  /// Construct a DIE for the subprogram definition \p SP and return it.
+  DIE &constructSubprogramDefinitionDIE(const DISubprogram *SP);
 
   /// Construct DIEs for call site entries describing the calls in \p MF.
   void constructCallSiteEntryDIEs(const DISubprogram &SP, DwarfCompileUnit &CU,
@@ -613,7 +611,7 @@ private:
                          DenseSet<InlinedEntity> &ProcessedVars);
 
   /// Build the location list for all DBG_VALUEs in the
-  /// function that describe the same variable. If the resulting
+  /// function that describe the same variable. If the resulting 
   /// list has only one entry that is valid for entire variable's
   /// scope return true.
   bool buildLocationList(SmallVectorImpl<DebugLocEntry> &DebugLoc,
@@ -632,9 +630,6 @@ protected:
 
   /// Gather and emit post-function debug information.
   void endFunctionImpl(const MachineFunction *MF) override;
-
-  /// Get Dwarf compile unit ID for line table.
-  unsigned getDwarfCompileUnitIDForLineTable(const DwarfCompileUnit &CU);
 
   void skippedNonDebugFunction() override;
 
@@ -781,9 +776,6 @@ public:
   /// Returns the previous CU that was being updated
   const DwarfCompileUnit *getPrevCU() const { return PrevCU; }
   void setPrevCU(const DwarfCompileUnit *PrevCU) { this->PrevCU = PrevCU; }
-
-  /// Terminate the line table by adding the last range label.
-  void terminateLineTable(const DwarfCompileUnit *CU);
 
   /// Returns the entries for the .debug_loc section.
   const DebugLocStream &getDebugLocs() const { return DebugLocs; }

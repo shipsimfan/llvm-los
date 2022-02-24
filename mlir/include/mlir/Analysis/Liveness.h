@@ -43,7 +43,7 @@ class Value;
 ///   auto &allInValues = liveness.getLiveIn(block);
 ///   auto &allOutValues = liveness.getLiveOut(block);
 ///   auto allOperationsInWhichValueIsLive = liveness.resolveLiveness(value);
-///   bool isDeafAfter = liveness.isDeadAfter(value, operation);
+///   bool lastUse = liveness.isLastUse(value, operation);
 class Liveness {
 public:
   using OperationListT = std::vector<Operation *>;
@@ -74,8 +74,9 @@ public:
   /// Returns a reference to a set containing live-out values (unordered).
   const ValueSetT &getLiveOut(Block *block) const;
 
-  /// Returns true if `value` is not live after `operation`.
-  bool isDeadAfter(Value value, Operation *operation) const;
+  /// Returns true if the given operation represent the last use of the
+  /// given value.
+  bool isLastUse(Value value, Operation *operation) const;
 
   /// Dumps the liveness information in a human readable format.
   void dump() const;
@@ -131,7 +132,7 @@ public:
 
 private:
   /// The underlying block.
-  Block *block = nullptr;
+  Block *block;
 
   /// The set of all live in values.
   ValueSetT inValues;
@@ -142,6 +143,6 @@ private:
   friend class Liveness;
 };
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // MLIR_ANALYSIS_LIVENESS_H

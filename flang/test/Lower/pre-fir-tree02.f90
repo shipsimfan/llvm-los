@@ -1,4 +1,4 @@
-! RUN: bbc -pft-test -o %t %s | FileCheck %s
+! RUN: %flang_fc1 -fsyntax-only -fdebug-pre-fir-tree %s | FileCheck %s
 
 ! Test Pre-FIR Tree captures all the intended nodes from the parse-tree
 ! Coarray and OpenMP related nodes are tested in other files.
@@ -212,7 +212,8 @@ contains
   ! CHECK: Subroutine sub
   subroutine sub(a)
     real(4):: a
-    ! CompilerDirective:
+    ! CompilerDirective
+    ! CHECK: <<CompilerDirective>>
     !DIR$ IGNORE_TKR a
   end subroutine
 
@@ -253,7 +254,7 @@ subroutine iostmts(filename, a, b, c)
   read(10, *) length
   ! CHECK: RewindStmt
   rewind 10
-  ! CHECK-NOT: NamelistStmt
+  ! CHECK: NamelistStmt
   namelist /nlist/ a, b, c
   ! CHECK: WriteStmt
   write(10, NML=nlist)

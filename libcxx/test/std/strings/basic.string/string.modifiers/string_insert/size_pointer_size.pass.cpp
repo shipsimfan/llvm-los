@@ -19,7 +19,7 @@
 #include "min_allocator.h"
 
 template <class S>
-TEST_CONSTEXPR_CXX20 void
+void
 test(S s, typename S::size_type pos, const typename S::value_type* str,
      typename S::size_type n, S expected)
 {
@@ -48,8 +48,9 @@ test(S s, typename S::size_type pos, const typename S::value_type* str,
 #endif
 }
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     typedef std::string S;
     test(S(""), 0, "", 0, S(""));
     test(S(""), 0, "12345", 0, S(""));
@@ -371,9 +372,9 @@ bool test() {
     test(S("abcdefghijklmnopqrst"), 21, "12345678901234567890", 10, S("can't happen"));
     test(S("abcdefghijklmnopqrst"), 21, "12345678901234567890", 19, S("can't happen"));
     test(S("abcdefghijklmnopqrst"), 21, "12345678901234567890", 20, S("can't happen"));
-  }
+    }
 #if TEST_STD_VER >= 11
-  {
+    {
     typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
     test(S(""), 0, "", 0, S(""));
     test(S(""), 0, "12345", 0, S(""));
@@ -695,10 +696,10 @@ bool test() {
     test(S("abcdefghijklmnopqrst"), 21, "12345678901234567890", 10, S("can't happen"));
     test(S("abcdefghijklmnopqrst"), 21, "12345678901234567890", 19, S("can't happen"));
     test(S("abcdefghijklmnopqrst"), 21, "12345678901234567890", 20, S("can't happen"));
-  }
+    }
 #endif
 
-  { // test inserting into self
+    { // test inserting into self
     typedef std::string S;
     S s_short = "123/";
     S s_long  = "Lorem ipsum dolor sit amet, consectetur/";
@@ -712,17 +713,7 @@ bool test() {
 
     s_long.insert(0, s_long.data(), s_long.size());
     assert(s_long == "Lorem ipsum dolor sit amet, consectetur/Lorem ipsum dolor sit amet, consectetur/");
-  }
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
-#endif
+    }
 
   return 0;
 }

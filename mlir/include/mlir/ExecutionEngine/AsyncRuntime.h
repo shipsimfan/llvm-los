@@ -29,13 +29,13 @@ namespace runtime {
 //===----------------------------------------------------------------------===//
 
 // Runtime implementation of `async.token` data type.
-using AsyncToken = struct AsyncToken;
+typedef struct AsyncToken AsyncToken;
 
 // Runtime implementation of `async.group` data type.
-using AsyncGroup = struct AsyncGroup;
+typedef struct AsyncGroup AsyncGroup;
 
 // Runtime implementation of `async.value` data type.
-using AsyncValue = struct AsyncValue;
+typedef struct AsyncValue AsyncValue;
 
 // Async value payload stored in a memory owned by the async.value.
 using ValueStorage = void *;
@@ -51,10 +51,10 @@ using CoroResume = void (*)(void *); // coroutine resume function
 using RefCountedObjPtr = void *;
 
 // Adds references to reference counted runtime object.
-extern "C" void mlirAsyncRuntimeAddRef(RefCountedObjPtr, int64_t);
+extern "C" void mlirAsyncRuntimeAddRef(RefCountedObjPtr, int32_t);
 
 // Drops references from reference counted runtime object.
-extern "C" void mlirAsyncRuntimeDropRef(RefCountedObjPtr, int64_t);
+extern "C" void mlirAsyncRuntimeDropRef(RefCountedObjPtr, int32_t);
 
 // Create a new `async.token` in not-ready state.
 extern "C" AsyncToken *mlirAsyncRuntimeCreateToken();
@@ -63,10 +63,10 @@ extern "C" AsyncToken *mlirAsyncRuntimeCreateToken();
 // number of bytes that will be allocated for the async value storage. Storage
 // is owned by the `async.value` and deallocated when the async value is
 // destructed (reference count drops to zero).
-extern "C" AsyncValue *mlirAsyncRuntimeCreateValue(int64_t);
+extern "C" AsyncValue *mlirAsyncRuntimeCreateValue(int32_t);
 
 // Create a new `async.group` in empty state.
-extern "C" AsyncGroup *mlirAsyncRuntimeCreateGroup(int64_t size);
+extern "C" AsyncGroup *mlirAsyncRuntimeCreateGroup();
 
 extern "C" int64_t mlirAsyncRuntimeAddTokenToGroup(AsyncToken *, AsyncGroup *);
 
@@ -75,22 +75,6 @@ extern "C" void mlirAsyncRuntimeEmplaceToken(AsyncToken *);
 
 // Switches `async.value` to ready state and runs all awaiters.
 extern "C" void mlirAsyncRuntimeEmplaceValue(AsyncValue *);
-
-// Switches `async.token` to error state and runs all awaiters.
-extern "C" void mlirAsyncRuntimeSetTokenError(AsyncToken *);
-
-// Switches `async.value` to error state and runs all awaiters.
-extern "C" void mlirAsyncRuntimeSetValueError(AsyncValue *);
-
-// Returns true if token is in the error state.
-extern "C" bool mlirAsyncRuntimeIsTokenError(AsyncToken *);
-
-// Returns true if value is in the error state.
-extern "C" bool mlirAsyncRuntimeIsValueError(AsyncValue *);
-
-// Returns true if group is in the error state (any of the tokens or values
-// added to the group are in the error state).
-extern "C" bool mlirAsyncRuntimeIsGroupError(AsyncGroup *);
 
 // Blocks the caller thread until the token becomes ready.
 extern "C" void mlirAsyncRuntimeAwaitToken(AsyncToken *);
@@ -122,9 +106,6 @@ extern "C" void mlirAsyncRuntimeAwaitValueAndExecute(AsyncValue *, CoroHandle,
 // managed by the runtime after the all members of the group become ready.
 extern "C" void
 mlirAsyncRuntimeAwaitAllInGroupAndExecute(AsyncGroup *, CoroHandle, CoroResume);
-
-// Returns the current number of available worker threads in the threadpool.
-extern "C" int64_t mlirAsyncRuntimGetNumWorkerThreads();
 
 //===----------------------------------------------------------------------===//
 // Small async runtime support library for testing.

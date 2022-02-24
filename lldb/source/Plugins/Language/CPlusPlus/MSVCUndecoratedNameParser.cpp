@@ -72,7 +72,7 @@ MSVCUndecoratedNameParser::MSVCUndecoratedNameParser(llvm::StringRef name) {
 }
 
 bool MSVCUndecoratedNameParser::IsMSVCUndecoratedName(llvm::StringRef name) {
-  return name.contains('`');
+  return name.find('`') != llvm::StringRef::npos;
 }
 
 bool MSVCUndecoratedNameParser::ExtractContextAndIdentifier(

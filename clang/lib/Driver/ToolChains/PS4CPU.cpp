@@ -23,6 +23,8 @@ using namespace clang::driver;
 using namespace clang;
 using namespace llvm::opt;
 
+using clang::driver::tools::AddLinkerInputs;
+
 void tools::PS4cpu::addProfileRTArgs(const ToolChain &TC, const ArgList &Args,
                                      ArgStringList &CmdArgs) {
   if ((Args.hasFlag(options::OPT_fprofile_arcs, options::OPT_fno_profile_arcs,
@@ -69,9 +71,8 @@ void tools::PS4cpu::Assemble::ConstructJob(Compilation &C, const JobAction &JA,
                                          Exec, CmdArgs, Inputs, Output));
 }
 
-static void AddPS4SanitizerArgs(const ToolChain &TC, const ArgList &Args,
-                                ArgStringList &CmdArgs) {
-  const SanitizerArgs &SanArgs = TC.getSanitizerArgs(Args);
+static void AddPS4SanitizerArgs(const ToolChain &TC, ArgStringList &CmdArgs) {
+  const SanitizerArgs &SanArgs = TC.getSanitizerArgs();
   if (SanArgs.needsUbsanRt()) {
     CmdArgs.push_back("-lSceDbgUBSanitizer_stub_weak");
   }
@@ -80,9 +81,9 @@ static void AddPS4SanitizerArgs(const ToolChain &TC, const ArgList &Args,
   }
 }
 
-void tools::PS4cpu::addSanitizerArgs(const ToolChain &TC, const ArgList &Args,
+void tools::PS4cpu::addSanitizerArgs(const ToolChain &TC,
                                      ArgStringList &CmdArgs) {
-  const SanitizerArgs &SanArgs = TC.getSanitizerArgs(Args);
+  const SanitizerArgs &SanArgs = TC.getSanitizerArgs();
   if (SanArgs.needsUbsanRt())
     CmdArgs.push_back("--dependent-lib=libSceDbgUBSanitizer_stub_weak.a");
   if (SanArgs.needsAsanRt())
@@ -126,7 +127,7 @@ void tools::PS4cpu::Link::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   if(!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs))
-    AddPS4SanitizerArgs(ToolChain, Args, CmdArgs);
+    AddPS4SanitizerArgs(ToolChain, CmdArgs);
 
   Args.AddAllArgs(CmdArgs, options::OPT_L);
   Args.AddAllArgs(CmdArgs, options::OPT_T_Group);

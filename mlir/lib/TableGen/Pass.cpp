@@ -66,9 +66,9 @@ StringRef PassStatistic::getDescription() const {
 
 Pass::Pass(const llvm::Record *def) : def(def) {
   for (auto *init : def->getValueAsListOfDefs("options"))
-    options.emplace_back(init);
+    options.push_back(PassOption(init));
   for (auto *init : def->getValueAsListOfDefs("statistics"))
-    statistics.emplace_back(init);
+    statistics.push_back(PassStatistic(init));
   for (StringRef dialect : def->getValueAsListOfStrings("dependentDialects"))
     dependentDialects.push_back(dialect);
 }

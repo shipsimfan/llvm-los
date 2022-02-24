@@ -15,7 +15,6 @@
 #include "toy/Parser.h"
 #include "toy/Passes.h"
 
-#include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/AsmState.h"
@@ -49,7 +48,7 @@ static cl::opt<std::string> inputFilename(cl::Positional,
 
 namespace {
 enum InputType { Toy, MLIR };
-} // namespace
+}
 static cl::opt<enum InputType> inputType(
     "x", cl::init(Toy), cl::desc("Decided the kind of output desired"),
     cl::values(clEnumValN(Toy, "toy", "load the input file as a Toy source.")),
@@ -66,7 +65,7 @@ enum Action {
   DumpLLVMIR,
   RunJIT
 };
-} // namespace
+}
 static cl::opt<enum Action> emitAction(
     "emit", cl::desc("Select the kind of output desired"),
     cl::values(clEnumValN(DumpAST, "ast", "output the AST dump")),
@@ -96,8 +95,7 @@ std::unique_ptr<toy::ModuleAST> parseInputFile(llvm::StringRef filename) {
   return parser.parseModule();
 }
 
-int loadMLIR(mlir::MLIRContext &context,
-             mlir::OwningOpRef<mlir::ModuleOp> &module) {
+int loadMLIR(mlir::MLIRContext &context, mlir::OwningModuleRef &module) {
   // Handle '.toy' input to the compiler.
   if (inputType != InputType::MLIR &&
       !llvm::StringRef(inputFilename).endswith(".mlir")) {
@@ -111,8 +109,8 @@ int loadMLIR(mlir::MLIRContext &context,
   // Otherwise, the input is '.mlir'.
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
       llvm::MemoryBuffer::getFileOrSTDIN(inputFilename);
-  if (std::error_code ec = fileOrErr.getError()) {
-    llvm::errs() << "Could not open input file: " << ec.message() << "\n";
+  if (std::error_code EC = fileOrErr.getError()) {
+    llvm::errs() << "Could not open input file: " << EC.message() << "\n";
     return -1;
   }
 
@@ -128,7 +126,7 @@ int loadMLIR(mlir::MLIRContext &context,
 }
 
 int loadAndProcessMLIR(mlir::MLIRContext &context,
-                       mlir::OwningOpRef<mlir::ModuleOp> &module) {
+                       mlir::OwningModuleRef &module) {
   if (int error = loadMLIR(context, module))
     return error;
 
@@ -164,7 +162,7 @@ int loadAndProcessMLIR(mlir::MLIRContext &context,
     // Add optimizations if enabled.
     if (enableOpt) {
       optPM.addPass(mlir::createLoopFusionPass());
-      optPM.addPass(mlir::createAffineScalarReplacementPass());
+      optPM.addPass(mlir::createMemRefDataFlowOptPass());
     }
   }
 
@@ -237,9 +235,8 @@ int runJit(mlir::ModuleOp module) {
 
   // Create an MLIR execution engine. The execution engine eagerly JIT-compiles
   // the module.
-  mlir::ExecutionEngineOptions engineOptions;
-  engineOptions.transformer = optPipeline;
-  auto maybeEngine = mlir::ExecutionEngine::create(module, engineOptions);
+  auto maybeEngine = mlir::ExecutionEngine::create(
+      module, /*llvmModuleBuilder=*/nullptr, optPipeline);
   assert(maybeEngine && "failed to construct an execution engine");
   auto &engine = maybeEngine.get();
 
@@ -270,7 +267,7 @@ int main(int argc, char **argv) {
   // Load our Dialect in this MLIR Context.
   context.getOrLoadDialect<mlir::toy::ToyDialect>();
 
-  mlir::OwningOpRef<mlir::ModuleOp> module;
+  mlir::OwningModuleRef module;
   if (int error = loadAndProcessMLIR(context, module))
     return error;
 

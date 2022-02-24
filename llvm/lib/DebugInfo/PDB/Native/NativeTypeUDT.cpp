@@ -7,11 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/DebugInfo/PDB/Native/NativeTypeUDT.h"
-#include "llvm/DebugInfo/CodeView/CodeView.h"
-#include "llvm/DebugInfo/PDB/IPDBEnumChildren.h"
-#include "llvm/DebugInfo/PDB/Native/NativeSession.h"
-#include "llvm/DebugInfo/PDB/Native/SymbolCache.h"
-#include "llvm/DebugInfo/PDB/PDBExtras.h"
+
+#include "llvm/DebugInfo/CodeView/TypeDeserializer.h"
+
+#include <cassert>
 
 using namespace llvm;
 using namespace llvm::codeview;
@@ -33,7 +32,7 @@ NativeTypeUDT::NativeTypeUDT(NativeSession &Session, SymIndexId Id,
     : NativeRawSymbol(Session, PDB_SymType::UDT, Id),
       UnmodifiedType(&UnmodifiedType), Modifiers(std::move(Modifier)) {}
 
-NativeTypeUDT::~NativeTypeUDT() = default;
+NativeTypeUDT::~NativeTypeUDT() {}
 
 void NativeTypeUDT::dump(raw_ostream &OS, int Indent,
                          PdbSymbolIdField ShowIdFields,

@@ -7,8 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "AssertSideEffectCheck.h"
-#include "../utils/Matchers.h"
-#include "../utils/OptionsUtils.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -27,9 +25,7 @@ namespace bugprone {
 
 namespace {
 
-AST_MATCHER_P2(Expr, hasSideEffect, bool, CheckFunctionCalls,
-               clang::ast_matchers::internal::Matcher<NamedDecl>,
-               IgnoredFunctionsMatcher) {
+AST_MATCHER_P(Expr, hasSideEffect, bool, CheckFunctionCalls) {
   const Expr *E = &Node;
 
   if (const auto *Op = dyn_cast<UnaryOperator>(E)) {
@@ -59,8 +55,7 @@ AST_MATCHER_P2(Expr, hasSideEffect, bool, CheckFunctionCalls,
     bool Result = CheckFunctionCalls;
     if (const auto *FuncDecl = CExpr->getDirectCallee()) {
       if (FuncDecl->getDeclName().isIdentifier() &&
-          IgnoredFunctionsMatcher.matches(*FuncDecl, Finder,
-                                          Builder)) // exceptions come here
+          FuncDecl->getName() == "__builtin_expect") // exceptions come here
         Result = false;
       else if (const auto *MethodDecl = dyn_cast<CXXMethodDecl>(FuncDecl))
         Result &= !MethodDecl->isConst();
@@ -77,9 +72,8 @@ AssertSideEffectCheck::AssertSideEffectCheck(StringRef Name,
                                              ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
       CheckFunctionCalls(Options.get("CheckFunctionCalls", false)),
-      RawAssertList(Options.get("AssertMacros", "assert,NSAssert,NSCAssert")),
-      IgnoredFunctions(utils::options::parseStringList(
-          "__builtin_expect;" + Options.get("IgnoredFunctions", ""))) {
+      RawAssertList(Options.get("AssertMacros",
+                                "assert,NSAssert,NSCAssert")) {
   StringRef(RawAssertList).split(AssertMacros, ",", -1, false);
 }
 
@@ -87,17 +81,11 @@ AssertSideEffectCheck::AssertSideEffectCheck(StringRef Name,
 void AssertSideEffectCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "CheckFunctionCalls", CheckFunctionCalls);
   Options.store(Opts, "AssertMacros", RawAssertList);
-  Options.store(Opts, "IgnoredFunctions",
-                utils::options::serializeStringList(IgnoredFunctions));
 }
 
 void AssertSideEffectCheck::registerMatchers(MatchFinder *Finder) {
-  auto IgnoredFunctionsMatcher =
-      matchers::matchesAnyListedName(IgnoredFunctions);
-
   auto DescendantWithSideEffect =
-      traverse(TK_AsIs, hasDescendant(expr(hasSideEffect(
-                            CheckFunctionCalls, IgnoredFunctionsMatcher))));
+      traverse(TK_AsIs, hasDescendant(expr(hasSideEffect(CheckFunctionCalls))));
   auto ConditionWithSideEffect = hasCondition(DescendantWithSideEffect);
   Finder->addMatcher(
       stmt(

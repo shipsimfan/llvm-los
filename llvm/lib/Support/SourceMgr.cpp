@@ -292,7 +292,8 @@ SMDiagnostic SourceMgr::GetMessage(SMLoc Loc, SourceMgr::DiagKind Kind,
 
     // Convert any ranges to column ranges that only intersect the line of the
     // location.
-    for (SMRange R : Ranges) {
+    for (unsigned i = 0, e = Ranges.size(); i != e; ++i) {
+      SMRange R = Ranges[i];
       if (!R.isValid())
         continue;
 

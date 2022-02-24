@@ -37,7 +37,7 @@ def ROCDL_Dialect : Dialect {
 // ROCDL op definitions
 //===----------------------------------------------------------------------===//
 
-class ROCDL_Op<string mnemonic, list<Trait> traits = []> :
+class ROCDL_Op<string mnemonic, list<OpTrait> traits = []> :
   LLVM_OpBase<ROCDL_Dialect, mnemonic, traits> {
 }
 
@@ -46,7 +46,7 @@ class ROCDL_Op<string mnemonic, list<Trait> traits = []> :
 //===----------------------------------------------------------------------===//
 
 class ROCDL_SpecialRegisterOp<string mnemonic,
-    list<Trait> traits = []> :
+    list<OpTrait> traits = []> :
   ROCDL_Op<mnemonic, !listconcat(traits, [NoSideEffect])>,
   Results<(outs LLVM_Type:$res)>, Arguments<(ins)> {
   string llvmBuilder = "$res = createIntrinsicCall(builder,"
@@ -55,7 +55,7 @@ class ROCDL_SpecialRegisterOp<string mnemonic,
 }
 
 class ROCDL_DeviceFunctionOp<string mnemonic, string device_function,
-                             int parameter, list<Trait> traits = []> :
+                             int parameter, list<OpTrait> traits = []> :
   ROCDL_Op<mnemonic, !listconcat(traits, [NoSideEffect])>,
   Results<(outs LLVM_Type:$res)>, Arguments<(ins)> {
   string llvmBuilder = "$res = createDeviceFunctionCall(builder, \""
@@ -113,7 +113,7 @@ def ROCDL_BarrierOp : ROCDL_Op<"barrier"> {
 //===---------------------------------------------------------------------===//
 // Xdlops intrinsics
 
-class ROCDL_Mfma_IntrOp<string mnemonic, list<Trait> traits = []> :
+class ROCDL_Mfma_IntrOp<string mnemonic, list<OpTrait> traits = []> :
   LLVM_IntrOpBase<ROCDL_Dialect, mnemonic,
                   "amdgcn_" # !subst(".","_", mnemonic),
                   [], [], traits, 1>,
@@ -159,7 +159,12 @@ def ROCDL_MubufLoadOp :
           llvm::Intrinsic::amdgcn_buffer_load, {$rsrc, $vindex, $offset, $glc,
           $slc}, {$_resultType});
   }];
-  let hasCustomAssemblyFormat = 1;
+  let parser = [{ return parseROCDLMubufLoadOp(parser, result); }];
+  let printer = [{
+    Operation *op = this->getOperation();
+    p << op->getName() << " " << op->getOperands()
+      << " : " << op->getResultTypes();
+  }];
 }
 
 def ROCDL_MubufStoreOp :
@@ -176,7 +181,12 @@ def ROCDL_MubufStoreOp :
           llvm::Intrinsic::amdgcn_buffer_store, {$vdata, $rsrc, $vindex,
           $offset, $glc, $slc}, {vdataType});
   }];
-  let hasCustomAssemblyFormat = 1;
+  let parser = [{ return parseROCDLMubufStoreOp(parser, result); }];
+  let printer = [{
+    Operation *op = this->getOperation();
+    p << op->getName() << " " << op->getOperands()
+      << " : " << vdata().getType();
+  }];
 }
 
 #endif // ROCDLIR_OPS

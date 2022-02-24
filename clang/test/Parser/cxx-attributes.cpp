@@ -42,6 +42,3 @@ void fn() {
 [[,,maybe_unused,]] int Commas4; // ok
 [[foo bar]] int NoComma; // expected-error {{expected ','}} \
                          // expected-warning {{unknown attribute 'foo' ignored}}
-// expected-error@+2 2 {{expected ']'}}
-// expected-error@+1 {{expected external declaration}}
-[[foo

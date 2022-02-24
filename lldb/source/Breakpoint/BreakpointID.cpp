@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cstdio>
+#include <stdio.h>
 
 #include "lldb/Breakpoint/Breakpoint.h"
 #include "lldb/Breakpoint/BreakpointID.h"
@@ -29,7 +29,12 @@ static llvm::StringRef g_range_specifiers[] = {"-", "to", "To", "TO"};
 // for specifying ID ranges at a later date.
 
 bool BreakpointID::IsRangeIdentifier(llvm::StringRef str) {
-  return llvm::is_contained(g_range_specifiers, str);
+  for (auto spec : g_range_specifiers) {
+    if (spec == str)
+      return true;
+  }
+
+  return false;
 }
 
 bool BreakpointID::IsValidIDExpression(llvm::StringRef str) {

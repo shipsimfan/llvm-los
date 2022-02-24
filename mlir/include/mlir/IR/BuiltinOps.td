@@ -15,8 +15,6 @@
 #define BUILTIN_OPS
 
 include "mlir/IR/BuiltinDialect.td"
-include "mlir/IR/FunctionInterfaces.td"
-include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
@@ -25,7 +23,7 @@ include "mlir/Interfaces/DataLayoutInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 // Base class for Builtin dialect ops.
-class Builtin_Op<string mnemonic, list<Trait> traits = []> :
+class Builtin_Op<string mnemonic, list<OpTrait> traits = []> :
     Op<Builtin_Dialect, mnemonic, traits>;
 
 //===----------------------------------------------------------------------===//
@@ -33,8 +31,8 @@ class Builtin_Op<string mnemonic, list<Trait> traits = []> :
 //===----------------------------------------------------------------------===//
 
 def FuncOp : Builtin_Op<"func", [
-  AffineScope, AutomaticAllocationScope, CallableOpInterface,
-  FunctionOpInterface, IsolatedFromAbove, Symbol
+  AffineScope, AutomaticAllocationScope, CallableOpInterface, FunctionLike,
+  IsolatedFromAbove, Symbol
 ]> {
   let summary = "An operation with a name containing a single `SSACFG` region";
   let description = [{
@@ -110,12 +108,6 @@ def FuncOp : Builtin_Op<"func", [
     /// compatible.
     void cloneInto(FuncOp dest, BlockAndValueMapping &mapper);
 
-    /// Returns the type of this function.
-    /// FIXME: We should drive this via the ODS `type` param.
-    FunctionType getType() { 
-      return getTypeAttr().getValue().cast<FunctionType>();
-    }
-
     //===------------------------------------------------------------------===//
     // CallableOpInterface
     //===------------------------------------------------------------------===//
@@ -123,24 +115,33 @@ def FuncOp : Builtin_Op<"func", [
     /// Returns the region on the current operation that is callable. This may
     /// return null in the case of an external callable object, e.g. an external
     /// function.
-    ::mlir::Region *getCallableRegion() { return isExternal() ? nullptr : &getBody(); }
+    Region *getCallableRegion() { return isExternal() ? nullptr : &getBody(); }
 
     /// Returns the results types that the callable region produces when
     /// executed.
     ArrayRef<Type> getCallableResults() { return getType().getResults(); }
 
     //===------------------------------------------------------------------===//
-    // FunctionOpInterface Methods
+    // SymbolOpInterface Methods
     //===------------------------------------------------------------------===//
 
-    /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
+    bool isDeclaration() { return isExternal(); }
 
-    /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
+  private:
+    // This trait needs access to the hooks defined below.
+    friend class OpTrait::FunctionLike<FuncOp>;
 
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
+    /// Returns the number of arguments. This is a hook for
+    /// OpTrait::FunctionLike.
+    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+
+    /// Returns the number of results. This is a hook for OpTrait::FunctionLike.
+    unsigned getNumFuncResults() { return getType().getResults().size(); }
+
+    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+    /// attribute is present and checks if it holds a function type. Ensures
+    /// getType, getNumFuncArguments, and getNumFuncResults can be called
+    /// safely.
     LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
       if (!type.isa<FunctionType>())
@@ -148,15 +149,10 @@ def FuncOp : Builtin_Op<"func", [
                            "' attribute of function type");
       return success();
     }
-
-    //===------------------------------------------------------------------===//
-    // SymbolOpInterface Methods
-    //===------------------------------------------------------------------===//
-
-    bool isDeclaration() { return isExternal(); }
   }];
-  let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
+  let parser = [{ return ::parseFuncOp(parser, result); }];
+  let printer = [{ return ::print(*this, p); }];
+  let verifier = [{ return ::verify(*this); }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -164,18 +160,17 @@ def FuncOp : Builtin_Op<"func", [
 //===----------------------------------------------------------------------===//
 
 def ModuleOp : Builtin_Op<"module", [
-    AffineScope, IsolatedFromAbove, NoRegionArguments, SymbolTable, Symbol,
-    OpAsmOpInterface
-  ] # GraphRegionNoTerminator.traits> {
+  AffineScope, IsolatedFromAbove, NoRegionArguments, SymbolTable, Symbol] 
+  # GraphRegionNoTerminator.traits> {
   let summary = "A top level container operation";
   let description = [{
     A `module` represents a top-level container operation. It contains a single
-    [graph region](../LangRef.md#control-flow-and-ssacfg-regions) containing a single block
-    which can contain any operations and does not have a terminator. Operations
-    within this region cannot implicitly capture values defined outside the module,
-    i.e. Modules are [IsolatedFromAbove](../Traits.md#isolatedfromabove). Modules have
-    an optional [symbol name](../SymbolsAndSymbolTables.md) which can be used to refer
-    to them in operations.
+   [graph region](#control-flow-and-ssacfg-regions) containing a single block
+   which can contain any operations and does not have a terminator. Operations
+   within this region cannot implicitly capture values defined outside the module,
+   i.e. Modules are [IsolatedFromAbove](Traits.md#isolatedfromabove). Modules have
+   an optional [symbol name](SymbolsAndSymbolTables.md) which can be used to refer
+   to them in operations.
 
     Example:
 
@@ -211,16 +206,8 @@ def ModuleOp : Builtin_Op<"module", [
     //===------------------------------------------------------------------===//
 
     DataLayoutSpecInterface getDataLayoutSpec();
-
-    //===------------------------------------------------------------------===//
-    // OpAsmOpInterface Methods
-    //===------------------------------------------------------------------===//
-
-    static ::llvm::StringRef getDefaultDialect() {
-      return "builtin";
-    }
   }];
-  let hasVerifier = 1;
+  let verifier = [{ return ::verify(*this); }];
 
   // We need to ensure the block inside the region is properly terminated;
   // the auto-generated builders do not guarantee that.

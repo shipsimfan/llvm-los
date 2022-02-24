@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// XFAIL: libcpp-has-no-wide-characters
-
 // REQUIRES: locale.en_US.UTF-8
 // REQUIRES: locale.fr_FR.UTF-8
 // REQUIRES: locale.ru_RU.UTF-8
@@ -22,7 +20,7 @@
 //             ios_base::iostate& err, tm* t) const;
 
 // TODO: investigation needed
-// XFAIL: target={{.*}}-linux-gnu{{.*}}
+// XFAIL: linux-gnu
 
 #include <locale>
 #include <cassert>
@@ -31,7 +29,7 @@
 
 #include "platform_support.h" // locale name macros
 
-typedef cpp17_input_iterator<const wchar_t*> I;
+typedef input_iterator<const wchar_t*> I;
 
 typedef std::time_get_byname<wchar_t, I> F;
 

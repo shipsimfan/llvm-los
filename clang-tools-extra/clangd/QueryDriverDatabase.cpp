@@ -38,10 +38,12 @@
 #include "clang/Basic/TargetOptions.h"
 #include "clang/Driver/Types.h"
 #include "clang/Tooling/CompilationDatabase.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -162,6 +164,15 @@ extractSystemIncludesAndTarget(llvm::SmallString<128> Driver,
     return llvm::None;
   }
 
+  if (!llvm::sys::fs::exists(Driver)) {
+    elog("System include extraction: {0} does not exist.", Driver);
+    return llvm::None;
+  }
+  if (!llvm::sys::fs::can_execute(Driver)) {
+    elog("System include extraction: {0} is not executable.", Driver);
+    return llvm::None;
+  }
+
   llvm::SmallString<128> StdErrPath;
   if (auto EC = llvm::sys::fs::createTemporaryFile("system-includes", "clangd",
                                                    StdErrPath)) {
@@ -173,7 +184,8 @@ extractSystemIncludesAndTarget(llvm::SmallString<128> Driver,
   auto CleanUp = llvm::make_scope_exit(
       [&StdErrPath]() { llvm::sys::fs::remove(StdErrPath); });
 
-  llvm::Optional<llvm::StringRef> Redirects[] = {{""}, {""}, StdErrPath.str()};
+  llvm::Optional<llvm::StringRef> Redirects[] = {
+      {""}, {""}, llvm::StringRef(StdErrPath)};
 
   llvm::SmallVector<llvm::StringRef> Args = {Driver, "-E", "-x",
                                              Lang,   "-",  "-v"};
@@ -207,13 +219,11 @@ extractSystemIncludesAndTarget(llvm::SmallString<128> Driver,
     }
   }
 
-  std::string ErrMsg;
   if (int RC = llvm::sys::ExecuteAndWait(Driver, Args, /*Env=*/llvm::None,
-                                         Redirects, /*SecondsToWait=*/0,
-                                         /*MemoryLimit=*/0, &ErrMsg)) {
+                                         Redirects)) {
     elog("System include extraction: driver execution failed with return code: "
-         "{0} - '{1}'. Args: [{2}]",
-         llvm::to_string(RC), ErrMsg, printArgv(Args));
+         "{0}. Args: [{1}]",
+         llvm::to_string(RC), printArgv(Args));
     return llvm::None;
   }
 
@@ -274,10 +284,6 @@ std::string convertGlobToRegex(llvm::StringRef Glob) {
         // Single star, accept any sequence without a slash.
         RegStream << "[^/]*";
       }
-    } else if (llvm::sys::path::is_separator(Glob[I]) &&
-               llvm::sys::path::is_separator('/') &&
-               llvm::sys::path::is_separator('\\')) {
-      RegStream << R"([/\\])"; // Accept either slash on windows.
     } else {
       RegStream << llvm::Regex::escape(Glob.substr(I, 1));
     }
@@ -295,7 +301,6 @@ llvm::Regex convertGlobsToRegex(llvm::ArrayRef<std::string> Globs) {
   for (llvm::StringRef Glob : Globs)
     RegTexts.push_back(convertGlobToRegex(Glob));
 
-  // Tempting to pass IgnoreCase, but we don't know the FS sensitivity.
   llvm::Regex Reg(llvm::join(RegTexts, "|"));
   assert(Reg.isValid(RegTexts.front()) &&
          "Created an invalid regex from globs");

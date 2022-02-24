@@ -20,9 +20,7 @@
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/AST/Stmt.h"
 #include "clang/AST/TemplateBase.h"
-#include "clang/AST/TypeLoc.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/Specifiers.h"
@@ -121,17 +119,14 @@ getQualification(ASTContext &Context, const DeclContext *DestContext,
       (void)ReachedNS;
       NNS = NestedNameSpecifier::Create(Context, nullptr, false,
                                         TD->getTypeForDecl());
-    } else if (auto *NSD = llvm::dyn_cast<NamespaceDecl>(CurContext)) {
+    } else {
       ReachedNS = true;
+      auto *NSD = llvm::cast<NamespaceDecl>(CurContext);
       NNS = NestedNameSpecifier::Create(Context, nullptr, NSD);
-      // Anonymous and inline namespace names are not spelled while qualifying
-      // a name, so skip those.
+      // Anonymous and inline namespace names are not spelled while qualifying a
+      // name, so skip those.
       if (NSD->isAnonymousNamespace() || NSD->isInlineNamespace())
         continue;
-    } else {
-      // Other types of contexts cannot be spelled in code, just skip over
-      // them.
-      continue;
     }
     // Stop if this namespace is already visible at DestContext.
     if (IsVisible(NNS))
@@ -376,24 +371,6 @@ std::string printType(const QualType QT, const DeclContext &CurContext) {
   return OS.str();
 }
 
-bool hasReservedName(const Decl &D) {
-  if (const auto *ND = llvm::dyn_cast<NamedDecl>(&D))
-    if (const auto *II = ND->getIdentifier())
-      return isReservedName(II->getName());
-  return false;
-}
-
-bool hasReservedScope(const DeclContext &DC) {
-  for (const DeclContext *D = &DC; D; D = D->getParent()) {
-    if (D->isTransparentContext() || D->isInlineNamespace())
-      continue;
-    if (const auto *ND = llvm::dyn_cast<NamedDecl>(D))
-      if (hasReservedName(*ND))
-        return true;
-  }
-  return false;
-}
-
 QualType declaredType(const TypeDecl *D) {
   if (const auto *CTSD = llvm::dyn_cast<ClassTemplateSpecializationDecl>(D))
     if (const auto *TSI = CTSD->getTypeAsWritten())
@@ -456,7 +433,7 @@ public:
     const AutoType *AT = D->getReturnType()->getContainedAutoType();
     if (AT && !AT->getDeducedType().isNull()) {
       DeducedType = AT->getDeducedType();
-    } else if (auto *DT = dyn_cast<DecltypeType>(D->getReturnType())) {
+    } else if (auto DT = dyn_cast<DecltypeType>(D->getReturnType())) {
       // auto in a trailing return type just points to a DecltypeType and
       // getContainedAutoType does not unwrap it.
       if (!DT->getUnderlyingType().isNull())
@@ -486,87 +463,6 @@ public:
     return true;
   }
 
-  // Handle functions/lambdas with `auto` typed parameters.
-  // We'll examine visible specializations and see if they yield a unique type.
-  bool VisitParmVarDecl(ParmVarDecl *PVD) {
-    if (!PVD->getType()->isDependentType())
-      return true;
-    // 'auto' here does not name an AutoType, but an implicit template param.
-    TemplateTypeParmTypeLoc Auto =
-        findContainedAutoTTPLoc(PVD->getTypeSourceInfo()->getTypeLoc());
-    if (Auto.isNull() || Auto.getNameLoc() != SearchedLocation)
-      return true;
-    // We expect the TTP to be attached to this function template.
-    // Find the template and the param index.
-    auto *FD = llvm::dyn_cast<FunctionDecl>(PVD->getDeclContext());
-    if (!FD)
-      return true;
-    auto *FTD = FD->getDescribedFunctionTemplate();
-    if (!FTD)
-      return true;
-    int ParamIndex = paramIndex(*FTD, *Auto.getDecl());
-    if (ParamIndex < 0) {
-      assert(false && "auto TTP is not from enclosing function?");
-      return true;
-    }
-
-    // Now determine the unique type arg among the implicit specializations.
-    const ASTContext &Ctx = PVD->getASTContext();
-    QualType UniqueType;
-    CanQualType CanUniqueType;
-    for (const FunctionDecl *Spec : FTD->specializations()) {
-      // Meaning `auto` is a bit overloaded if the function is specialized.
-      if (Spec->getTemplateSpecializationKind() == TSK_ExplicitSpecialization)
-        return true;
-      // Find the type for this specialization.
-      const auto *Args = Spec->getTemplateSpecializationArgs();
-      if (Args->size() != FTD->getTemplateParameters()->size())
-        continue; // no weird variadic stuff
-      QualType SpecType = Args->get(ParamIndex).getAsType();
-      if (SpecType.isNull())
-        continue;
-
-      // Deduced types need only be *canonically* equal.
-      CanQualType CanSpecType = Ctx.getCanonicalType(SpecType);
-      if (CanUniqueType.isNull()) {
-        CanUniqueType = CanSpecType;
-        UniqueType = SpecType;
-        continue;
-      }
-      if (CanUniqueType != CanSpecType)
-        return true; // deduced type is not unique
-    }
-    DeducedType = UniqueType;
-    return true;
-  }
-
-  // Find the abbreviated-function-template `auto` within a type.
-  // Similar to getContainedAutoTypeLoc, but these `auto`s are
-  // TemplateTypeParmTypes for implicit TTPs, instead of AutoTypes.
-  // Also we don't look very hard, just stripping const, references, pointers.
-  // FIXME: handle more types: vector<auto>?
-  static TemplateTypeParmTypeLoc findContainedAutoTTPLoc(TypeLoc TL) {
-    if (auto QTL = TL.getAs<QualifiedTypeLoc>())
-      return findContainedAutoTTPLoc(QTL.getUnqualifiedLoc());
-    if (llvm::isa<PointerType, ReferenceType>(TL.getTypePtr()))
-      return findContainedAutoTTPLoc(TL.getNextTypeLoc());
-    if (auto TTPTL = TL.getAs<TemplateTypeParmTypeLoc>()) {
-      if (TTPTL.getTypePtr()->getDecl()->isImplicit())
-        return TTPTL;
-    }
-    return {};
-  }
-
-  static int paramIndex(const TemplateDecl &TD, NamedDecl &Param) {
-    unsigned I = 0;
-    for (auto *ND : *TD.getTemplateParameters()) {
-      if (&Param == ND)
-        return I;
-      ++I;
-    }
-    return -1;
-  }
-
   QualType DeducedType;
 };
 } // namespace
@@ -580,30 +476,6 @@ llvm::Optional<QualType> getDeducedType(ASTContext &ASTCtx,
   if (V.DeducedType.isNull())
     return llvm::None;
   return V.DeducedType;
-}
-
-std::vector<const Attr *> getAttributes(const DynTypedNode &N) {
-  std::vector<const Attr *> Result;
-  if (const auto *TL = N.get<TypeLoc>()) {
-    for (AttributedTypeLoc ATL = TL->getAs<AttributedTypeLoc>(); !ATL.isNull();
-         ATL = ATL.getModifiedLoc().getAs<AttributedTypeLoc>()) {
-      if (const Attr *A = ATL.getAttr())
-        Result.push_back(A);
-      assert(!ATL.getModifiedLoc().isNull());
-    }
-  }
-  if (const auto *S = N.get<AttributedStmt>()) {
-    for (; S != nullptr; S = dyn_cast<AttributedStmt>(S->getSubStmt()))
-      for (const Attr *A : S->getAttrs())
-        if (A)
-          Result.push_back(A);
-  }
-  if (const auto *D = N.get<Decl>()) {
-    for (const Attr *A : D->attrs())
-      if (A)
-        Result.push_back(A);
-  }
-  return Result;
 }
 
 std::string getQualification(ASTContext &Context,

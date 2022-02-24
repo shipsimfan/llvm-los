@@ -10,7 +10,7 @@
 
 // class istream_iterator
 
-// istream_iterator(); // constexpr since C++11
+// constexpr istream_iterator();
 // C++17 says: If is_trivially_default_constructible_v<T> is true, then this
 //    constructor is a constexpr constructor.
 
@@ -38,7 +38,8 @@ void operator ()() const {}
 #endif
 
 
-int main(int, char**) {
+int main(int, char**)
+{
     {
     typedef std::istream_iterator<int> T;
     T it;

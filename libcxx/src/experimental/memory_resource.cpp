@@ -1,4 +1,4 @@
-//===----------------------------------------------------------------------===//
+//===------------------------ memory_resource.cpp -------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,15 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <experimental/memory_resource>
+#include "experimental/memory_resource"
 
 #ifndef _LIBCPP_HAS_NO_ATOMIC_HEADER
-#  include <atomic>
+#include "atomic"
 #elif !defined(_LIBCPP_HAS_NO_THREADS)
-#  include <mutex>
-#  if defined(__ELF__) && defined(_LIBCPP_LINK_PTHREAD_LIB)
-#    pragma comment(lib, "pthread")
-#  endif
+#include "mutex"
+#if defined(__ELF__) && defined(_LIBCPP_LINK_PTHREAD_LIB)
+#pragma comment(lib, "pthread")
+#endif
 #endif
 
 _LIBCPP_BEGIN_NAMESPACE_LFTS_PMR
@@ -76,9 +76,7 @@ union ResourceInitHelper {
   ~ResourceInitHelper() {}
 };
 
-// Pretend we're inside a system header so the compiler doesn't flag the use of the init_priority
-// attribute with a value that's reserved for the implementation (we're the implementation).
-#include "memory_resource_init_helper.h"
+_LIBCPP_SAFE_STATIC ResourceInitHelper res_init _LIBCPP_INIT_PRIORITY_MAX;
 
 } // end namespace
 
@@ -97,7 +95,8 @@ static memory_resource *
 __default_memory_resource(bool set = false, memory_resource * new_res = nullptr) noexcept
 {
 #ifndef _LIBCPP_HAS_NO_ATOMIC_HEADER
-    static constinit atomic<memory_resource*> __res{&res_init.resources.new_delete_res};
+    _LIBCPP_SAFE_STATIC static atomic<memory_resource*> __res =
+        ATOMIC_VAR_INIT(&res_init.resources.new_delete_res);
     if (set) {
         new_res = new_res ? new_res : new_delete_resource();
         // TODO: Can a weaker ordering be used?
@@ -109,7 +108,7 @@ __default_memory_resource(bool set = false, memory_resource * new_res = nullptr)
             &__res, memory_order_acquire);
     }
 #elif !defined(_LIBCPP_HAS_NO_THREADS)
-    static constinit memory_resource *res = &res_init.resources.new_delete_res;
+    _LIBCPP_SAFE_STATIC static memory_resource * res = &res_init.resources.new_delete_res;
     static mutex res_lock;
     if (set) {
         new_res = new_res ? new_res : new_delete_resource();
@@ -122,7 +121,7 @@ __default_memory_resource(bool set = false, memory_resource * new_res = nullptr)
         return res;
     }
 #else
-    static constinit memory_resource *res = &res_init.resources.new_delete_res;
+    _LIBCPP_SAFE_STATIC static memory_resource* res = &res_init.resources.new_delete_res;
     if (set) {
         new_res = new_res ? new_res : new_delete_resource();
         memory_resource * old_res = res;

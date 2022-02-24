@@ -6,13 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-// <deque>
+// <array>
 // UNSUPPORTED: c++03, c++11, c++14
+// UNSUPPORTED: libcpp-no-deduction-guides
+
 
 // template <class InputIterator, class Allocator = allocator<typename iterator_traits<InputIterator>::value_type>>
 //    deque(InputIterator, InputIterator, Allocator = Allocator())
 //    -> deque<typename iterator_traits<InputIterator>::value_type, Allocator>;
 //
+
 
 #include <deque>
 #include <iterator>
@@ -20,7 +23,6 @@
 #include <cstddef>
 #include <climits> // INT_MAX
 
-#include "deduction_guides_sfinae_checks.h"
 #include "test_macros.h"
 #include "test_iterators.h"
 #include "test_allocator.h"
@@ -93,36 +95,5 @@ int main(int, char**)
     assert(deq.size() == 0);
     }
 
-    {
-        typedef test_allocator<short> Alloc;
-        typedef test_allocator<int> ConvertibleToAlloc;
-
-        {
-        std::deque<short, Alloc> source;
-        std::deque deq(source, Alloc(2));
-        static_assert(std::is_same_v<decltype(deq), decltype(source)>);
-        }
-
-        {
-        std::deque<short, Alloc> source;
-        std::deque deq(source, ConvertibleToAlloc(2));
-        static_assert(std::is_same_v<decltype(deq), decltype(source)>);
-        }
-
-        {
-        std::deque<short, Alloc> source;
-        std::deque deq(std::move(source), Alloc(2));
-        static_assert(std::is_same_v<decltype(deq), decltype(source)>);
-        }
-
-        {
-        std::deque<short, Alloc> source;
-        std::deque deq(std::move(source), ConvertibleToAlloc(2));
-        static_assert(std::is_same_v<decltype(deq), decltype(source)>);
-        }
-    }
-
-    SequenceContainerDeductionGuidesSfinaeAway<std::deque, std::deque<int>>();
-
-    return 0;
+  return 0;
 }

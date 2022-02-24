@@ -50,10 +50,8 @@ template <TypeCategory CATEGORY, int KIND = 0> class Type;
 
 using SubscriptInteger = Type<TypeCategory::Integer, 8>;
 using CInteger = Type<TypeCategory::Integer, 4>;
-using LargestInt = Type<TypeCategory::Integer, 16>;
 using LogicalResult = Type<TypeCategory::Logical, 4>;
 using LargestReal = Type<TypeCategory::Real, 16>;
-using Ascii = Type<TypeCategory::Character, 1>;
 
 // A predicate that is true when a kind value is a kind that could possibly
 // be supported for an intrinsic type category on some target instruction
@@ -83,16 +81,15 @@ static constexpr bool IsValidKindOfIntrinsicType(
 // directly hold anything requiring a destructor, such as an arbitrary
 // CHARACTER length type parameter expression.  Those must be derived
 // via LEN() member functions, packaged elsewhere (e.g. as in
-// ArrayConstructor), copied from a parameter spec in the symbol table
-// if one is supplied, or a known integer value.
+// ArrayConstructor), or copied from a parameter spec in the symbol table
+// if one is supplied.
 class DynamicType {
 public:
   constexpr DynamicType(TypeCategory cat, int k) : category_{cat}, kind_{k} {
     CHECK(IsValidKindOfIntrinsicType(category_, kind_));
   }
-  DynamicType(int charKind, const semantics::ParamValue &len);
-  constexpr DynamicType(int k, std::int64_t len)
-      : category_{TypeCategory::Character}, kind_{k}, knownLength_{len} {
+  constexpr DynamicType(int k, const semantics::ParamValue &pv)
+      : category_{TypeCategory::Character}, kind_{k}, charLength_{&pv} {
     CHECK(IsValidKindOfIntrinsicType(category_, kind_));
   }
   explicit constexpr DynamicType(
@@ -140,16 +137,8 @@ public:
     CHECK(kind_ > 0);
     return kind_;
   }
-  constexpr const semantics::ParamValue *charLengthParamValue() const {
-    return charLengthParamValue_;
-  }
-  constexpr std::optional<std::int64_t> knownLength() const {
-#if defined(_GLIBCXX_RELEASE) && _GLIBCXX_RELEASE == 7
-    if (knownLength_ < 0) {
-      return std::nullopt;
-    }
-#endif
-    return knownLength_;
+  constexpr const semantics::ParamValue *charLength() const {
+    return charLength_;
   }
   std::optional<Expr<SubscriptInteger>> GetCharLength() const;
 
@@ -223,13 +212,7 @@ private:
 
   TypeCategory category_{TypeCategory::Derived}; // overridable default
   int kind_{0};
-  const semantics::ParamValue *charLengthParamValue_{nullptr};
-#if defined(_GLIBCXX_RELEASE) && _GLIBCXX_RELEASE == 7
-  // GCC 7's optional<> lacks a constexpr operator=
-  std::int64_t knownLength_{-1};
-#else
-  std::optional<std::int64_t> knownLength_;
-#endif
+  const semantics::ParamValue *charLength_{nullptr};
   const semantics::DerivedTypeSpec *derived_{nullptr}; // TYPE(T), CLASS(T)
 };
 
@@ -337,10 +320,8 @@ using LogicalTypes = CategoryTypes<TypeCategory::Logical>;
 
 using FloatingTypes = common::CombineTuples<RealTypes, ComplexTypes>;
 using NumericTypes = common::CombineTuples<IntegerTypes, FloatingTypes>;
-using RelationalTypes =
-    common::CombineTuples<IntegerTypes, RealTypes, CharacterTypes>;
-using AllIntrinsicTypes =
-    common::CombineTuples<NumericTypes, CharacterTypes, LogicalTypes>;
+using RelationalTypes = common::CombineTuples<NumericTypes, CharacterTypes>;
+using AllIntrinsicTypes = common::CombineTuples<RelationalTypes, LogicalTypes>;
 using LengthlessIntrinsicTypes =
     common::CombineTuples<NumericTypes, LogicalTypes>;
 

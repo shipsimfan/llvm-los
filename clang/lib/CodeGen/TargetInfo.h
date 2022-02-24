@@ -38,6 +38,7 @@ class ABIInfo;
 class CallArgList;
 class CodeGenFunction;
 class CGBlockInfo;
+class CGFunctionInfo;
 
 /// TargetCodeGenInfo - This class organizes various target-specific
 /// codegeneration issues, like target-specific attributes, builtins and so
@@ -145,13 +146,6 @@ public:
                                           StringRef Constraint,
                                           llvm::Type *Ty) const {
     return Ty;
-  }
-
-  /// Target hook to decide whether an inline asm operand can be passed
-  /// by value.
-  virtual bool isScalarizableAsmOperand(CodeGen::CodeGenFunction &CGF,
-                                        llvm::Type *Ty) const {
-    return false;
   }
 
   /// Adds constraints and types for result registers.

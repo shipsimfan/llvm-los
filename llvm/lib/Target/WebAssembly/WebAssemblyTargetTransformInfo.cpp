@@ -114,8 +114,7 @@ bool WebAssemblyTTIImpl::areInlineCompatible(const Function *Caller,
 }
 
 void WebAssemblyTTIImpl::getUnrollingPreferences(
-    Loop *L, ScalarEvolution &SE, TTI::UnrollingPreferences &UP,
-    OptimizationRemarkEmitter *ORE) const {
+  Loop *L, ScalarEvolution &SE, TTI::UnrollingPreferences &UP) const {
   // Scan the loop: don't unroll loops with calls. This is a standard approach
   // for most (all?) targets.
   for (BasicBlock *BB : L->blocks())

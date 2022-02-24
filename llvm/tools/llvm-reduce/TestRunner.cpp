@@ -10,11 +10,8 @@
 
 using namespace llvm;
 
-TestRunner::TestRunner(StringRef TestName,
-                       const std::vector<std::string> &TestArgs,
-                       std::unique_ptr<ReducerWorkItem> Program)
-    : TestName(TestName), TestArgs(TestArgs), Program(std::move(Program)) {
-  assert(this->Program && "Initialized with null program?");
+TestRunner::TestRunner(StringRef TestName, const std::vector<std::string> &TestArgs)
+    : TestName(TestName), TestArgs(TestArgs) {
 }
 
 /// Runs the interestingness test, passes file to be tested as first argument

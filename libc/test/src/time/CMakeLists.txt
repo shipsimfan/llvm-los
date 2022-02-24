@@ -1,32 +1,6 @@
 add_libc_testsuite(libc_time_unittests)
 
 add_libc_unittest(
-  asctime
-  SUITE
-    libc_time_unittests
-  SRCS
-    asctime_test.cpp
-  HDRS
-    TmHelper.h
-    TmMatcher.h
-  DEPENDS
-    libc.src.time.asctime
-)
-
-add_libc_unittest(
-  asctime_r
-  SUITE
-    libc_time_unittests
-  SRCS
-    asctime_r_test.cpp
-  HDRS
-    TmHelper.h
-    TmMatcher.h
-  DEPENDS
-    libc.src.time.asctime_r
-)
-
-add_libc_unittest(
   gmtime
   SUITE
     libc_time_unittests
@@ -57,7 +31,6 @@ add_libc_unittest(
   SRCS
     mktime_test.cpp
   HDRS
-    TmHelper.h
     TmMatcher.h
   DEPENDS
     libc.src.time.mktime

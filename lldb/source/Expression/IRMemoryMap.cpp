@@ -13,7 +13,6 @@
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/DataExtractor.h"
 #include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Scalar.h"
 #include "lldb/Utility/Status.h"
@@ -289,7 +288,8 @@ IRMemoryMap::Allocation::Allocation(lldb::addr_t process_alloc,
 lldb::addr_t IRMemoryMap::Malloc(size_t size, uint8_t alignment,
                                  uint32_t permissions, AllocationPolicy policy,
                                  bool zero_memory, Status &error) {
-  lldb_private::Log *log(GetLog(LLDBLog::Expressions));
+  lldb_private::Log *log(
+      lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
   error.Clear();
 
   lldb::ProcessSP process_sp;
@@ -476,7 +476,8 @@ void IRMemoryMap::Free(lldb::addr_t process_address, Status &error) {
   }
   }
 
-  if (lldb_private::Log *log = GetLog(LLDBLog::Expressions)) {
+  if (lldb_private::Log *log =
+          lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS)) {
     LLDB_LOGF(log,
               "IRMemoryMap::Free (0x%" PRIx64 ") freed [0x%" PRIx64
               "..0x%" PRIx64 ")",
@@ -573,7 +574,8 @@ void IRMemoryMap::WriteMemory(lldb::addr_t process_address,
     break;
   }
 
-  if (lldb_private::Log *log = GetLog(LLDBLog::Expressions)) {
+  if (lldb_private::Log *log =
+          lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS)) {
     LLDB_LOGF(log,
               "IRMemoryMap::WriteMemory (0x%" PRIx64 ", 0x%" PRIxPTR
               ", 0x%" PRId64 ") went to [0x%" PRIx64 "..0x%" PRIx64 ")",
@@ -607,6 +609,7 @@ void IRMemoryMap::WriteScalarToMemory(lldb::addr_t process_address,
     error.SetErrorToGenericError();
     error.SetErrorString("Couldn't write scalar: its size was zero");
   }
+  return;
 }
 
 void IRMemoryMap::WritePointerToMemory(lldb::addr_t process_address,
@@ -702,7 +705,8 @@ void IRMemoryMap::ReadMemory(uint8_t *bytes, lldb::addr_t process_address,
     break;
   }
 
-  if (lldb_private::Log *log = GetLog(LLDBLog::Expressions)) {
+  if (lldb_private::Log *log =
+          lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS)) {
     LLDB_LOGF(log,
               "IRMemoryMap::ReadMemory (0x%" PRIx64 ", 0x%" PRIxPTR
               ", 0x%" PRId64 ") came from [0x%" PRIx64 "..0x%" PRIx64 ")",
@@ -753,6 +757,7 @@ void IRMemoryMap::ReadScalarFromMemory(Scalar &scalar,
     error.SetErrorToGenericError();
     error.SetErrorString("Couldn't read scalar: its size was zero");
   }
+  return;
 }
 
 void IRMemoryMap::ReadPointerFromMemory(lldb::addr_t *address,
@@ -768,6 +773,8 @@ void IRMemoryMap::ReadPointerFromMemory(lldb::addr_t *address,
     return;
 
   *address = pointer_scalar.ULongLong();
+
+  return;
 }
 
 void IRMemoryMap::GetMemoryData(DataExtractor &extractor,

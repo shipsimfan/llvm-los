@@ -43,9 +43,6 @@ syn keyword mlirOps memref_shape_cast mulf muli negf powf prefetch rsqrt sitofp
 syn keyword mlirOps splat store select sqrt subf subi subview tanh
 syn keyword mlirOps view
 
-" Math ops.
-syn match mlirOps /\<math\.erf\>/
-
 " Affine ops.
 syn match mlirOps /\<affine\.apply\>/
 syn match mlirOps /\<affine\.dma_start\>/
@@ -56,10 +53,8 @@ syn match mlirOps /\<affine\.load\>/
 syn match mlirOps /\<affine\.parallel\>/
 syn match mlirOps /\<affine\.prefetch\>/
 syn match mlirOps /\<affine\.store\>/
-syn match mlirOps /\<scf\.execute_region\>/
-syn match mlirOps /\<scf\.for\>/
-syn match mlirOps /\<scf\.if\>/
-syn match mlirOps /\<scf\.yield\>/
+syn match mlirOps /\<loop\.for\>/
+syn match mlirOps /\<loop\.if\>/
 
 " TODO: dialect name prefixed ops (llvm or std).
 

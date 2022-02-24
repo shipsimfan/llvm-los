@@ -19,7 +19,6 @@
 #ifndef LLVM_IR_DATALAYOUT_H
 #define LLVM_IR_DATALAYOUT_H
 
-#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -92,14 +91,14 @@ struct LayoutAlignElem {
 struct PointerAlignElem {
   Align ABIAlign;
   Align PrefAlign;
-  uint32_t TypeBitWidth;
+  uint32_t TypeByteWidth;
   uint32_t AddressSpace;
-  uint32_t IndexBitWidth;
+  uint32_t IndexWidth;
 
   /// Initializer
-  static PointerAlignElem getInBits(uint32_t AddressSpace, Align ABIAlign,
-                                    Align PrefAlign, uint32_t TypeBitWidth,
-                                    uint32_t IndexBitWidth);
+  static PointerAlignElem get(uint32_t AddressSpace, Align ABIAlign,
+                              Align PrefAlign, uint32_t TypeByteWidth,
+                              uint32_t IndexWidth);
 
   bool operator==(const PointerAlignElem &rhs) const;
 };
@@ -136,7 +135,6 @@ private:
     MM_MachO,
     MM_WinCOFF,
     MM_WinCOFFX86,
-    MM_GOFF,
     MM_Mips,
     MM_XCOFF
   };
@@ -180,9 +178,8 @@ private:
 
   /// Attempts to set the alignment of a pointer in the given address space.
   /// Returns an error description on failure.
-  Error setPointerAlignmentInBits(uint32_t AddrSpace, Align ABIAlign,
-                                  Align PrefAlign, uint32_t TypeBitWidth,
-                                  uint32_t IndexBitWidth);
+  Error setPointerAlignment(uint32_t AddrSpace, Align ABIAlign, Align PrefAlign,
+                            uint32_t TypeByteWidth, uint32_t IndexWidth);
 
   /// Internal helper to get alignment for integer of given bitwidth.
   Align getIntegerAlignment(uint32_t BitWidth, bool abi_or_pref) const;
@@ -319,7 +316,6 @@ public:
     switch (ManglingMode) {
     case MM_None:
     case MM_ELF:
-    case MM_GOFF:
     case MM_Mips:
     case MM_WinCOFF:
     case MM_XCOFF:
@@ -338,8 +334,6 @@ public:
     case MM_ELF:
     case MM_WinCOFF:
       return ".L";
-    case MM_GOFF:
-      return "@";
     case MM_Mips:
       return "$";
     case MM_MachO:
@@ -373,17 +367,15 @@ public:
   /// the backends/clients are updated.
   Align getPointerPrefAlignment(unsigned AS = 0) const;
 
-  /// Layout pointer size in bytes, rounded up to a whole
-  /// number of bytes.
+  /// Layout pointer size
   /// FIXME: The defaults need to be removed once all of
   /// the backends/clients are updated.
   unsigned getPointerSize(unsigned AS = 0) const;
 
-  /// Returns the maximum index size over all address spaces.
-  unsigned getMaxIndexSize() const;
+  /// Returns the maximum pointer size over all address spaces.
+  unsigned getMaxPointerSize() const;
 
-  // Index size in bytes used for address calculation,
-  /// rounded up to a whole number of bytes.
+  // Index size used for address calculation.
   unsigned getIndexSize(unsigned AS) const;
 
   /// Return the address spaces containing non-integral pointers.  Pointers in
@@ -410,17 +402,17 @@ public:
   /// FIXME: The defaults need to be removed once all of
   /// the backends/clients are updated.
   unsigned getPointerSizeInBits(unsigned AS = 0) const {
-    return getPointerAlignElem(AS).TypeBitWidth;
+    return getPointerSize(AS) * 8;
   }
 
-  /// Returns the maximum index size over all address spaces.
-  unsigned getMaxIndexSizeInBits() const {
-    return getMaxIndexSize() * 8;
+  /// Returns the maximum pointer size over all address spaces.
+  unsigned getMaxPointerSizeInBits() const {
+    return getMaxPointerSize() * 8;
   }
 
   /// Size in bits of index used for address calculation in getelementptr.
   unsigned getIndexSizeInBits(unsigned AS) const {
-    return getPointerAlignElem(AS).IndexBitWidth;
+    return getIndexSize(AS) * 8;
   }
 
   /// Layout pointer size, in bits, based on the type.  If this function is
@@ -473,7 +465,7 @@ public:
   /// For example, returns 5 for i36 and 10 for x86_fp80.
   TypeSize getTypeStoreSize(Type *Ty) const {
     TypeSize BaseSize = getTypeSizeInBits(Ty);
-    return {divideCeil(BaseSize.getKnownMinSize(), 8), BaseSize.isScalable()};
+    return { (BaseSize.getKnownMinSize() + 7) / 8, BaseSize.isScalable() };
   }
 
   /// Returns the maximum number of bits that may be overwritten by
@@ -522,7 +514,7 @@ public:
 
   /// Returns the minimum ABI-required alignment for the specified type.
   /// FIXME: Deprecate this function once migration to Align is over.
-  uint64_t getABITypeAlignment(Type *Ty) const;
+  unsigned getABITypeAlignment(Type *Ty) const;
 
   /// Returns the minimum ABI-required alignment for the specified type.
   Align getABITypeAlign(Type *Ty) const;
@@ -545,7 +537,7 @@ public:
   ///
   /// This is always at least as good as the ABI alignment.
   /// FIXME: Deprecate this function once migration to Align is over.
-  uint64_t getPrefTypeAlignment(Type *Ty) const;
+  unsigned getPrefTypeAlignment(Type *Ty) const;
 
   /// Returns the preferred stack/global alignment for the specified
   /// type.
@@ -587,16 +579,6 @@ public:
   /// This is used to implement getelementptr.
   int64_t getIndexedOffsetInType(Type *ElemTy, ArrayRef<Value *> Indices) const;
 
-  /// Get GEP indices to access Offset inside ElemTy. ElemTy is updated to be
-  /// the result element type and Offset to be the residual offset.
-  SmallVector<APInt> getGEPIndicesForOffset(Type *&ElemTy, APInt &Offset) const;
-
-  /// Get single GEP index to access Offset inside ElemTy. Returns None if
-  /// index cannot be computed, e.g. because the type is not an aggregate.
-  /// ElemTy is updated to be the result element type and Offset to be the
-  /// residual offset.
-  Optional<APInt> getGEPIndexForOffset(Type *&ElemTy, APInt &Offset) const;
-
   /// Returns a StructLayout object, indicating the alignment of the
   /// struct, its size, and the offsets of its fields.
   ///
@@ -607,6 +589,25 @@ public:
   ///
   /// This includes an explicitly requested alignment (if the global has one).
   Align getPreferredAlign(const GlobalVariable *GV) const;
+
+  /// Returns the preferred alignment of the specified global.
+  ///
+  /// This includes an explicitly requested alignment (if the global has one).
+  LLVM_ATTRIBUTE_DEPRECATED(
+      inline unsigned getPreferredAlignment(const GlobalVariable *GV) const,
+      "Use getPreferredAlign instead") {
+    return getPreferredAlign(GV).value();
+  }
+
+  /// Returns the preferred alignment of the specified global, returned
+  /// in log form.
+  ///
+  /// This includes an explicitly requested alignment (if the global has one).
+  LLVM_ATTRIBUTE_DEPRECATED(
+      inline unsigned getPreferredAlignmentLog(const GlobalVariable *GV) const,
+      "Inline where needed") {
+    return Log2(getPreferredAlign(GV));
+  }
 };
 
 inline DataLayout *unwrap(LLVMTargetDataRef P) {

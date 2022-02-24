@@ -6,7 +6,7 @@ typedef union {
 
 typedef struct { int x; } A;
 
-void foo(void) {
+void foo() {
   U u = {};
   A *a = &u; // expected-warning{{incompatible pointer types}}
   a->x;      // no-crash

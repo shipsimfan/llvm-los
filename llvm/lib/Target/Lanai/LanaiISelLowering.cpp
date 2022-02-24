@@ -284,7 +284,7 @@ LanaiTargetLowering::getSingleConstraintMatchWeight(
 void LanaiTargetLowering::LowerAsmOperandForConstraint(
     SDValue Op, std::string &Constraint, std::vector<SDValue> &Ops,
     SelectionDAG &DAG) const {
-  SDValue Result;
+  SDValue Result(nullptr, 0);
 
   // Only support length 1 constraints for now.
   if (Constraint.length() > 1)
@@ -486,7 +486,7 @@ SDValue LanaiTargetLowering::LowerCCCArguments(
         llvm_unreachable("unhandled argument type");
       }
     } else {
-      // Only arguments passed on the stack should make it here.
+      // Sanity check
       assert(VA.isMemLoc());
       // Load the argument to a virtual register
       unsigned ObjSize = VA.getLocVT().getSizeInBits() / 8;
@@ -511,7 +511,7 @@ SDValue LanaiTargetLowering::LowerCCCArguments(
   // the sret argument into rv for the return. Save the argument into
   // a virtual register so that we can access it from the return points.
   if (MF.getFunction().hasStructRetAttr()) {
-    Register Reg = LanaiMFI->getSRetReturnReg();
+    unsigned Reg = LanaiMFI->getSRetReturnReg();
     if (!Reg) {
       Reg = MF.getRegInfo().createVirtualRegister(getRegClassFor(MVT::i32));
       LanaiMFI->setSRetReturnReg(Reg);
@@ -528,15 +528,6 @@ SDValue LanaiTargetLowering::LowerCCCArguments(
   }
 
   return Chain;
-}
-
-bool LanaiTargetLowering::CanLowerReturn(
-    CallingConv::ID CallConv, MachineFunction &MF, bool IsVarArg,
-    const SmallVectorImpl<ISD::OutputArg> &Outs, LLVMContext &Context) const {
-  SmallVector<CCValAssign, 16> RVLocs;
-  CCState CCInfo(CallConv, IsVarArg, MF, RVLocs, Context);
-
-  return CCInfo.CheckReturn(Outs, RetCC_Lanai32);
 }
 
 SDValue
@@ -577,7 +568,7 @@ LanaiTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   if (DAG.getMachineFunction().getFunction().hasStructRetAttr()) {
     MachineFunction &MF = DAG.getMachineFunction();
     LanaiMachineFunctionInfo *LanaiMFI = MF.getInfo<LanaiMachineFunctionInfo>();
-    Register Reg = LanaiMFI->getSRetReturnReg();
+    unsigned Reg = LanaiMFI->getSRetReturnReg();
     assert(Reg &&
            "SRetReturnReg should have been set in LowerFormalArguments().");
     SDValue Val =
@@ -1077,7 +1068,7 @@ SDValue LanaiTargetLowering::LowerRETURNADDR(SDValue Op,
 
   // Return the link register, which contains the return address.
   // Mark it an implicit live-in.
-  Register Reg = MF.addLiveIn(TRI->getRARegister(), getRegClassFor(MVT::i32));
+  unsigned Reg = MF.addLiveIn(TRI->getRARegister(), getRegClassFor(MVT::i32));
   return DAG.getCopyFromReg(DAG.getEntryNode(), DL, Reg, VT);
 }
 
@@ -1176,7 +1167,7 @@ SDValue LanaiTargetLowering::LowerGlobalAddress(SDValue Op,
 
   // If the code model is small or global variable will be placed in the small
   // section, then assume address will fit in 21-bits.
-  const GlobalObject *GO = GV->getAliaseeObject();
+  const GlobalObject *GO = GV->getBaseObject();
   if (TLOF->isGlobalInSmallSection(GO, getTargetMachine())) {
     SDValue Small = DAG.getTargetGlobalAddress(
         GV, DL, getPointerTy(DAG.getDataLayout()), Offset, LanaiII::MO_NO_FLAG);
@@ -1400,7 +1391,8 @@ static bool isConditionalZeroOrAllOnes(SDNode *N, bool AllOnes, SDValue &CC,
       // value is 0.
       OtherOp = DAG.getConstant(0, dl, VT);
     else
-      OtherOp = DAG.getAllOnesConstant(dl, VT);
+      OtherOp =
+          DAG.getConstant(APInt::getAllOnesValue(VT.getSizeInBits()), dl, VT);
     return true;
   }
   }

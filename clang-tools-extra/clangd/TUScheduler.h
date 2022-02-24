@@ -23,7 +23,6 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include <chrono>
-#include <string>
 
 namespace clang {
 namespace clangd {
@@ -134,7 +133,8 @@ public:
   /// contains only AST nodes from the #include directives at the start of the
   /// file. AST node in the current file should be observed on onMainAST call.
   virtual void onPreambleAST(PathRef Path, llvm::StringRef Version,
-                             ASTContext &Ctx, Preprocessor &PP,
+                             ASTContext &Ctx,
+                             std::shared_ptr<clang::Preprocessor> PP,
                              const CanonicalIncludes &) {}
 
   /// The argument function is run under the critical section guarding against
@@ -169,11 +169,6 @@ public:
 
   /// Called whenever the TU status is updated.
   virtual void onFileUpdated(PathRef File, const TUStatus &Status) {}
-
-  /// Preamble for the TU have changed. This might imply new semantics (e.g.
-  /// different highlightings). Any actions on the file are guranteed to see new
-  /// preamble after the callback.
-  virtual void onPreamblePublished(PathRef File) {}
 };
 
 /// Handles running tasks for ClangdServer and managing the resources (e.g.,
@@ -341,9 +336,6 @@ private:
   // asynchronously.
   llvm::Optional<AsyncTaskRunner> PreambleTasks;
   llvm::Optional<AsyncTaskRunner> WorkerThreads;
-  // Used to create contexts for operations that are not bound to a particular
-  // file (e.g. index queries).
-  std::string LastActiveFile;
 };
 
 } // namespace clangd

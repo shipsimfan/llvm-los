@@ -65,7 +65,7 @@ void UseNoexceptCheck::check(const MatchFinder::MatchResult &Result) {
   } else if (const auto *ParmDecl =
                  Result.Nodes.getNodeAs<ParmVarDecl>("parmVarDecl")) {
     FnTy = ParmDecl->getType()
-               ->castAs<Type>()
+               ->getAs<Type>()
                ->getPointeeType()
                ->getAs<FunctionProtoType>();
 

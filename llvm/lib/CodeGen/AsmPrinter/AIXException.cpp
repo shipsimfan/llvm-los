@@ -23,8 +23,6 @@ namespace llvm {
 
 AIXException::AIXException(AsmPrinter *A) : DwarfCFIExceptionBase(A) {}
 
-void AIXException::markFunctionEnd() { endFragment(); }
-
 void AIXException::emitExceptionInfoTable(const MCSymbol *LSDA,
                                           const MCSymbol *PerSym) {
   // Generate EH Info Table.
@@ -63,9 +61,6 @@ void AIXException::emitExceptionInfoTable(const MCSymbol *LSDA,
 }
 
 void AIXException::endFunction(const MachineFunction *MF) {
-  // There is no easy way to access register information in `AIXException`
-  // class. when ShouldEmitEHBlock is false and VRs are saved, A dumy eh info
-  // table are emitted in PPCAIXAsmPrinter::emitFunctionBodyEnd.
   if (!TargetLoweringObjectFileXCOFF::ShouldEmitEHBlock(MF))
     return;
 

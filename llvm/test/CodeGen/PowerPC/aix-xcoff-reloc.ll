@@ -3,7 +3,7 @@
 ; RUN: llvm-readobj --section-headers --file-header %t.o | \
 ; RUN: FileCheck --check-prefix=OBJ %s
 ; RUN: llvm-readobj --relocs --expand-relocs %t.o | FileCheck --check-prefix=RELOC %s
-; RUN: llvm-readobj --syms %t.o | FileCheck --check-prefix=SYM %s
+; RUN: llvm-readobj -t %t.o | FileCheck --check-prefix=SYM %s
 ; RUN: llvm-objdump -D %t.o | FileCheck --check-prefix=DIS %s
 ; RUN: llvm-objdump -r %t.o | FileCheck --check-prefix=DIS_REL %s
 
@@ -422,7 +422,7 @@ declare i32 @bar(i32)
 
 ; DIS:      {{.*}}aix-xcoff-reloc.ll.tmp.o:   file format aixcoff-rs6000
 ; DIS:      Disassembly of section .text:
-; DIS:      00000000 <.foo>:
+; DIS:      00000000 <.text>:
 ; DIS-NEXT:        0: 7c 08 02 a6                   mflr 0
 ; DIS-NEXT:        4: 90 01 00 08                   stw 0, 8(1)
 ; DIS-NEXT:        8: 94 21 ff c0                   stwu 1, -64(1)

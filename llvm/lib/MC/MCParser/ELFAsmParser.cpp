@@ -12,9 +12,11 @@
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDirectives.h"
+#include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCAsmParser.h"
 #include "llvm/MC/MCParser/MCAsmParserExtension.h"
+#include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
@@ -282,8 +284,7 @@ bool ELFAsmParser::ParseSectionName(StringRef &SectionName) {
   return false;
 }
 
-static unsigned parseSectionFlags(const Triple &TT, StringRef flagsStr,
-                                  bool *UseLastGroup) {
+static unsigned parseSectionFlags(StringRef flagsStr, bool *UseLastGroup) {
   unsigned flags = 0;
 
   // If a valid numerical value is set for the section flag, use it verbatim
@@ -332,10 +333,7 @@ static unsigned parseSectionFlags(const Triple &TT, StringRef flagsStr,
       flags |= ELF::SHF_GROUP;
       break;
     case 'R':
-      if (TT.isOSSolaris())
-        flags |= ELF::SHF_SUNW_NODISCARD;
-      else
-        flags |= ELF::SHF_GNU_RETAIN;
+      flags |= ELF::SHF_GNU_RETAIN;
       break;
     case '?':
       *UseLastGroup = true;
@@ -501,25 +499,7 @@ bool ELFAsmParser::maybeParseUniqueID(int64_t &UniqueID) {
 }
 
 static bool hasPrefix(StringRef SectionName, StringRef Prefix) {
-  return SectionName.consume_front(Prefix) &&
-         (SectionName.empty() || SectionName[0] == '.');
-}
-
-static bool allowSectionTypeMismatch(const Triple &TT, StringRef SectionName,
-                                     unsigned Type) {
-  if (TT.getArch() == Triple::x86_64) {
-    // x86-64 psABI names SHT_X86_64_UNWIND as the canonical type for .eh_frame,
-    // but GNU as emits SHT_PROGBITS .eh_frame for .cfi_* directives. Don't
-    // error for SHT_PROGBITS .eh_frame
-    return SectionName == ".eh_frame" && Type == ELF::SHT_PROGBITS;
-  }
-  if (TT.isMIPS()) {
-    // MIPS .debug_* sections should have SHT_MIPS_DWARF section type to
-    // distinguish among sections contain DWARF and ECOFF debug formats,
-    // but in assembly files these sections have SHT_PROGBITS type.
-    return SectionName.startswith(".debug_") && Type == ELF::SHT_PROGBITS;
-  }
-  return false;
+  return SectionName.startswith(Prefix) || SectionName == Prefix.drop_back();
 }
 
 bool ELFAsmParser::ParseSectionArguments(bool IsPush, SMLoc loc) {
@@ -540,18 +520,19 @@ bool ELFAsmParser::ParseSectionArguments(bool IsPush, SMLoc loc) {
   int64_t UniqueID = ~0;
 
   // Set the defaults first.
-  if (hasPrefix(SectionName, ".rodata") || SectionName == ".rodata1")
+  if (hasPrefix(SectionName, ".rodata.") || SectionName == ".rodata1")
     Flags |= ELF::SHF_ALLOC;
   else if (SectionName == ".fini" || SectionName == ".init" ||
-           hasPrefix(SectionName, ".text"))
+           hasPrefix(SectionName, ".text."))
     Flags |= ELF::SHF_ALLOC | ELF::SHF_EXECINSTR;
-  else if (hasPrefix(SectionName, ".data") || SectionName == ".data1" ||
-           hasPrefix(SectionName, ".bss") ||
-           hasPrefix(SectionName, ".init_array") ||
-           hasPrefix(SectionName, ".fini_array") ||
-           hasPrefix(SectionName, ".preinit_array"))
+  else if (hasPrefix(SectionName, ".data.") || SectionName == ".data1" ||
+           hasPrefix(SectionName, ".bss.") ||
+           hasPrefix(SectionName, ".init_array.") ||
+           hasPrefix(SectionName, ".fini_array.") ||
+           hasPrefix(SectionName, ".preinit_array."))
     Flags |= ELF::SHF_ALLOC | ELF::SHF_WRITE;
-  else if (hasPrefix(SectionName, ".tdata") || hasPrefix(SectionName, ".tbss"))
+  else if (hasPrefix(SectionName, ".tdata.") ||
+           hasPrefix(SectionName, ".tbss."))
     Flags |= ELF::SHF_ALLOC | ELF::SHF_WRITE | ELF::SHF_TLS;
 
   if (getLexer().is(AsmToken::Comma)) {
@@ -573,8 +554,7 @@ bool ELFAsmParser::ParseSectionArguments(bool IsPush, SMLoc loc) {
     } else {
       StringRef FlagsStr = getTok().getStringContents();
       Lex();
-      extraFlags = parseSectionFlags(getContext().getTargetTriple(), FlagsStr,
-                                     &UseLastGroup);
+      extraFlags = parseSectionFlags(FlagsStr, &UseLastGroup);
     }
 
     if (extraFlags == -1U)
@@ -623,15 +603,15 @@ EndStmt:
   if (TypeName.empty()) {
     if (SectionName.startswith(".note"))
       Type = ELF::SHT_NOTE;
-    else if (hasPrefix(SectionName, ".init_array"))
+    else if (hasPrefix(SectionName, ".init_array."))
       Type = ELF::SHT_INIT_ARRAY;
-    else if (hasPrefix(SectionName, ".bss"))
+    else if (hasPrefix(SectionName, ".bss."))
       Type = ELF::SHT_NOBITS;
-    else if (hasPrefix(SectionName, ".tbss"))
+    else if (hasPrefix(SectionName, ".tbss."))
       Type = ELF::SHT_NOBITS;
-    else if (hasPrefix(SectionName, ".fini_array"))
+    else if (hasPrefix(SectionName, ".fini_array."))
       Type = ELF::SHT_FINI_ARRAY;
-    else if (hasPrefix(SectionName, ".preinit_array"))
+    else if (hasPrefix(SectionName, ".preinit_array."))
       Type = ELF::SHT_PREINIT_ARRAY;
   } else {
     if (TypeName == "init_array")
@@ -679,14 +659,16 @@ EndStmt:
       getContext().getELFSection(SectionName, Type, Flags, Size, GroupName,
                                  IsComdat, UniqueID, LinkedToSym);
   getStreamer().SwitchSection(Section, Subsection);
+  // x86-64 psABI names SHT_X86_64_UNWIND as the canonical type for .eh_frame,
+  // but GNU as emits SHT_PROGBITS .eh_frame for .cfi_* directives. Don't error
+  // for SHT_PROGBITS .eh_frame
+  if (Section->getType() != Type &&
+      !(SectionName == ".eh_frame" && Type == ELF::SHT_PROGBITS))
+    Error(loc, "changed section type for " + SectionName + ", expected: 0x" +
+                   utohexstr(Section->getType()));
   // Check that flags are used consistently. However, the GNU assembler permits
   // to leave out in subsequent uses of the same sections; for compatibility,
   // do likewise.
-  if (!TypeName.empty() && Section->getType() != Type &&
-      !allowSectionTypeMismatch(getContext().getTargetTriple(), SectionName,
-                                Type))
-    Error(loc, "changed section type for " + SectionName + ", expected: 0x" +
-                   utohexstr(Section->getType()));
   if ((extraFlags || Size || !TypeName.empty()) && Section->getFlags() != Flags)
     Error(loc, "changed section flags for " + SectionName + ", expected: 0x" +
                    utohexstr(Section->getFlags()));
@@ -833,7 +815,7 @@ bool ELFAsmParser::ParseDirectiveSymver(StringRef, SMLoc) {
   if (getParser().parseIdentifier(Name))
     return TokError("expected identifier in directive");
 
-  if (!Name.contains('@'))
+  if (Name.find('@') == StringRef::npos)
     return TokError("expected a '@' in the name");
   bool KeepOriginalSym = !Name.contains("@@@");
   if (parseOptionalToken(AsmToken::Comma)) {

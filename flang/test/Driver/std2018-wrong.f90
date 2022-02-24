@@ -1,3 +1,4 @@
+! REQUIRES: new-flang-driver
 ! Ensure argument -std=f2018 works as expected.
 
 !-----------------------------------------

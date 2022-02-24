@@ -8,9 +8,9 @@
 
 // <iterator>
 
-// template <FrontInsertionContainer Cont>
+// template <BackInsertionContainer Cont>
 //   front_insert_iterator<Cont>
-//   front_inserter(Cont& x); // constexpr in C++20
+//   front_inserter(Cont& x);
 
 #include <cassert>
 #include <iterator>
@@ -25,12 +25,9 @@ TEST_CONSTEXPR_CXX20 bool
 test(C c)
 {
     std::front_insert_iterator<C> i = std::front_inserter(c);
-    i = 3;
+    i = 0;
     assert(c.size() == 1);
-    assert(c.front() == 3);
-    i = 4;
-    assert(c.size() == 2);
-    assert(c.front() == 4);
+    assert(c.front() == 0);
     return true;
 }
 

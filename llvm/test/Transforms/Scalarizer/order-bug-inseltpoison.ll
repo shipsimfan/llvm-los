@@ -1,3 +1,4 @@
+; RUN: opt %s -scalarizer -S -o - | FileCheck %s
 ; RUN: opt %s -passes='function(scalarizer)' -S -o - | FileCheck %s
 
 ; This input caused the scalarizer to replace & erase gathered results when 

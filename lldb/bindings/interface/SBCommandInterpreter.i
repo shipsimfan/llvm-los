@@ -125,9 +125,6 @@ public:
     bool
     HasAliasOptions ();
 
-    bool
-    IsInteractive ();
-
     lldb::SBProcess
     GetProcess ();
 

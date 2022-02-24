@@ -17,7 +17,7 @@
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/LegacyPassManager.h"
-#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeSparcTarget() {
@@ -102,7 +102,7 @@ SparcTargetMachine::SparcTargetMachine(
   initAsmInfo();
 }
 
-SparcTargetMachine::~SparcTargetMachine() = default;
+SparcTargetMachine::~SparcTargetMachine() {}
 
 const SparcSubtarget *
 SparcTargetMachine::getSubtargetImpl(const Function &F) const {

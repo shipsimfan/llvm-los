@@ -19,7 +19,7 @@
 #include "min_allocator.h"
 
 template <class S>
-TEST_CONSTEXPR_CXX20 void
+void
 test(const S& s, typename S::size_type pos, typename S::size_type n)
 {
     if (pos <= s.size())
@@ -47,7 +47,8 @@ test(const S& s, typename S::size_type pos, typename S::size_type n)
 #endif
 }
 
-bool test() {
+int main(int, char**)
+{
     {
     typedef std::string S;
     test(S(""), 0, 0);
@@ -171,16 +172,6 @@ bool test() {
     test(S("lsaijeqhtrbgcdmpfkno"), 20, 0);
     test(S("dplqartnfgejichmoskb"), 21, 0);
     }
-#endif
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
 #endif
 
   return 0;

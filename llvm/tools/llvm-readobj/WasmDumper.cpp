@@ -20,26 +20,26 @@ using namespace object;
 
 namespace {
 
-const EnumEntry<unsigned> WasmSymbolTypes[] = {
+static const EnumEntry<unsigned> WasmSymbolTypes[] = {
 #define ENUM_ENTRY(X)                                                          \
   { #X, wasm::WASM_SYMBOL_TYPE_##X }
-    ENUM_ENTRY(FUNCTION), ENUM_ENTRY(DATA), ENUM_ENTRY(GLOBAL),
-    ENUM_ENTRY(SECTION),  ENUM_ENTRY(TAG),  ENUM_ENTRY(TABLE),
+    ENUM_ENTRY(FUNCTION), ENUM_ENTRY(DATA),  ENUM_ENTRY(GLOBAL),
+    ENUM_ENTRY(SECTION),  ENUM_ENTRY(EVENT), ENUM_ENTRY(TABLE),
 #undef ENUM_ENTRY
 };
 
-const EnumEntry<uint32_t> WasmSectionTypes[] = {
+static const EnumEntry<uint32_t> WasmSectionTypes[] = {
 #define ENUM_ENTRY(X)                                                          \
   { #X, wasm::WASM_SEC_##X }
     ENUM_ENTRY(CUSTOM),   ENUM_ENTRY(TYPE),      ENUM_ENTRY(IMPORT),
     ENUM_ENTRY(FUNCTION), ENUM_ENTRY(TABLE),     ENUM_ENTRY(MEMORY),
-    ENUM_ENTRY(GLOBAL),   ENUM_ENTRY(TAG),       ENUM_ENTRY(EXPORT),
+    ENUM_ENTRY(GLOBAL),   ENUM_ENTRY(EVENT),     ENUM_ENTRY(EXPORT),
     ENUM_ENTRY(START),    ENUM_ENTRY(ELEM),      ENUM_ENTRY(CODE),
     ENUM_ENTRY(DATA),     ENUM_ENTRY(DATACOUNT),
 #undef ENUM_ENTRY
 };
 
-const EnumEntry<unsigned> WasmSymbolFlags[] = {
+static const EnumEntry<unsigned> WasmSymbolFlags[] = {
 #define ENUM_ENTRY(X)                                                          \
   { #X, wasm::WASM_SYMBOL_##X }
   ENUM_ENTRY(BINDING_GLOBAL),
@@ -183,10 +183,7 @@ void WasmDumper::printSectionHeaders() {
           W.printNumber("Offset", Seg.Offset.Value.Int32);
         else if (Seg.Offset.Opcode == wasm::WASM_OPCODE_I64_CONST)
           W.printNumber("Offset", Seg.Offset.Value.Int64);
-        else if (Seg.Offset.Opcode == wasm::WASM_OPCODE_GLOBAL_GET) {
-          ListScope Group(W, "Offset");
-          W.printNumber("Global", Seg.Offset.Value.Global);
-        } else
+        else
           llvm_unreachable("unknown init expr opcode");
       }
       break;

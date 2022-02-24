@@ -9,7 +9,6 @@
 #ifndef DIALECT_AFFINE_TRANSFORMS_PASSDETAIL_H_
 #define DIALECT_AFFINE_TRANSFORMS_PASSDETAIL_H_
 
-#include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/Pass/Pass.h"
 
 namespace mlir {
@@ -17,25 +16,21 @@ namespace mlir {
 template <typename ConcreteDialect>
 void registerDialect(DialectRegistry &registry);
 
-namespace arith {
-class ArithmeticDialect;
-} // namespace arith
-
 namespace linalg {
 class LinalgDialect;
-} // namespace linalg
+} // end namespace linalg
 
 namespace memref {
 class MemRefDialect;
-} // namespace memref
+} // end namespace memref
 
 namespace vector {
 class VectorDialect;
-} // namespace vector
+} // end namespace vector
 
 #define GEN_PASS_CLASSES
 #include "mlir/Dialect/Affine/Passes.h.inc"
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // DIALECT_AFFINE_TRANSFORMS_PASSDETAIL_H_

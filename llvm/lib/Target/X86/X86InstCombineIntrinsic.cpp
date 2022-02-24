@@ -72,8 +72,8 @@ static Instruction *simplifyX86MaskedLoad(IntrinsicInst &II, InstCombiner &IC) {
     Value *PtrCast = IC.Builder.CreateBitCast(Ptr, VecPtrTy, "castvec");
 
     // The pass-through vector for an x86 masked load is a zero vector.
-    CallInst *NewMaskedLoad = IC.Builder.CreateMaskedLoad(
-        II.getType(), PtrCast, Align(1), BoolMask, ZeroVec);
+    CallInst *NewMaskedLoad =
+        IC.Builder.CreateMaskedLoad(PtrCast, Align(1), BoolMask, ZeroVec);
     return IC.replaceInstUsesWith(II, NewMaskedLoad);
   }
 
@@ -197,11 +197,11 @@ static Value *simplifyX86immShift(const IntrinsicInst &II,
   }
   assert((LogicalShift || !ShiftLeft) && "Only logical shifts can shift left");
 
-  Value *Vec = II.getArgOperand(0);
-  Value *Amt = II.getArgOperand(1);
-  auto *VT = cast<FixedVectorType>(Vec->getType());
-  Type *SVT = VT->getElementType();
-  Type *AmtVT = Amt->getType();
+  auto Vec = II.getArgOperand(0);
+  auto Amt = II.getArgOperand(1);
+  auto VT = cast<FixedVectorType>(Vec->getType());
+  auto SVT = VT->getElementType();
+  auto AmtVT = Amt->getType();
   unsigned VWidth = VT->getNumElements();
   unsigned BitWidth = SVT->getPrimitiveSizeInBits();
 
@@ -239,7 +239,7 @@ static Value *simplifyX86immShift(const IntrinsicInst &II,
     KnownBits KnownUpperBits = llvm::computeKnownBits(
         Amt, DemandedUpper, II.getModule()->getDataLayout());
     if (KnownLowerBits.getMaxValue().ult(BitWidth) &&
-        (DemandedUpper.isZero() || KnownUpperBits.isZero())) {
+        (DemandedUpper.isNullValue() || KnownUpperBits.isZero())) {
       SmallVector<int, 16> ZeroSplat(VWidth, 0);
       Amt = Builder.CreateShuffleVector(Amt, ZeroSplat);
       return (LogicalShift ? (ShiftLeft ? Builder.CreateShl(Vec, Amt)
@@ -249,7 +249,7 @@ static Value *simplifyX86immShift(const IntrinsicInst &II,
   }
 
   // Simplify if count is constant vector.
-  auto *CDV = dyn_cast<ConstantDataVector>(Amt);
+  auto CDV = dyn_cast<ConstantDataVector>(Amt);
   if (!CDV)
     return nullptr;
 
@@ -263,13 +263,13 @@ static Value *simplifyX86immShift(const IntrinsicInst &II,
   APInt Count(64, 0);
   for (unsigned i = 0, NumSubElts = 64 / BitWidth; i != NumSubElts; ++i) {
     unsigned SubEltIdx = (NumSubElts - 1) - i;
-    auto *SubElt = cast<ConstantInt>(CDV->getElementAsConstant(SubEltIdx));
+    auto SubElt = cast<ConstantInt>(CDV->getElementAsConstant(SubEltIdx));
     Count <<= BitWidth;
     Count |= SubElt->getValue().zextOrTrunc(64);
   }
 
   // If shift-by-zero then just return the original value.
-  if (Count.isZero())
+  if (Count.isNullValue())
     return Vec;
 
   // Handle cases when Shift >= BitWidth.
@@ -345,18 +345,19 @@ static Value *simplifyX86varShift(const IntrinsicInst &II,
   }
   assert((LogicalShift || !ShiftLeft) && "Only logical shifts can shift left");
 
-  Value *Vec = II.getArgOperand(0);
-  Value *Amt = II.getArgOperand(1);
-  auto *VT = cast<FixedVectorType>(II.getType());
-  Type *SVT = VT->getElementType();
+  auto Vec = II.getArgOperand(0);
+  auto Amt = II.getArgOperand(1);
+  auto VT = cast<FixedVectorType>(II.getType());
+  auto SVT = VT->getElementType();
   int NumElts = VT->getNumElements();
   int BitWidth = SVT->getIntegerBitWidth();
 
   // If the shift amount is guaranteed to be in-range we can replace it with a
   // generic shift.
-  KnownBits KnownAmt =
-      llvm::computeKnownBits(Amt, II.getModule()->getDataLayout());
-  if (KnownAmt.getMaxValue().ult(BitWidth)) {
+  APInt UpperBits =
+      APInt::getHighBitsSet(BitWidth, BitWidth - Log2_32(BitWidth));
+  if (llvm::MaskedValueIsZero(Amt, UpperBits,
+                              II.getModule()->getDataLayout())) {
     return (LogicalShift ? (ShiftLeft ? Builder.CreateShl(Vec, Amt)
                                       : Builder.CreateLShr(Vec, Amt))
                          : Builder.CreateAShr(Vec, Amt));
@@ -475,7 +476,7 @@ static Value *simplifyX86pack(IntrinsicInst &II,
     // PACKUS: Truncate signed value with unsigned saturation.
     // Source values less than zero are saturated to zero.
     // Source values greater than dst maxuint are saturated to maxuint.
-    MinValue = APInt::getZero(SrcScalarSizeInBits);
+    MinValue = APInt::getNullValue(SrcScalarSizeInBits);
     MaxValue = APInt::getLowBitsSet(SrcScalarSizeInBits, DstScalarSizeInBits);
   }
 
@@ -627,8 +628,8 @@ static Value *simplifyX86extrq(IntrinsicInst &II, Value *Op0,
   };
 
   // See if we're dealing with constant values.
-  auto *C0 = dyn_cast<Constant>(Op0);
-  auto *CI0 =
+  Constant *C0 = dyn_cast<Constant>(Op0);
+  ConstantInt *CI0 =
       C0 ? dyn_cast_or_null<ConstantInt>(C0->getAggregateElement((unsigned)0))
          : nullptr;
 
@@ -760,12 +761,12 @@ static Value *simplifyX86insertq(IntrinsicInst &II, Value *Op0, Value *Op1,
   }
 
   // See if we're dealing with constant values.
-  auto *C0 = dyn_cast<Constant>(Op0);
-  auto *C1 = dyn_cast<Constant>(Op1);
-  auto *CI00 =
+  Constant *C0 = dyn_cast<Constant>(Op0);
+  Constant *C1 = dyn_cast<Constant>(Op1);
+  ConstantInt *CI00 =
       C0 ? dyn_cast_or_null<ConstantInt>(C0->getAggregateElement((unsigned)0))
          : nullptr;
-  auto *CI10 =
+  ConstantInt *CI10 =
       C1 ? dyn_cast_or_null<ConstantInt>(C1->getAggregateElement((unsigned)0))
          : nullptr;
 
@@ -802,7 +803,7 @@ static Value *simplifyX86insertq(IntrinsicInst &II, Value *Op0, Value *Op1,
 /// Attempt to convert pshufb* to shufflevector if the mask is constant.
 static Value *simplifyX86pshufb(const IntrinsicInst &II,
                                 InstCombiner::BuilderTy &Builder) {
-  auto *V = dyn_cast<Constant>(II.getArgOperand(1));
+  Constant *V = dyn_cast<Constant>(II.getArgOperand(1));
   if (!V)
     return nullptr;
 
@@ -847,7 +848,7 @@ static Value *simplifyX86pshufb(const IntrinsicInst &II,
 /// Attempt to convert vpermilvar* to shufflevector if the mask is constant.
 static Value *simplifyX86vpermilvar(const IntrinsicInst &II,
                                     InstCombiner::BuilderTy &Builder) {
-  auto *V = dyn_cast<Constant>(II.getArgOperand(1));
+  Constant *V = dyn_cast<Constant>(II.getArgOperand(1));
   if (!V)
     return nullptr;
 
@@ -996,17 +997,19 @@ X86TTIImpl::instCombineIntrinsic(InstCombiner &IC, IntrinsicInst &II) const {
         return IC.replaceInstUsesWith(II, II.getArgOperand(0));
       }
 
-      unsigned MaskIdx, MaskLen;
-      if (MaskC->getValue().isShiftedMask(MaskIdx, MaskLen)) {
+      if (MaskC->getValue().isShiftedMask()) {
         // any single contingous sequence of 1s anywhere in the mask simply
         // describes a subset of the input bits shifted to the appropriate
         // position.  Replace with the straight forward IR.
+        unsigned ShiftAmount = MaskC->getValue().countTrailingZeros();
         Value *Input = II.getArgOperand(0);
         Value *Masked = IC.Builder.CreateAnd(Input, II.getArgOperand(1));
-        Value *ShiftAmt = ConstantInt::get(II.getType(), MaskIdx);
-        Value *Shifted = IC.Builder.CreateLShr(Masked, ShiftAmt);
+        Value *Shifted = IC.Builder.CreateLShr(Masked,
+                                               ConstantInt::get(II.getType(),
+                                                                ShiftAmount));
         return IC.replaceInstUsesWith(II, Shifted);
       }
+
 
       if (auto *SrcC = dyn_cast<ConstantInt>(II.getArgOperand(0))) {
         uint64_t Src = SrcC->getZExtValue();
@@ -1039,15 +1042,15 @@ X86TTIImpl::instCombineIntrinsic(InstCombiner &IC, IntrinsicInst &II) const {
       if (MaskC->isAllOnesValue()) {
         return IC.replaceInstUsesWith(II, II.getArgOperand(0));
       }
-
-      unsigned MaskIdx, MaskLen;
-      if (MaskC->getValue().isShiftedMask(MaskIdx, MaskLen)) {
+      if (MaskC->getValue().isShiftedMask()) {
         // any single contingous sequence of 1s anywhere in the mask simply
         // describes a subset of the input bits shifted to the appropriate
         // position.  Replace with the straight forward IR.
+        unsigned ShiftAmount = MaskC->getValue().countTrailingZeros();
         Value *Input = II.getArgOperand(0);
-        Value *ShiftAmt = ConstantInt::get(II.getType(), MaskIdx);
-        Value *Shifted = IC.Builder.CreateShl(Input, ShiftAmt);
+        Value *Shifted = IC.Builder.CreateShl(Input,
+                                              ConstantInt::get(II.getType(),
+                                                               ShiftAmount));
         Value *Masked = IC.Builder.CreateAnd(Shifted, II.getArgOperand(1));
         return IC.replaceInstUsesWith(II, Masked);
       }
@@ -1469,11 +1472,11 @@ X86TTIImpl::instCombineIntrinsic(InstCombiner &IC, IntrinsicInst &II) const {
            VWidth1 == 16 && "Unexpected operand sizes");
 
     // See if we're dealing with constant values.
-    auto *C1 = dyn_cast<Constant>(Op1);
-    auto *CILength =
+    Constant *C1 = dyn_cast<Constant>(Op1);
+    ConstantInt *CILength =
         C1 ? dyn_cast_or_null<ConstantInt>(C1->getAggregateElement((unsigned)0))
            : nullptr;
-    auto *CIIndex =
+    ConstantInt *CIIndex =
         C1 ? dyn_cast_or_null<ConstantInt>(C1->getAggregateElement((unsigned)1))
            : nullptr;
 
@@ -1508,8 +1511,8 @@ X86TTIImpl::instCombineIntrinsic(InstCombiner &IC, IntrinsicInst &II) const {
            "Unexpected operand size");
 
     // See if we're dealing with constant values.
-    auto *CILength = dyn_cast<ConstantInt>(II.getArgOperand(1));
-    auto *CIIndex = dyn_cast<ConstantInt>(II.getArgOperand(2));
+    ConstantInt *CILength = dyn_cast<ConstantInt>(II.getArgOperand(1));
+    ConstantInt *CIIndex = dyn_cast<ConstantInt>(II.getArgOperand(2));
 
     // Attempt to simplify to a constant or shuffle vector.
     if (Value *V = simplifyX86extrq(II, Op0, CILength, CIIndex, IC.Builder)) {
@@ -1534,8 +1537,8 @@ X86TTIImpl::instCombineIntrinsic(InstCombiner &IC, IntrinsicInst &II) const {
            "Unexpected operand size");
 
     // See if we're dealing with constant values.
-    auto *C1 = dyn_cast<Constant>(Op1);
-    auto *CI11 =
+    Constant *C1 = dyn_cast<Constant>(Op1);
+    ConstantInt *CI11 =
         C1 ? dyn_cast_or_null<ConstantInt>(C1->getAggregateElement((unsigned)1))
            : nullptr;
 
@@ -1570,8 +1573,8 @@ X86TTIImpl::instCombineIntrinsic(InstCombiner &IC, IntrinsicInst &II) const {
            VWidth1 == 2 && "Unexpected operand sizes");
 
     // See if we're dealing with constant values.
-    auto *CILength = dyn_cast<ConstantInt>(II.getArgOperand(2));
-    auto *CIIndex = dyn_cast<ConstantInt>(II.getArgOperand(3));
+    ConstantInt *CILength = dyn_cast<ConstantInt>(II.getArgOperand(2));
+    ConstantInt *CIIndex = dyn_cast<ConstantInt>(II.getArgOperand(3));
 
     // Attempt to simplify to a constant or shuffle vector.
     if (CILength && CIIndex) {
@@ -1753,7 +1756,8 @@ Optional<Value *> X86TTIImpl::simplifyDemandedUseBitsIntrinsic(
     if (II.getIntrinsicID() == Intrinsic::x86_mmx_pmovmskb) {
       ArgWidth = 8; // Arg is x86_mmx, but treated as <8 x i8>.
     } else {
-      auto *ArgType = cast<FixedVectorType>(II.getArgOperand(0)->getType());
+      auto Arg = II.getArgOperand(0);
+      auto ArgType = cast<FixedVectorType>(Arg->getType());
       ArgWidth = ArgType->getNumElements();
     }
 
@@ -1761,7 +1765,7 @@ Optional<Value *> X86TTIImpl::simplifyDemandedUseBitsIntrinsic(
     // we know that DemandedMask is non-zero already.
     APInt DemandedElts = DemandedMask.zextOrTrunc(ArgWidth);
     Type *VTy = II.getType();
-    if (DemandedElts.isZero()) {
+    if (DemandedElts.isNullValue()) {
       return ConstantInt::getNullValue(VTy);
     }
 

@@ -152,8 +152,6 @@ namespace {
 /// This pass exercises the different configurations of the IR visitors.
 struct TestIRVisitorsPass
     : public PassWrapper<TestIRVisitorsPass, OperationPass<>> {
-  StringRef getArgument() const final { return "test-ir-visitors"; }
-  StringRef getDescription() const final { return "Test various visitors."; }
   void runOnOperation() override {
     Operation *op = getOperation();
     testPureCallbacks(op);
@@ -161,10 +159,13 @@ struct TestIRVisitorsPass
     testNoSkipErasureCallbacks(op);
   }
 };
-} // namespace
+} // end anonymous namespace
 
 namespace mlir {
 namespace test {
-void registerTestIRVisitorsPass() { PassRegistration<TestIRVisitorsPass>(); }
+void registerTestIRVisitorsPass() {
+  PassRegistration<TestIRVisitorsPass>("test-ir-visitors",
+                                       "Test various visitors.");
+}
 } // namespace test
 } // namespace mlir

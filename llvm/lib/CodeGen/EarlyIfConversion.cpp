@@ -111,11 +111,12 @@ public:
   /// Information about each phi in the Tail block.
   struct PHIInfo {
     MachineInstr *PHI;
-    unsigned TReg = 0, FReg = 0;
+    unsigned TReg, FReg;
     // Latencies from Cond+Branch, TReg, and FReg to DstReg.
-    int CondCycles = 0, TCycles = 0, FCycles = 0;
+    int CondCycles, TCycles, FCycles;
 
-    PHIInfo(MachineInstr *phi) : PHI(phi) {}
+    PHIInfo(MachineInstr *phi)
+      : PHI(phi), TReg(0), FReg(0), CondCycles(0), TCycles(0), FCycles(0) {}
   };
 
   SmallVector<PHIInfo, 8> PHIs;
@@ -209,9 +210,9 @@ bool SSAIfConv::canSpeculateInstrs(MachineBasicBlock *MBB) {
 
   // Check all instructions, except the terminators. It is assumed that
   // terminators never have side effects or define any used register values.
-  for (MachineInstr &MI :
-       llvm::make_range(MBB->begin(), MBB->getFirstTerminator())) {
-    if (MI.isDebugInstr())
+  for (MachineBasicBlock::iterator I = MBB->begin(),
+       E = MBB->getFirstTerminator(); I != E; ++I) {
+    if (I->isDebugInstr())
       continue;
 
     if (++InstrCount > BlockInstrLimit && !Stress) {
@@ -221,28 +222,28 @@ bool SSAIfConv::canSpeculateInstrs(MachineBasicBlock *MBB) {
     }
 
     // There shouldn't normally be any phis in a single-predecessor block.
-    if (MI.isPHI()) {
-      LLVM_DEBUG(dbgs() << "Can't hoist: " << MI);
+    if (I->isPHI()) {
+      LLVM_DEBUG(dbgs() << "Can't hoist: " << *I);
       return false;
     }
 
     // Don't speculate loads. Note that it may be possible and desirable to
     // speculate GOT or constant pool loads that are guaranteed not to trap,
     // but we don't support that for now.
-    if (MI.mayLoad()) {
-      LLVM_DEBUG(dbgs() << "Won't speculate load: " << MI);
+    if (I->mayLoad()) {
+      LLVM_DEBUG(dbgs() << "Won't speculate load: " << *I);
       return false;
     }
 
     // We never speculate stores, so an AA pointer isn't necessary.
     bool DontMoveAcrossStore = true;
-    if (!MI.isSafeToMove(nullptr, DontMoveAcrossStore)) {
-      LLVM_DEBUG(dbgs() << "Can't speculate: " << MI);
+    if (!I->isSafeToMove(nullptr, DontMoveAcrossStore)) {
+      LLVM_DEBUG(dbgs() << "Can't speculate: " << *I);
       return false;
     }
 
     // Check for any dependencies on Head instructions.
-    if (!InstrDependenciesAllowIfConv(&MI))
+    if (!InstrDependenciesAllowIfConv(&(*I)))
       return false;
   }
   return true;

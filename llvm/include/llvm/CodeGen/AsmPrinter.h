@@ -17,7 +17,6 @@
 
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/CodeGen/AsmPrinterHandler.h"
 #include "llvm/CodeGen/DwarfStringPoolEntry.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -42,6 +41,7 @@ class DIEAbbrev;
 class DwarfDebug;
 class GCMetadataPrinter;
 class GCStrategy;
+class GlobalIndirectSymbol;
 class GlobalObject;
 class GlobalValue;
 class GlobalVariable;
@@ -182,9 +182,6 @@ private:
   /// Emit comments in assembly output if this is true.
   bool VerboseAsm;
 
-  /// Output stream for the stack usage file (i.e., .su file).
-  std::unique_ptr<raw_fd_ostream> StackUsageStream;
-
   static char ID;
 
 protected:
@@ -231,9 +228,6 @@ public:
 
   /// Returns 4 for DWARF32 and 12 for DWARF64.
   unsigned int getUnitLengthFieldByteSize() const;
-
-  /// Returns information about the byte size of DW_FORM values.
-  dwarf::FormParams getDwarfFormParams() const;
 
   bool isPositionIndependent() const;
 
@@ -364,8 +358,6 @@ public:
 
   void emitStackSizeSection(const MachineFunction &MF);
 
-  void emitStackUsage(const MachineFunction &MF);
-
   void emitBBAddrMapSection(const MachineFunction &MF);
 
   void emitPseudoProbe(const MachineInstr &MI);
@@ -382,12 +374,6 @@ public:
   CFISection getModuleCFISectionType() const { return ModuleCFISection; }
 
   bool needsSEHMoves();
-
-  /// Since emitting CFI unwind information is entangled with supporting the
-  /// exceptions, this returns true for platforms which use CFI unwind
-  /// information for debugging purpose when
-  /// `MCAsmInfo::ExceptionsType == ExceptionHandling::None`.
-  bool needsCFIForDebug() const;
 
   /// Print to the current output stream assembly representations of the
   /// constants in the constant pool MCP. This is used to print out constants
@@ -435,8 +421,7 @@ public:
   /// global value is specified, and if that global has an explicit alignment
   /// requested, it will override the alignment request if required for
   /// correctness.
-  void emitAlignment(Align Alignment, const GlobalObject *GV = nullptr,
-                     unsigned MaxBytesToEmit = 0) const;
+  void emitAlignment(Align Alignment, const GlobalObject *GV = nullptr) const;
 
   /// Lower the specified LLVM Constant to an MCExpr.
   virtual const MCExpr *lowerConstant(const Constant *CV);
@@ -712,7 +697,7 @@ public:
   /// ${:comment}.  Targets can override this to add support for their own
   /// strange codes.
   virtual void PrintSpecial(const MachineInstr *MI, raw_ostream &OS,
-                            StringRef Code) const;
+                            const char *Code) const;
 
   /// Print the MachineOperand as a symbol. Targets with complex handling of
   /// symbol references should override the base implementation.
@@ -799,16 +784,11 @@ private:
   void emitModuleCommandLines(Module &M);
 
   GCMetadataPrinter *GetOrCreateGCPrinter(GCStrategy &S);
-  void emitGlobalAlias(Module &M, const GlobalAlias &GA);
-  void emitGlobalIFunc(Module &M, const GlobalIFunc &GI);
+  /// Emit GlobalAlias or GlobalIFunc.
+  void emitGlobalIndirectSymbol(Module &M, const GlobalIndirectSymbol &GIS);
 
   /// This method decides whether the specified basic block requires a label.
   bool shouldEmitLabelForBasicBlock(const MachineBasicBlock &MBB) const;
-
-protected:
-  virtual bool shouldEmitWeakSwiftAsyncExtendedFramePointerFlags() const {
-    return false;
-  }
 };
 
 } // end namespace llvm

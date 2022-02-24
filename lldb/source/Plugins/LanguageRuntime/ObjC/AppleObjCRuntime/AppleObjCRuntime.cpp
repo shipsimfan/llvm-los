@@ -31,7 +31,6 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Scalar.h"
 #include "lldb/Utility/Status.h"
@@ -49,7 +48,7 @@ LLDB_PLUGIN_DEFINE(AppleObjCRuntime)
 
 char AppleObjCRuntime::ID = 0;
 
-AppleObjCRuntime::~AppleObjCRuntime() = default;
+AppleObjCRuntime::~AppleObjCRuntime() {}
 
 AppleObjCRuntime::AppleObjCRuntime(Process *process)
     : ObjCLanguageRuntime(process), m_read_objc_library(false),
@@ -505,7 +504,7 @@ ValueObjectSP AppleObjCRuntime::GetExceptionObjectForThread(
 ///         GetBacktraceThreadFromException.
 LLVM_NODISCARD
 static ThreadSP FailExceptionParsing(llvm::StringRef msg) {
-  Log *log = GetLog(LLDBLog::Language);
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_LANGUAGE));
   LLDB_LOG(log, "Failed getting backtrace from exception: {0}", msg);
   return ThreadSP();
 }

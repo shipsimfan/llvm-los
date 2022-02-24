@@ -19,7 +19,9 @@ class MultipleHitsTestCase(TestBase):
     @skipIfwatchOS
     def test(self):
         self.build()
-        target = self.createTestTarget()
+        exe = self.getBuildArtifact("a.out")
+        target = self.dbg.CreateTarget(exe)
+        self.assertTrue(target and target.IsValid(), VALID_TARGET)
 
         bp = target.BreakpointCreateByName("main")
         self.assertTrue(bp and bp.IsValid(), "Breakpoint is valid")
@@ -43,7 +45,7 @@ class MultipleHitsTestCase(TestBase):
 
             error = lldb.SBError()
             watch = member.Watch(True, True, True, error)
-            self.assertSuccess(error)
+            self.assertTrue(error.Success())
 
         process.Continue();
         self.assertEqual(process.GetState(), lldb.eStateStopped)

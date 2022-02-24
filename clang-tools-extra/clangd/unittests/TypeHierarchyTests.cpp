@@ -35,22 +35,22 @@ using ::testing::Matcher;
 using ::testing::UnorderedElementsAre;
 
 // GMock helpers for matching TypeHierarchyItem.
-MATCHER_P(withName, N, "") { return arg.name == N; }
-MATCHER_P(withKind, Kind, "") { return arg.kind == Kind; }
-MATCHER_P(selectionRangeIs, R, "") { return arg.selectionRange == R; }
+MATCHER_P(WithName, N, "") { return arg.name == N; }
+MATCHER_P(WithKind, Kind, "") { return arg.kind == Kind; }
+MATCHER_P(SelectionRangeIs, R, "") { return arg.selectionRange == R; }
 template <class... ParentMatchers>
-::testing::Matcher<TypeHierarchyItem> parents(ParentMatchers... ParentsM) {
+::testing::Matcher<TypeHierarchyItem> Parents(ParentMatchers... ParentsM) {
   return Field(&TypeHierarchyItem::parents,
                HasValue(UnorderedElementsAre(ParentsM...)));
 }
 template <class... ChildMatchers>
-::testing::Matcher<TypeHierarchyItem> children(ChildMatchers... ChildrenM) {
+::testing::Matcher<TypeHierarchyItem> Children(ChildMatchers... ChildrenM) {
   return Field(&TypeHierarchyItem::children,
                HasValue(UnorderedElementsAre(ChildrenM...)));
 }
 // Note: "not resolved" is different from "resolved but empty"!
-MATCHER(parentsNotResolved, "") { return !arg.parents; }
-MATCHER(childrenNotResolved, "") { return !arg.children; }
+MATCHER(ParentsNotResolved, "") { return !arg.parents; }
+MATCHER(ChildrenNotResolved, "") { return !arg.children; }
 
 TEST(FindRecordTypeAt, TypeOrVariable) {
   Annotations Source(R"cpp(
@@ -206,7 +206,7 @@ struct Child : Parent {};
   EXPECT_THAT(typeParents(Child), ElementsAre(Parent));
 }
 
-MATCHER_P(implicitSpecOf, ClassTemplate, "") {
+MATCHER_P(ImplicitSpecOf, ClassTemplate, "") {
   const ClassTemplateSpecializationDecl *CTS =
       dyn_cast<ClassTemplateSpecializationDecl>(arg);
   return CTS &&
@@ -255,7 +255,7 @@ struct Child2 : Parent<int> {};
   const CXXRecordDecl *Child2 =
       dyn_cast<CXXRecordDecl>(&findDecl(AST, "Child2"));
 
-  EXPECT_THAT(typeParents(Child1), ElementsAre(implicitSpecOf(Parent)));
+  EXPECT_THAT(typeParents(Child1), ElementsAre(ImplicitSpecOf(Parent)));
   EXPECT_THAT(typeParents(Child2), ElementsAre(ParentSpec));
 }
 
@@ -371,16 +371,16 @@ int main() {
     EXPECT_THAT(
         *Result,
         AllOf(
-            withName("Child"), withKind(SymbolKind::Struct),
-            parents(AllOf(withName("Parent1"), withKind(SymbolKind::Struct),
-                          selectionRangeIs(Source.range("Parent1Def")),
-                          parents()),
-                    AllOf(withName("Parent3"), withKind(SymbolKind::Struct),
-                          selectionRangeIs(Source.range("Parent3Def")),
-                          parents(AllOf(
-                              withName("Parent2"), withKind(SymbolKind::Struct),
-                              selectionRangeIs(Source.range("Parent2Def")),
-                              parents()))))));
+            WithName("Child"), WithKind(SymbolKind::Struct),
+            Parents(AllOf(WithName("Parent1"), WithKind(SymbolKind::Struct),
+                          SelectionRangeIs(Source.range("Parent1Def")),
+                          Parents()),
+                    AllOf(WithName("Parent3"), WithKind(SymbolKind::Struct),
+                          SelectionRangeIs(Source.range("Parent3Def")),
+                          Parents(AllOf(
+                              WithName("Parent2"), WithKind(SymbolKind::Struct),
+                              SelectionRangeIs(Source.range("Parent2Def")),
+                              Parents()))))));
   }
 }
 
@@ -409,13 +409,13 @@ TEST(TypeHierarchy, RecursiveHierarchyUnbounded) {
   ASSERT_TRUE(bool(Result));
   EXPECT_THAT(
       *Result,
-      AllOf(withName("S<0>"), withKind(SymbolKind::Struct),
-            parents(
-                AllOf(withName("S"), withKind(SymbolKind::Struct),
-                      selectionRangeIs(Source.range("SDef")),
-                      parents(AllOf(withName("S"), withKind(SymbolKind::Struct),
-                                    selectionRangeIs(Source.range("SDef")),
-                                    parents()))))));
+      AllOf(WithName("S<0>"), WithKind(SymbolKind::Struct),
+            Parents(
+                AllOf(WithName("S"), WithKind(SymbolKind::Struct),
+                      SelectionRangeIs(Source.range("SDef")),
+                      Parents(AllOf(WithName("S"), WithKind(SymbolKind::Struct),
+                                    SelectionRangeIs(Source.range("SDef")),
+                                    Parents()))))));
 }
 
 TEST(TypeHierarchy, RecursiveHierarchyBounded) {
@@ -443,20 +443,20 @@ TEST(TypeHierarchy, RecursiveHierarchyBounded) {
   ASSERT_TRUE(bool(Result));
   EXPECT_THAT(
       *Result,
-      AllOf(withName("S<2>"), withKind(SymbolKind::Struct),
-            parents(AllOf(
-                withName("S<1>"), withKind(SymbolKind::Struct),
-                selectionRangeIs(Source.range("SDef")),
-                parents(AllOf(withName("S<0>"), withKind(SymbolKind::Struct),
-                              parents()))))));
+      AllOf(WithName("S<2>"), WithKind(SymbolKind::Struct),
+            Parents(AllOf(
+                WithName("S<1>"), WithKind(SymbolKind::Struct),
+                SelectionRangeIs(Source.range("SDef")),
+                Parents(AllOf(WithName("S<0>"), WithKind(SymbolKind::Struct),
+                              Parents()))))));
   Result = getTypeHierarchy(AST, Source.point("SRefDependent"), 0,
                             TypeHierarchyDirection::Parents);
   ASSERT_TRUE(bool(Result));
   EXPECT_THAT(
       *Result,
-      AllOf(withName("S"), withKind(SymbolKind::Struct),
-            parents(AllOf(withName("S"), withKind(SymbolKind::Struct),
-                          selectionRangeIs(Source.range("SDef")), parents()))));
+      AllOf(WithName("S"), WithKind(SymbolKind::Struct),
+            Parents(AllOf(WithName("S"), WithKind(SymbolKind::Struct),
+                          SelectionRangeIs(Source.range("SDef")), Parents()))));
 }
 
 TEST(TypeHierarchy, DeriveFromImplicitSpec) {
@@ -480,11 +480,11 @@ TEST(TypeHierarchy, DeriveFromImplicitSpec) {
       testPath(TU.Filename));
   ASSERT_TRUE(bool(Result));
   EXPECT_THAT(*Result,
-              AllOf(withName("Parent"), withKind(SymbolKind::Struct),
-                    children(AllOf(withName("Child1"),
-                                   withKind(SymbolKind::Struct), children()),
-                             AllOf(withName("Child2"),
-                                   withKind(SymbolKind::Struct), children()))));
+              AllOf(WithName("Parent"), WithKind(SymbolKind::Struct),
+                    Children(AllOf(WithName("Child1"),
+                                   WithKind(SymbolKind::Struct), Children()),
+                             AllOf(WithName("Child2"),
+                                   WithKind(SymbolKind::Struct), Children()))));
 }
 
 TEST(TypeHierarchy, DeriveFromPartialSpec) {
@@ -505,8 +505,8 @@ TEST(TypeHierarchy, DeriveFromPartialSpec) {
       AST, Source.points()[0], 2, TypeHierarchyDirection::Children, Index.get(),
       testPath(TU.Filename));
   ASSERT_TRUE(bool(Result));
-  EXPECT_THAT(*Result, AllOf(withName("Parent"), withKind(SymbolKind::Struct),
-                             children()));
+  EXPECT_THAT(*Result, AllOf(WithName("Parent"), WithKind(SymbolKind::Struct),
+                             Children()));
 }
 
 TEST(TypeHierarchy, DeriveFromTemplate) {
@@ -532,9 +532,9 @@ TEST(TypeHierarchy, DeriveFromTemplate) {
       testPath(TU.Filename));
   ASSERT_TRUE(bool(Result));
   EXPECT_THAT(*Result,
-              AllOf(withName("Parent"), withKind(SymbolKind::Struct),
-                    children(AllOf(withName("Child"),
-                                   withKind(SymbolKind::Struct), children()))));
+              AllOf(WithName("Parent"), WithKind(SymbolKind::Struct),
+                    Children(AllOf(WithName("Child"),
+                                   WithKind(SymbolKind::Struct), Children()))));
 }
 
 TEST(TypeHierarchy, Preamble) {
@@ -558,10 +558,10 @@ struct [[Parent]] {
   ASSERT_TRUE(Result);
   EXPECT_THAT(
       *Result,
-      AllOf(withName("Child"),
-            parents(AllOf(withName("Parent"),
-                          selectionRangeIs(HeaderInPreambleAnnotations.range()),
-                          parents()))));
+      AllOf(WithName("Child"),
+            Parents(AllOf(WithName("Parent"),
+                          SelectionRangeIs(HeaderInPreambleAnnotations.range()),
+                          Parents()))));
 }
 
 SymbolID findSymbolIDByName(SymbolIndex *Index, llvm::StringRef Name,
@@ -734,22 +734,22 @@ struct Child2b : Child1 {};
   ASSERT_TRUE(bool(Result));
   EXPECT_THAT(
       *Result,
-      AllOf(withName("Parent"), withKind(SymbolKind::Struct),
-            parentsNotResolved(),
-            children(AllOf(withName("Child1"), withKind(SymbolKind::Struct),
-                           parentsNotResolved(), childrenNotResolved()))));
+      AllOf(WithName("Parent"), WithKind(SymbolKind::Struct),
+            ParentsNotResolved(),
+            Children(AllOf(WithName("Child1"), WithKind(SymbolKind::Struct),
+                           ParentsNotResolved(), ChildrenNotResolved()))));
 
   resolveTypeHierarchy((*Result->children)[0], /*ResolveLevels=*/1,
                        TypeHierarchyDirection::Children, Index.get());
 
   EXPECT_THAT(
       (*Result->children)[0],
-      AllOf(withName("Child1"), withKind(SymbolKind::Struct),
-            parentsNotResolved(),
-            children(AllOf(withName("Child2a"), withKind(SymbolKind::Struct),
-                           parentsNotResolved(), childrenNotResolved()),
-                     AllOf(withName("Child2b"), withKind(SymbolKind::Struct),
-                           parentsNotResolved(), childrenNotResolved()))));
+      AllOf(WithName("Child1"), WithKind(SymbolKind::Struct),
+            ParentsNotResolved(),
+            Children(AllOf(WithName("Child2a"), WithKind(SymbolKind::Struct),
+                           ParentsNotResolved(), ChildrenNotResolved()),
+                     AllOf(WithName("Child2b"), WithKind(SymbolKind::Struct),
+                           ParentsNotResolved(), ChildrenNotResolved()))));
 }
 
 } // namespace

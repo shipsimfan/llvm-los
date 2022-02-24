@@ -29,16 +29,15 @@ static IntegerType parseStorageType(DialectAsmParser &parser, bool &isSigned) {
   // Parse storage type (alpha_ident, integer_literal).
   StringRef identifier;
   unsigned storageTypeWidth = 0;
-  OptionalParseResult result = parser.parseOptionalType(type);
-  if (result.hasValue()) {
-    if (!succeeded(*result)) {
-      parser.parseType(type);
+  if (failed(parser.parseOptionalKeyword(&identifier))) {
+    // If we didn't parse a keyword, this must be a signed type.
+    if (parser.parseType(type))
       return nullptr;
-    }
-    isSigned = !type.isUnsigned();
+    isSigned = true;
     storageTypeWidth = type.getWidth();
-  } else if (succeeded(parser.parseKeyword(&identifier))) {
+
     // Otherwise, this must be an unsigned integer (`u` integer-literal).
+  } else {
     if (!identifier.consume_front("u")) {
       parser.emitError(typeLoc, "illegal storage type prefix");
       return nullptr;
@@ -49,8 +48,6 @@ static IntegerType parseStorageType(DialectAsmParser &parser, bool &isSigned) {
     }
     isSigned = false;
     type = parser.getBuilder().getIntegerType(storageTypeWidth);
-  } else {
-    return nullptr;
   }
 
   if (storageTypeWidth == 0 ||
@@ -78,7 +75,7 @@ static ParseResult parseStorageRange(DialectAsmParser &parser,
   }
 
   // Explicit storage min and storage max.
-  SMLoc minLoc = parser.getCurrentLocation(), maxLoc;
+  llvm::SMLoc minLoc = parser.getCurrentLocation(), maxLoc;
   if (parser.parseInteger(storageTypeMin) || parser.parseColon() ||
       parser.getCurrentLocation(&maxLoc) ||
       parser.parseInteger(storageTypeMax) || parser.parseGreater())
@@ -252,7 +249,7 @@ static Type parseUniformType(DialectAsmParser &parser) {
   }
 
   // Parse scales/zeroPoints.
-  SMLoc scaleZPLoc = parser.getCurrentLocation();
+  llvm::SMLoc scaleZPLoc = parser.getCurrentLocation();
   do {
     scales.resize(scales.size() + 1);
     zeroPoints.resize(zeroPoints.size() + 1);

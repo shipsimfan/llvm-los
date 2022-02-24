@@ -1,5 +1,6 @@
 # This tests that the reproducer can deal with relative files. We create a
-# binary in a subdirectory and pass its relative path to LLDB.
+# binary in a subdirectory and pass its relative path to LLDB. The subdirectory
+# is removed before replay so that it only exists in the reproducer's VFS.
 
 # RUN: echo "CHECK: %t" > %t.check
 
@@ -13,6 +14,7 @@
 # RUN: rm -rf %t/binary
 
 # RUN: cat %t.repro/cwd.txt | FileCheck %t.check
+# RUN: %lldb --replay %t.repro | FileCheck %t.check
 
 # Make sure the current working directory is recorded even when it's not
 # referenced.

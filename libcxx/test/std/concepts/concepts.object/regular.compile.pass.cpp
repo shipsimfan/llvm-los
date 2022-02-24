@@ -161,7 +161,7 @@ static_assert(!std::regular<const_copy_assignment const>);
 static_assert(!std::regular<cv_copy_assignment const volatile>);
 
 struct is_equality_comparable {
-  bool operator==(is_equality_comparable const&) const = default;
+  [[nodiscard]] bool operator==(is_equality_comparable const&) const = default;
 };
 static_assert(std::regular<is_equality_comparable>);
 

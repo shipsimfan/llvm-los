@@ -208,9 +208,11 @@ public:
 
       bool Changed = false;
 
-      for (MachineBasicBlock &B : llvm::make_early_inc_range(MF))
+      for (MachineFunction::iterator I = MF.begin(); I != MF.end();) {
+        MachineBasicBlock &B = *I++;
         if (processBlock(B))
           Changed = true;
+      }
 
       return Changed;
     }

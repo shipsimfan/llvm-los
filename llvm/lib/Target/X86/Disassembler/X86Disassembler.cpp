@@ -83,9 +83,9 @@
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -149,12 +149,6 @@ static InstrUID decode(OpcodeType type, InstructionContext insnContext,
   case THREEDNOW_MAP:
     dec =
         &THREEDNOW_MAP_SYM.opcodeDecisions[insnContext].modRMDecisions[opcode];
-    break;
-  case MAP5:
-    dec = &MAP5_SYM.opcodeDecisions[insnContext].modRMDecisions[opcode];
-    break;
-  case MAP6:
-    dec = &MAP6_SYM.opcodeDecisions[insnContext].modRMDecisions[opcode];
     break;
   }
 
@@ -338,7 +332,7 @@ static int readPrefixes(struct InternalInstruction *insn) {
     }
 
     if ((insn->mode == MODE_64BIT || (byte1 & 0xc0) == 0xc0) &&
-        ((~byte1 & 0x8) == 0x8) && ((byte2 & 0x4) == 0x4)) {
+        ((~byte1 & 0xc) == 0xc) && ((byte2 & 0x4) == 0x4)) {
       insn->vectorExtensionType = TYPE_EVEX;
     } else {
       --insn->readerCursor; // unconsume byte1
@@ -806,6 +800,10 @@ static int readModRM(struct InternalInstruction *insn) {
       return prefix##_DR0 + index;                                             \
     case TYPE_CONTROLREG:                                                      \
       return prefix##_CR0 + index;                                             \
+    case TYPE_BNDR:                                                            \
+      if (index > 3)                                                           \
+        *valid = 0;                                                            \
+      return prefix##_BND0 + index;                                            \
     case TYPE_MVSIBX:                                                          \
       return prefix##_XMM0 + index;                                            \
     case TYPE_MVSIBY:                                                          \
@@ -878,11 +876,11 @@ static bool readOpcode(struct InternalInstruction *insn) {
 
   insn->opcodeType = ONEBYTE;
   if (insn->vectorExtensionType == TYPE_EVEX) {
-    switch (mmmFromEVEX2of4(insn->vectorExtensionPrefix[1])) {
+    switch (mmFromEVEX2of4(insn->vectorExtensionPrefix[1])) {
     default:
       LLVM_DEBUG(
-          dbgs() << format("Unhandled mmm field for instruction (0x%hhx)",
-                           mmmFromEVEX2of4(insn->vectorExtensionPrefix[1])));
+          dbgs() << format("Unhandled mm field for instruction (0x%hhx)",
+                           mmFromEVEX2of4(insn->vectorExtensionPrefix[1])));
       return true;
     case VEX_LOB_0F:
       insn->opcodeType = TWOBYTE;
@@ -892,12 +890,6 @@ static bool readOpcode(struct InternalInstruction *insn) {
       return consume(insn, insn->opcode);
     case VEX_LOB_0F3A:
       insn->opcodeType = THREEBYTE_3A;
-      return consume(insn, insn->opcode);
-    case VEX_LOB_MAP5:
-      insn->opcodeType = MAP5;
-      return consume(insn, insn->opcode);
-    case VEX_LOB_MAP6:
-      insn->opcodeType = MAP6;
       return consume(insn, insn->opcode);
     }
   } else if (insn->vectorExtensionType == TYPE_VEX_3B) {
@@ -915,12 +907,6 @@ static bool readOpcode(struct InternalInstruction *insn) {
       return consume(insn, insn->opcode);
     case VEX_LOB_0F3A:
       insn->opcodeType = THREEBYTE_3A;
-      return consume(insn, insn->opcode);
-    case VEX_LOB_MAP5:
-      insn->opcodeType = MAP5;
-      return consume(insn, insn->opcode);
-    case VEX_LOB_MAP6:
-      insn->opcodeType = MAP6;
       return consume(insn, insn->opcode);
     }
   } else if (insn->vectorExtensionType == TYPE_VEX_2B) {
@@ -1057,12 +1043,6 @@ static int getInstructionIDWithAttrMask(uint16_t *instructionID,
   case THREEDNOW_MAP:
     decision = &THREEDNOW_MAP_SYM;
     break;
-  case MAP5:
-    decision = &MAP5_SYM;
-    break;
-  case MAP6:
-    decision = &MAP6_SYM;
-    break;
   }
 
   if (decision->opcodeDecisions[insnCtx]
@@ -1139,8 +1119,6 @@ static int getInstructionID(struct InternalInstruction *insn,
       switch (ppFromVEX2of2(insn->vectorExtensionPrefix[1])) {
       case VEX_PREFIX_66:
         attrMask |= ATTR_OPSIZE;
-        if (insn->hasAdSize)
-          attrMask |= ATTR_ADSIZE;
         break;
       case VEX_PREFIX_F3:
         attrMask |= ATTR_XS;
@@ -1197,8 +1175,6 @@ static int getInstructionID(struct InternalInstruction *insn,
     case 0x66:
       if (insn->mode != MODE_16BIT)
         attrMask |= ATTR_OPSIZE;
-      if (insn->hasAdSize)
-        attrMask |= ATTR_ADSIZE;
       break;
     case 0x67:
       attrMask |= ATTR_ADSIZE;

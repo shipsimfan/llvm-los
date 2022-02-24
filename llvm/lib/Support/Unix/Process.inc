@@ -460,5 +460,3 @@ unsigned llvm::sys::Process::GetRandomNumber() {
   return ::rand();
 #endif
 }
-
-[[noreturn]] void Process::ExitNoCleanup(int RetCode) { _Exit(RetCode); }

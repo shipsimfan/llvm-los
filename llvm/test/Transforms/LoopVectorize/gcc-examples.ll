@@ -367,11 +367,10 @@ define void @example11() nounwind uwtable ssp {
 }
 
 ;CHECK-LABEL: @example12(
-;CHECK: vector.body:
-;CHECK: [[VEC_IV_TRUNC:%.+]] = phi <4 x i32>
-;CHECK: store <4 x i32> [[VEC_IV_TRUNC]]
+;CHECK: %vec.ind1 = phi <4 x i32>
+;CHECK: store <4 x i32>
 ;CHECK: ret void
-define void @example12() {
+define void @example12() nounwind uwtable ssp {
   br label %1
 
 ; <label>:1                                       ; preds = %1, %0

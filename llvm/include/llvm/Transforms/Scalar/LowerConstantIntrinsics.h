@@ -23,7 +23,7 @@ namespace llvm {
 struct LowerConstantIntrinsicsPass :
     PassInfoMixin<LowerConstantIntrinsicsPass> {
 public:
-  explicit LowerConstantIntrinsicsPass() = default;
+  explicit LowerConstantIntrinsicsPass() {}
 
   /// Run the pass over the function.
   ///

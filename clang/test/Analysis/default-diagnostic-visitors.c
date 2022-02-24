@@ -2,7 +2,7 @@
 
 // This file is for testing enhanced diagnostics produced by the default BugReporterVisitors.
 
-int getPasswordAndItem(void)
+int getPasswordAndItem()
 {
   int err = 0;
   int *password; // expected-note {{'password' declared without an initial value}}

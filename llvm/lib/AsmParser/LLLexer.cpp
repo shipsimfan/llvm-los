@@ -543,6 +543,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(triple);
   KEYWORD(source_filename);
   KEYWORD(unwind);
+  KEYWORD(deplibs);             // FIXME: Remove in 4.0.
   KEYWORD(datalayout);
   KEYWORD(volatile);
   KEYWORD(atomic);
@@ -608,7 +609,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(x86_regcallcc);
   KEYWORD(webkit_jscc);
   KEYWORD(swiftcc);
-  KEYWORD(swifttailcc);
   KEYWORD(anyregcc);
   KEYWORD(preserve_mostcc);
   KEYWORD(preserve_allcc);
@@ -643,8 +643,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(convergent);
   KEYWORD(dereferenceable);
   KEYWORD(dereferenceable_or_null);
-  KEYWORD(disable_sanitizer_instrumentation);
-  KEYWORD(elementtype);
   KEYWORD(inaccessiblememonly);
   KEYWORD(inaccessiblemem_or_argmemonly);
   KEYWORD(inlinehint);
@@ -672,7 +670,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(nocf_check);
   KEYWORD(noundef);
   KEYWORD(nounwind);
-  KEYWORD(nosanitize_coverage);
   KEYWORD(null_pointer_is_valid);
   KEYWORD(optforfuzzing);
   KEYWORD(optnone);
@@ -699,7 +696,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(speculative_load_hardening);
   KEYWORD(swifterror);
   KEYWORD(swiftself);
-  KEYWORD(swiftasync);
   KEYWORD(uwtable);
   KEYWORD(vscale_range);
   KEYWORD(willreturn);
@@ -708,8 +704,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(immarg);
   KEYWORD(byref);
   KEYWORD(mustprogress);
-  KEYWORD(sync);
-  KEYWORD(async);
 
   KEYWORD(type);
   KEYWORD(opaque);
@@ -720,7 +714,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(any);
   KEYWORD(exactmatch);
   KEYWORD(largest);
-  KEYWORD(nodeduplicate);
+  KEYWORD(noduplicates);
   KEYWORD(samesize);
 
   KEYWORD(eq); KEYWORD(ne); KEYWORD(slt); KEYWORD(sgt); KEYWORD(sle);
@@ -735,7 +729,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(x);
   KEYWORD(blockaddress);
   KEYWORD(dso_local_equivalent);
-  KEYWORD(no_cfi);
 
   // Metadata types.
   KEYWORD(distinct);
@@ -773,10 +766,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(returnDoesNotAlias);
   KEYWORD(noInline);
   KEYWORD(alwaysInline);
-  KEYWORD(noUnwind);
-  KEYWORD(mayThrow);
-  KEYWORD(hasUnknownCall);
-  KEYWORD(mustBeUnreachable);
   KEYWORD(calls);
   KEYWORD(callee);
   KEYWORD(params);
@@ -856,15 +845,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   TYPEKEYWORD("x86_mmx",   Type::getX86_MMXTy(Context));
   TYPEKEYWORD("x86_amx",   Type::getX86_AMXTy(Context));
   TYPEKEYWORD("token",     Type::getTokenTy(Context));
-
-  if (Keyword == "ptr") {
-    if (Context.supportsTypedPointers()) {
-      Warning("ptr type is only supported in -opaque-pointers mode");
-      return lltok::Error;
-    }
-    TyVal = PointerType::getUnqual(Context);
-    return lltok::Type;
-  }
 
 #undef TYPEKEYWORD
 

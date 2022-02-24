@@ -28,6 +28,7 @@ namespace llvm {
 class CodeGenTarget;
 class CodeGenSchedModels;
 class CodeGenInstruction;
+class CodeGenRegisterClass;
 
 using RecVec = std::vector<Record*>;
 using RecIter = std::vector<Record*>::const_iterator;

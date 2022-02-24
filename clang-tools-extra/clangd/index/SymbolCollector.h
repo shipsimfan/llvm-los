@@ -5,8 +5,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-#ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_SYMBOLCOLLECTOR_H
-#define LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_SYMBOLCOLLECTOR_H
+#ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_SYMBOL_COLLECTOR_H
+#define LLVM_CLANG_TOOLS_EXTRA_CLANGD_INDEX_SYMBOL_COLLECTOR_H
 
 #include "CanonicalIncludes.h"
 #include "CollectMacros.h"
@@ -81,9 +81,6 @@ public:
     bool CollectMainFileSymbols = true;
     /// Collect references to main-file symbols.
     bool CollectMainFileRefs = false;
-    /// Collect symbols with reserved names, like __Vector_base.
-    /// This does not currently affect macros (many like _WIN32 are important!)
-    bool CollectReserved = false;
     /// If set to true, SymbolCollector will collect doc for all symbols.
     /// Note that documents of symbols being indexed for completion will always
     /// be collected regardless of this option.
@@ -103,9 +100,8 @@ public:
   void initialize(ASTContext &Ctx) override;
 
   void setPreprocessor(std::shared_ptr<Preprocessor> PP) override {
-    this->PP = PP.get();
+    this->PP = std::move(PP);
   }
-  void setPreprocessor(Preprocessor &PP) { this->PP = &PP; }
 
   bool
   handleDeclOccurrence(const Decl *D, index::SymbolRoleSet Roles,
@@ -157,7 +153,7 @@ private:
   // All relations collected from the AST.
   RelationSlab::Builder Relations;
   ASTContext *ASTCtx;
-  Preprocessor *PP = nullptr;
+  std::shared_ptr<Preprocessor> PP;
   std::shared_ptr<GlobalCodeCompletionAllocator> CompletionAllocator;
   std::unique_ptr<CodeCompletionTUInfo> CompletionTUInfo;
   Options Opts;

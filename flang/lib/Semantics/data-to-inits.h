@@ -17,7 +17,6 @@
 
 namespace Fortran::parser {
 struct DataStmtSet;
-struct DataStmtValue;
 }
 namespace Fortran::evaluate {
 class ExpressionAnalyzer;
@@ -29,9 +28,8 @@ class Symbol;
 struct SymbolDataInitialization {
   using Range = common::Interval<common::ConstantSubscript>;
   explicit SymbolDataInitialization(std::size_t bytes) : image{bytes} {}
-  SymbolDataInitialization(SymbolDataInitialization &&) = default;
   evaluate::InitialImage image;
-  std::list<Range> initializedRanges;
+  std::list<Range> inits;
 };
 
 using DataInitializations = std::map<const Symbol *, SymbolDataInitialization>;
@@ -40,11 +38,6 @@ using DataInitializations = std::map<const Symbol *, SymbolDataInitialization>;
 // compatibility.
 void AccumulateDataInitializations(DataInitializations &,
     evaluate::ExpressionAnalyzer &, const parser::DataStmtSet &);
-
-// For legacy DATA-style initialization extension: integer n(2)/1,2/
-void AccumulateDataInitializations(DataInitializations &,
-    evaluate::ExpressionAnalyzer &, const Symbol &,
-    const std::list<common::Indirection<parser::DataStmtValue>> &);
 
 void ConvertToInitializers(
     DataInitializations &, evaluate::ExpressionAnalyzer &);

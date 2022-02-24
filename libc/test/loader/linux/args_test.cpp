@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "loader_test.h"
+#undef NDEBUG
+#include "src/assert/assert.h"
 
 static bool my_streq(const char *lhs, const char *rhs) {
   const char *l, *r;
@@ -18,10 +19,10 @@ static bool my_streq(const char *lhs, const char *rhs) {
 }
 
 int main(int argc, char **argv, char **envp) {
-  ASSERT_TRUE(argc == 4);
-  ASSERT_TRUE(my_streq(argv[1], "1"));
-  ASSERT_TRUE(my_streq(argv[2], "2"));
-  ASSERT_TRUE(my_streq(argv[3], "3"));
+  assert(argc == 4 && "Unexpected argc.");
+  assert(my_streq(argv[1], "1") && "Unexpected argv[1].");
+  assert(my_streq(argv[2], "2") && "Unexpected argv[2].");
+  assert(my_streq(argv[3], "3") && "Unexpected argv[3].");
 
   bool found_france = false;
   bool found_germany = false;
@@ -32,7 +33,8 @@ int main(int argc, char **argv, char **envp) {
       found_germany = true;
   }
 
-  ASSERT_TRUE(found_france && found_germany);
+  assert(found_france && found_germany &&
+         "Did not find whats expected in envp.");
 
   return 0;
 }

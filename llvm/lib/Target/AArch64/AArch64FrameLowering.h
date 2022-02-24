@@ -26,8 +26,9 @@ public:
       : TargetFrameLowering(StackGrowsDown, Align(16), 0, Align(16),
                             true /*StackRealignable*/) {}
 
-  void emitCalleeSavedFrameMoves(MachineBasicBlock &MBB,
-                                 MachineBasicBlock::iterator MBBI) const;
+  void
+  emitCalleeSavedFrameMoves(MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator MBBI) const override;
 
   MachineBasicBlock::iterator
   eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
@@ -66,11 +67,10 @@ public:
   bool hasFP(const MachineFunction &MF) const override;
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
 
-  bool assignCalleeSavedSpillSlots(MachineFunction &MF,
-                                   const TargetRegisterInfo *TRI,
-                                   std::vector<CalleeSavedInfo> &CSI,
-                                   unsigned &MinCSFrameIndex,
-                                   unsigned &MaxCSFrameIndex) const override;
+  bool
+  assignCalleeSavedSpillSlots(MachineFunction &MF,
+                              const TargetRegisterInfo *TRI,
+                              std::vector<CalleeSavedInfo> &CSI) const override;
 
   void determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
                             RegScavenger *RS) const override;
@@ -84,7 +84,7 @@ public:
   TargetStackID::Value getStackIDForScalableVectors() const override;
 
   void processFunctionBeforeFrameFinalized(MachineFunction &MF,
-                                           RegScavenger *RS) const override;
+                                             RegScavenger *RS) const override;
 
   void
   processFunctionBeforeFrameIndicesReplaced(MachineFunction &MF,

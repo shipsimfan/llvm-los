@@ -236,7 +236,7 @@ std::string DeclarationName::getAsString() const {
   std::string Result;
   llvm::raw_string_ostream OS(Result);
   OS << *this;
-  return Result;
+  return OS.str();
 }
 
 void *DeclarationName::getFETokenInfoSlow() const {
@@ -460,7 +460,7 @@ std::string DeclarationNameInfo::getAsString() const {
   std::string Result;
   llvm::raw_string_ostream OS(Result);
   OS << *this;
-  return Result;
+  return OS.str();
 }
 
 raw_ostream &clang::operator<<(raw_ostream &OS, DeclarationNameInfo DNInfo) {

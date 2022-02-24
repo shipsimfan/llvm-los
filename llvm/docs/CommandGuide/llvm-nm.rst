@@ -126,26 +126,11 @@ OPTIONS
 
  Use BSD output format. Alias for ``--format=bsd``.
 
-.. option:: -X
-
- Specify the type of XCOFF object file, ELF object file, or IR object file input
- from command line or from archive files that llvm-nm should examine. The
- mode must be one of the following:
- 
-   32
-         Process only 32-bit object files.
-   64
-         Process only 64-bit object files.
-   32_64
-         Process both 32-bit and 64-bit object files.
-   any
-         Process all the supported object files.
-
 .. option:: --debug-syms, -a
 
  Show all symbols, even those usually suppressed.
 
-.. option:: --defined-only
+.. option:: --defined-only, -U
 
  Print only symbols defined in this file.
 
@@ -156,11 +141,6 @@ OPTIONS
 .. option:: --dynamic, -D
 
  Display dynamic symbols instead of normal symbols.
-
-.. option:: --export-symbols
-
- Print sorted symbols with their visibility (if applicable), with duplicates
- removed.
 
 .. option:: --extern-only, -g
 
@@ -177,7 +157,11 @@ OPTIONS
 
  Print a summary of command-line options and their meanings.
 
-.. option:: -j
+.. option:: --help-list
+
+ Print an uncategorized summary of command-line options and their meanings.
+
+.. option:: --just-symbol-name, -j
 
  Print just the symbol names. Alias for `--format=just-symbols``.
 
@@ -197,7 +181,7 @@ OPTIONS
 
  Show symbols in the order encountered.
 
-.. option:: --no-weak
+.. option:: --no-weak, -W
 
  Don't print weak symbols.
 
@@ -209,7 +193,7 @@ OPTIONS
 
  Use POSIX.2 output format.  Alias for ``--format=posix``.
 
-.. option:: --print-armap
+.. option:: --print-armap, -M
 
  Print the archive symbol table, in addition to the symbols.
 
@@ -246,10 +230,14 @@ OPTIONS
 
  Print only undefined symbols.
 
-.. option:: --version, -V
+.. option:: --version
 
- Display the version of the :program:`llvm-nm` executable, then exit. Does not
- stack with other commands.
+ Display the version of the :program:`llvm-nm` executable. Does not stack with
+ other commands.
+
+.. option:: --without-aliases
+
+ Exclude aliases from the output.
 
 .. option:: @<FILE>
 
@@ -279,20 +267,13 @@ MACH-O SPECIFIC OPTIONS
 
  Do not add any symbols from the dyldinfo.
 
-.. option:: -s <segment> <section>
+.. option:: -s=<segment section>
 
  Dump only symbols from this segment and section name.
 
 .. option:: -x
 
  Print symbol entry in hex.
-
-XCOFF SPECIFIC OPTIONS
-----------------------
-
-.. option:: --no-rsrc
-
-  Exclude resource file symbols (``__rsrc``) from export symbol list.
 
 BUGS
 ----

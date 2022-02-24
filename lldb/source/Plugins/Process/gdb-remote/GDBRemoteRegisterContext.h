@@ -11,7 +11,7 @@
 
 #include <vector>
 
-#include "lldb/Target/DynamicRegisterInfo.h"
+#include "Plugins/Process/Utility/DynamicRegisterInfo.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Utility/ConstString.h"
 #include "lldb/Utility/DataExtractor.h"
@@ -38,6 +38,7 @@ public:
 
   ~GDBRemoteDynamicRegisterInfo() override = default;
 
+  void HardcodeARMRegisters(bool from_scratch);
   bool UpdateARM64SVERegistersInfos(uint64_t vg);
 };
 
@@ -82,7 +83,7 @@ public:
 protected:
   friend class ThreadGDBRemote;
 
-  bool ReadRegisterBytes(const RegisterInfo *reg_info);
+  bool ReadRegisterBytes(const RegisterInfo *reg_info, DataExtractor &data);
 
   bool WriteRegisterBytes(const RegisterInfo *reg_info, DataExtractor &data,
                           uint32_t data_offset);

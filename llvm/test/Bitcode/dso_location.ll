@@ -27,8 +27,8 @@
 @preemptable_alias = dso_preemptable alias i32, i32* @hidden_local_global
 ; CHECK-DAG: @preemptable_alias = alias i32, i32* @hidden_local_global
 
-@preemptable_ifunc = dso_preemptable ifunc void (), void ()* ()* @ifunc_resolver
-; CHECK-DAG: @preemptable_ifunc = ifunc void (), void ()* ()* @ifunc_resolver
+@preemptable_ifunc = dso_preemptable ifunc void (), i8* ()* @ifunc_resolver
+; CHECK-DAG: @preemptable_ifunc = ifunc void (), i8* ()* @ifunc_resolver
 declare dso_local default void @default_local()
 ; CHECK: declare dso_local void @default_local()
 
@@ -41,7 +41,7 @@ entry:
   ret void
 }
 
-define void ()* @ifunc_resolver() {
+define i8* @ifunc_resolver() {
 entry:
-  ret void ()* null
+  ret i8* null
 }

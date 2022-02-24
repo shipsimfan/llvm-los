@@ -234,8 +234,7 @@ void ExpandModularHeadersPPCallbacks::PragmaOpenCLExtension(
   parseToLocation(NameLoc);
 }
 void ExpandModularHeadersPPCallbacks::PragmaWarning(SourceLocation Loc,
-                                                    PragmaWarningSpecifier,
-                                                    ArrayRef<int>) {
+                                                    StringRef, ArrayRef<int>) {
   parseToLocation(Loc);
 }
 void ExpandModularHeadersPPCallbacks::PragmaWarningPush(SourceLocation Loc,

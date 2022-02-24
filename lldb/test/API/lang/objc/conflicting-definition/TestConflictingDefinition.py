@@ -31,7 +31,8 @@ class TestRealDefinition(TestBase):
                     substrs=['stopped',
                              'stop reason = breakpoint'])
 
-        lldbutil.check_breakpoint(self, bpno = 1, expected_hit_count = 1)
+        self.expect("breakpoint list -f", BREAKPOINT_HIT_ONCE,
+                    substrs=[' resolved, hit count = 1'])
 
         # This should display correctly.
         self.expect(

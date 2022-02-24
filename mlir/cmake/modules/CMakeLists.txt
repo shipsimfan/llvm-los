@@ -1,7 +1,3 @@
-include(ExtendPath)
-include(LLVMDistributionSupport)
-include(FindPrefixFromConfig)
-
 # Generate a list of CMake library targets so that other CMake projects can
 # link against them. LLVM calls its version of this file LLVMExports.cmake, but
 # the usual CMake convention seems to be ${Project}Targets.cmake.
@@ -23,20 +19,18 @@ get_property(MLIR_TRANSLATION_LIBS GLOBAL PROPERTY MLIR_TRANSLATION_LIBS)
 # Generate MlirConfig.cmake for the build tree.
 set(MLIR_CONFIG_CMAKE_DIR "${mlir_cmake_builddir}")
 set(MLIR_CONFIG_LLVM_CMAKE_DIR "${llvm_cmake_builddir}")
-set(MLIR_CONFIG_INCLUDE_EXPORTS "include(\"\${MLIR_CMAKE_DIR}/MLIRTargets.cmake\")")
+set(MLIR_CONFIG_EXPORTS_FILE "\${MLIR_CMAKE_DIR}/MLIRTargets.cmake")
 set(MLIR_CONFIG_INCLUDE_DIRS
   "${MLIR_SOURCE_DIR}/include"
   "${MLIR_BINARY_DIR}/include"
   )
-# Refer to the best host mlir-tbgen, which might be a host-optimized version
-set(MLIR_CONFIG_TABLEGEN_EXE "${MLIR_TABLEGEN_EXE}")
-
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/MLIRConfig.cmake.in
   ${mlir_cmake_builddir}/MLIRConfig.cmake
   @ONLY)
 set(MLIR_CONFIG_CMAKE_DIR)
 set(MLIR_CONFIG_LLVM_CMAKE_DIR)
+set(MLIR_CONFIG_EXPORTS_FILE)
 set(MLIR_CONFIG_INCLUDE_DIRS)
 
 # For compatibility with projects that include(MLIRConfig)
@@ -49,18 +43,22 @@ file(COPY .
   )
 
 # Generate MLIRConfig.cmake for the install tree.
-find_prefix_from_config(MLIR_CONFIG_CODE MLIR_INSTALL_PREFIX "${MLIR_INSTALL_PACKAGE_DIR}")
+set(MLIR_CONFIG_CODE "
+# Compute the installation prefix from this MLIRConfig.cmake file location.
+get_filename_component(MLIR_INSTALL_PREFIX \"\${CMAKE_CURRENT_LIST_FILE}\" PATH)")
+# Construct the proper number of get_filename_component(... PATH)
+# calls to compute the installation prefix.
+string(REGEX REPLACE "/" ";" _count "${MLIR_INSTALL_PACKAGE_DIR}")
+foreach(p ${_count})
+  set(MLIR_CONFIG_CODE "${MLIR_CONFIG_CODE}
+get_filename_component(MLIR_INSTALL_PREFIX \"\${MLIR_INSTALL_PREFIX}\" PATH)")
+endforeach(p)
 set(MLIR_CONFIG_CMAKE_DIR "\${MLIR_INSTALL_PREFIX}/${MLIR_INSTALL_PACKAGE_DIR}")
 set(MLIR_CONFIG_LLVM_CMAKE_DIR "\${MLIR_INSTALL_PREFIX}/${LLVM_INSTALL_PACKAGE_DIR}")
-get_config_exports_includes(MLIR MLIR_CONFIG_INCLUDE_EXPORTS)
-extend_path(base_includedir "\${MLIR_INSTALL_PREFIX}" "${CMAKE_INSTALL_INCLUDEDIR}")
+set(MLIR_CONFIG_EXPORTS_FILE "\${MLIR_CMAKE_DIR}/MLIRTargets.cmake")
 set(MLIR_CONFIG_INCLUDE_DIRS
-  "${base_includedir}"
+  "\${MLIR_INSTALL_PREFIX}/include"
   )
-# Ensure that we are using the installed mlir-tblgen. This might not be MLIR_TABLEGEN_EXE
-# if we're building with a host-optimized mlir-tblgen (with LLVM_OPTIMIZED_TABLEGEN).
-set(MLIR_CONFIG_TABLEGEN_EXE mlir-tblgen)
-
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/MLIRConfig.cmake.in
   ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/MLIRConfig.cmake
@@ -68,17 +66,22 @@ configure_file(
 set(MLIR_CONFIG_CODE)
 set(MLIR_CONFIG_CMAKE_DIR)
 set(MLIR_CONFIG_LLVM_CMAKE_DIR)
+set(MLIR_CONFIG_EXPORTS_FILE)
 set(MLIR_CONFIG_INCLUDE_DIRS)
 
 if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
   # Not TOOLCHAIN ONLY, so install the MLIR parts as well
   # Include the cmake files so other tools can use mlir-tblgen, etc.
-  install_distribution_exports(MLIR)
+  get_property(mlir_has_exports GLOBAL PROPERTY MLIR_HAS_EXPORTS)
+  if(mlir_has_exports)
+    install(EXPORT MLIRTargets DESTINATION ${MLIR_INSTALL_PACKAGE_DIR}
+            COMPONENT mlir-cmake-exports)
+  endif()
 
   install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/MLIRConfig.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/AddMLIR.cmake
-    ${CMAKE_CURRENT_SOURCE_DIR}/AddMLIRPython.cmake
+    ${CMAKE_CURRENT_SOURCE_DIR}/AddMLIRPythonExtension.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/MLIRDetectPythonEnv.cmake
     DESTINATION ${MLIR_INSTALL_PACKAGE_DIR}
     COMPONENT mlir-cmake-exports)

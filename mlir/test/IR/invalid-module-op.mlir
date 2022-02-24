@@ -4,11 +4,11 @@
 
 func @module_op() {
   // expected-error@+1 {{Operations with a 'SymbolTable' must have exactly one block}}
-  builtin.module {
+  module {
   ^bb1:
-    "test.dummy"() : () -> ()
+    "module_terminator"() : () -> ()
   ^bb2:
-    "test.dummy"() : () -> ()
+    "module_terminator"() : () -> ()
   }
   return
 }
@@ -17,7 +17,7 @@ func @module_op() {
 
 func @module_op() {
   // expected-error@+1 {{region should have no arguments}}
-  builtin.module {
+  module {
   ^bb1(%arg: i32):
   }
   return

@@ -27,6 +27,7 @@ class AllocaInst;
 class AssumptionCache;
 class DominatorTree;
 class Function;
+class Instruction;
 class LLVMContext;
 class PHINode;
 class SelectInst;
@@ -61,7 +62,7 @@ class SROALegacyPass;
 ///    onto insert and extract operations on a vector value, and convert them to
 ///    this form. By doing so, it will enable promotion of vector aggregates to
 ///    SSA vector values.
-class SROAPass : public PassInfoMixin<SROAPass> {
+class SROA : public PassInfoMixin<SROA> {
   LLVMContext *C = nullptr;
   DominatorTree *DT = nullptr;
   AssumptionCache *AC = nullptr;
@@ -109,7 +110,7 @@ class SROAPass : public PassInfoMixin<SROAPass> {
   SetVector<SelectInst *, SmallVector<SelectInst *, 2>> SpeculatableSelects;
 
 public:
-  SROAPass() = default;
+  SROA() = default;
 
   /// Run the pass over the function.
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);

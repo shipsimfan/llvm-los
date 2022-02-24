@@ -8,8 +8,7 @@
 
 #include "mlir/Dialect/AMX/Transforms.h"
 
-#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
-#include "mlir/Conversion/LLVMCommon/Pattern.h"
+#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Dialect/AMX/AMXDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -84,7 +83,7 @@ Value castPtr(ConversionPatternRewriter &rewriter, Location loc, Value ptr) {
 struct TileZeroConversion : public ConvertOpToLLVMPattern<TileZeroOp> {
   using ConvertOpToLLVMPattern<TileZeroOp>::ConvertOpToLLVMPattern;
   LogicalResult
-  matchAndRewrite(TileZeroOp op, OpAdaptor adaptor,
+  matchAndRewrite(TileZeroOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     VectorType vType = op.getVectorType();
     // Determine m x n tile sizes.
@@ -102,8 +101,9 @@ struct TileLoadConversion : public ConvertOpToLLVMPattern<TileLoadOp> {
   using ConvertOpToLLVMPattern<TileLoadOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(TileLoadOp op, OpAdaptor adaptor,
+  matchAndRewrite(TileLoadOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
+    TileLoadOp::Adaptor adaptor(operands);
     MemRefType mType = op.getMemRefType();
     VectorType vType = op.getVectorType();
     // Determine m x n tile sizes.
@@ -129,8 +129,9 @@ struct TileStoreConversion : public ConvertOpToLLVMPattern<TileStoreOp> {
   using ConvertOpToLLVMPattern<TileStoreOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(TileStoreOp op, OpAdaptor adaptor,
+  matchAndRewrite(TileStoreOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
+    TileStoreOp::Adaptor adaptor(operands);
     MemRefType mType = op.getMemRefType();
     VectorType vType = op.getVectorType();
     // Determine m x n tile sizes.
@@ -154,8 +155,9 @@ struct TileStoreConversion : public ConvertOpToLLVMPattern<TileStoreOp> {
 struct TileMulFConversion : public ConvertOpToLLVMPattern<TileMulFOp> {
   using ConvertOpToLLVMPattern<TileMulFOp>::ConvertOpToLLVMPattern;
   LogicalResult
-  matchAndRewrite(TileMulFOp op, OpAdaptor adaptor,
+  matchAndRewrite(TileMulFOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
+    TileMulFOp::Adaptor adaptor(operands);
     VectorType aType = op.getLhsVectorType();
     VectorType bType = op.getRhsVectorType();
     VectorType cType = op.getVectorType();
@@ -176,8 +178,9 @@ struct TileMulFConversion : public ConvertOpToLLVMPattern<TileMulFOp> {
 struct TileMulIConversion : public ConvertOpToLLVMPattern<TileMulIOp> {
   using ConvertOpToLLVMPattern<TileMulIOp>::ConvertOpToLLVMPattern;
   LogicalResult
-  matchAndRewrite(TileMulIOp op, OpAdaptor adaptor,
+  matchAndRewrite(TileMulIOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
+    TileMulIOp::Adaptor adaptor(operands);
     VectorType aType = op.getLhsVectorType();
     VectorType bType = op.getRhsVectorType();
     VectorType cType = op.getVectorType();

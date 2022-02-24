@@ -15,6 +15,7 @@
 #include "mlir/IR/Dominance.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/Passes.h"
+#include "mlir/Transforms/Utils.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/ScopedHashTable.h"
@@ -27,11 +28,7 @@ using namespace mlir;
 namespace {
 struct SimpleOperationInfo : public llvm::DenseMapInfo<Operation *> {
   static unsigned getHashValue(const Operation *opC) {
-    return OperationEquivalence::computeHash(
-        const_cast<Operation *>(opC),
-        /*hashOperands=*/OperationEquivalence::directHashValue,
-        /*hashResults=*/OperationEquivalence::ignoreHashValue,
-        OperationEquivalence::IgnoreLocations);
+    return OperationEquivalence::computeHash(const_cast<Operation *>(opC));
   }
   static bool isEqual(const Operation *lhsC, const Operation *rhsC) {
     auto *lhs = const_cast<Operation *>(lhsC);
@@ -41,14 +38,11 @@ struct SimpleOperationInfo : public llvm::DenseMapInfo<Operation *> {
     if (lhs == getTombstoneKey() || lhs == getEmptyKey() ||
         rhs == getTombstoneKey() || rhs == getEmptyKey())
       return false;
-    return OperationEquivalence::isEquivalentTo(
-        const_cast<Operation *>(lhsC), const_cast<Operation *>(rhsC),
-        /*mapOperands=*/OperationEquivalence::exactValueMatch,
-        /*mapResults=*/OperationEquivalence::ignoreValueEquivalence,
-        OperationEquivalence::IgnoreLocations);
+    return OperationEquivalence::isEquivalentTo(const_cast<Operation *>(lhsC),
+                                                const_cast<Operation *>(rhsC));
   }
 };
-} // namespace
+} // end anonymous namespace
 
 namespace {
 /// Simple common sub-expression elimination.
@@ -80,17 +74,18 @@ struct CSE : public CSEBase<CSE> {
   /// operation was marked for removal, failure otherwise.
   LogicalResult simplifyOperation(ScopedMapTy &knownValues, Operation *op,
                                   bool hasSSADominance);
-  void simplifyBlock(ScopedMapTy &knownValues, Block *bb, bool hasSSADominance);
-  void simplifyRegion(ScopedMapTy &knownValues, Region &region);
+  void simplifyBlock(ScopedMapTy &knownValues, DominanceInfo &domInfo,
+                     Block *bb, bool hasSSADominance);
+  void simplifyRegion(ScopedMapTy &knownValues, DominanceInfo &domInfo,
+                      Region &region);
 
   void runOnOperation() override;
 
 private:
   /// Operations marked as dead and to be erased.
   std::vector<Operation *> opsToErase;
-  DominanceInfo *domInfo = nullptr;
 };
-} // namespace
+} // end anonymous namespace
 
 /// Attempt to eliminate a redundant operation.
 LogicalResult CSE::simplifyOperation(ScopedMapTy &knownValues, Operation *op,
@@ -160,44 +155,41 @@ LogicalResult CSE::simplifyOperation(ScopedMapTy &knownValues, Operation *op,
   return failure();
 }
 
-void CSE::simplifyBlock(ScopedMapTy &knownValues, Block *bb,
-                        bool hasSSADominance) {
-  for (auto &op : *bb) {
+void CSE::simplifyBlock(ScopedMapTy &knownValues, DominanceInfo &domInfo,
+                        Block *bb, bool hasSSADominance) {
+  for (auto &inst : *bb) {
     // If the operation is simplified, we don't process any held regions.
-    if (succeeded(simplifyOperation(knownValues, &op, hasSSADominance)))
-      continue;
-
-    // Most operations don't have regions, so fast path that case.
-    if (op.getNumRegions() == 0)
+    if (succeeded(simplifyOperation(knownValues, &inst, hasSSADominance)))
       continue;
 
     // If this operation is isolated above, we can't process nested regions with
     // the given 'knownValues' map. This would cause the insertion of implicit
     // captures in explicit capture only regions.
-    if (op.mightHaveTrait<OpTrait::IsIsolatedFromAbove>()) {
+    if (inst.mightHaveTrait<OpTrait::IsIsolatedFromAbove>()) {
       ScopedMapTy nestedKnownValues;
-      for (auto &region : op.getRegions())
-        simplifyRegion(nestedKnownValues, region);
+      for (auto &region : inst.getRegions())
+        simplifyRegion(nestedKnownValues, domInfo, region);
       continue;
     }
 
     // Otherwise, process nested regions normally.
-    for (auto &region : op.getRegions())
-      simplifyRegion(knownValues, region);
+    for (auto &region : inst.getRegions())
+      simplifyRegion(knownValues, domInfo, region);
   }
 }
 
-void CSE::simplifyRegion(ScopedMapTy &knownValues, Region &region) {
+void CSE::simplifyRegion(ScopedMapTy &knownValues, DominanceInfo &domInfo,
+                         Region &region) {
   // If the region is empty there is nothing to do.
   if (region.empty())
     return;
 
-  bool hasSSADominance = domInfo->hasSSADominance(&region);
+  bool hasSSADominance = domInfo.hasDominanceInfo(&region);
 
   // If the region only contains one block, then simplify it directly.
-  if (region.hasOneBlock()) {
+  if (std::next(region.begin()) == region.end()) {
     ScopedMapTy::ScopeTy scope(knownValues);
-    simplifyBlock(knownValues, &region.front(), hasSSADominance);
+    simplifyBlock(knownValues, domInfo, &region.front(), hasSSADominance);
     return;
   }
 
@@ -217,7 +209,7 @@ void CSE::simplifyRegion(ScopedMapTy &knownValues, Region &region) {
 
   // Process the nodes of the dom tree for this region.
   stack.emplace_back(std::make_unique<CFGStackNode>(
-      knownValues, domInfo->getRootNode(&region)));
+      knownValues, domInfo.getRootNode(&region)));
 
   while (!stack.empty()) {
     auto &currentNode = stack.back();
@@ -225,7 +217,7 @@ void CSE::simplifyRegion(ScopedMapTy &knownValues, Region &region) {
     // Check to see if we need to process this node.
     if (!currentNode->processed) {
       currentNode->processed = true;
-      simplifyBlock(knownValues, currentNode->node->getBlock(),
+      simplifyBlock(knownValues, domInfo, currentNode->node->getBlock(),
                     hasSSADominance);
     }
 
@@ -246,11 +238,9 @@ void CSE::runOnOperation() {
   /// A scoped hash table of defining operations within a region.
   ScopedMapTy knownValues;
 
-  domInfo = &getAnalysis<DominanceInfo>();
-  Operation *rootOp = getOperation();
-
-  for (auto &region : rootOp->getRegions())
-    simplifyRegion(knownValues, region);
+  DominanceInfo &domInfo = getAnalysis<DominanceInfo>();
+  for (Region &region : getOperation()->getRegions())
+    simplifyRegion(knownValues, domInfo, region);
 
   // If no operations were erased, then we mark all analyses as preserved.
   if (opsToErase.empty())
@@ -264,7 +254,6 @@ void CSE::runOnOperation() {
   // We currently don't remove region operations, so mark dominance as
   // preserved.
   markAnalysesPreserved<DominanceInfo, PostDominanceInfo>();
-  domInfo = nullptr;
 }
 
 std::unique_ptr<Pass> mlir::createCSEPass() { return std::make_unique<CSE>(); }

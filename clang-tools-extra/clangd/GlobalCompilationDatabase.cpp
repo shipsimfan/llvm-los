@@ -279,10 +279,11 @@ bool DirectoryBasedGlobalCompilationDatabase::DirectoryCache::load(
   struct CDBFile {
     CachedFile *File;
     // Wrapper for {Fixed,JSON}CompilationDatabase::loadFromBuffer.
-    std::unique_ptr<tooling::CompilationDatabase> (*Parser)(
+    llvm::function_ref<std::unique_ptr<tooling::CompilationDatabase>(
         PathRef,
         /*Data*/ llvm::StringRef,
-        /*ErrorMsg*/ std::string &);
+        /*ErrorMsg*/ std::string &)>
+        Parser;
   };
   for (const auto &Entry : {CDBFile{&CompileCommandsJson, parseJSON},
                             CDBFile{&BuildCompileCommandsJson, parseJSON},
@@ -763,7 +764,7 @@ OverlayCDB::getCompileCommand(PathRef File) const {
   if (!Cmd)
     return llvm::None;
   if (ArgsAdjuster)
-    Cmd->CommandLine = ArgsAdjuster(Cmd->CommandLine, File);
+    Cmd->CommandLine = ArgsAdjuster(Cmd->CommandLine, Cmd->Filename);
   return Cmd;
 }
 
@@ -773,7 +774,7 @@ tooling::CompileCommand OverlayCDB::getFallbackCommand(PathRef File) const {
   Cmd.CommandLine.insert(Cmd.CommandLine.end(), FallbackFlags.begin(),
                          FallbackFlags.end());
   if (ArgsAdjuster)
-    Cmd.CommandLine = ArgsAdjuster(Cmd.CommandLine, File);
+    Cmd.CommandLine = ArgsAdjuster(Cmd.CommandLine, Cmd.Filename);
   return Cmd;
 }
 

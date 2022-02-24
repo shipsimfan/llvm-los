@@ -23,9 +23,6 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/FoldUtils.h"
 #include "mlir/Transforms/Passes.h"
-#include "llvm/Support/Debug.h"
-
-#define DEBUG_TYPE "sccp"
 
 using namespace mlir;
 
@@ -73,9 +70,6 @@ struct SCCPAnalysis : public ForwardDataFlowAnalysis<SCCPLatticeValue> {
   ChangeResult
   visitOperation(Operation *op,
                  ArrayRef<LatticeElement<SCCPLatticeValue> *> operands) final {
-
-    LLVM_DEBUG(llvm::dbgs() << "SCCP: Visiting operation: " << *op << "\n");
-
     // Don't try to simulate the results of a region operation as we can't
     // guarantee that folding will be out-of-place. We don't allow in-place
     // folds as the desire here is for simulated execution, and not general
@@ -245,7 +239,7 @@ namespace {
 struct SCCP : public SCCPBase<SCCP> {
   void runOnOperation() override;
 };
-} // namespace
+} // end anonymous namespace
 
 void SCCP::runOnOperation() {
   Operation *op = getOperation();

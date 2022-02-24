@@ -150,10 +150,9 @@ static bool mayExtractBlock(const BasicBlock &BB) {
   //
   // Resumes that are not reachable from a cleanup landing pad are considered to
   // be unreachable. It’s not safe to split them out either.
-  if (BB.hasAddressTaken() || BB.isEHPad())
-    return false;
   auto Term = BB.getTerminator();
-  return !isa<InvokeInst>(Term) && !isa<ResumeInst>(Term);
+  return !BB.hasAddressTaken() && !BB.isEHPad() && !isa<InvokeInst>(Term) &&
+         !isa<ResumeInst>(Term);
 }
 
 /// Mark \p F cold. Based on this assumption, also optimize it for minimum size.
@@ -294,7 +293,7 @@ static int getOutliningPenalty(ArrayRef<BasicBlock *> Region,
       // Find all incoming values from the outlining region.
       int NumIncomingVals = 0;
       for (unsigned i = 0; i < PN.getNumIncomingValues(); ++i)
-        if (llvm::is_contained(Region, PN.getIncomingBlock(i))) {
+        if (find(Region, PN.getIncomingBlock(i)) != Region.end()) {
           ++NumIncomingVals;
           if (NumIncomingVals > 1) {
             ++NumSplitExitPhis;

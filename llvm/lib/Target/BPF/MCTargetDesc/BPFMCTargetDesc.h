@@ -14,7 +14,6 @@
 #define LLVM_LIB_TARGET_BPF_MCTARGETDESC_BPFMCTARGETDESC_H
 
 #include "llvm/Config/config.h"
-#include "llvm/MC/MCContext.h"
 #include "llvm/Support/DataTypes.h"
 
 #include <memory>
@@ -31,8 +30,10 @@ class MCTargetOptions;
 class Target;
 
 MCCodeEmitter *createBPFMCCodeEmitter(const MCInstrInfo &MCII,
+                                      const MCRegisterInfo &MRI,
                                       MCContext &Ctx);
 MCCodeEmitter *createBPFbeMCCodeEmitter(const MCInstrInfo &MCII,
+                                        const MCRegisterInfo &MRI,
                                         MCContext &Ctx);
 
 MCAsmBackend *createBPFAsmBackend(const Target &T, const MCSubtargetInfo &STI,

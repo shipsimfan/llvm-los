@@ -8,7 +8,6 @@ add_mlir_conversion_library(MLIRComplexToStandard
   MLIRConversionPassIncGen
 
   LINK_LIBS PUBLIC
-  MLIRArithmetic
   MLIRComplex
   MLIRIR
   MLIRMath

@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/InitAllDialects.h"
@@ -27,13 +26,13 @@ int main(int argc, char **argv) {
   // TODO: Register standalone passes here.
 
   mlir::DialectRegistry registry;
-  registry.insert<mlir::standalone::StandaloneDialect,
-                  mlir::arith::ArithmeticDialect, mlir::StandardOpsDialect>();
+  registry.insert<mlir::standalone::StandaloneDialect>();
+  registry.insert<mlir::StandardOpsDialect>();
   // Add the following to include *all* MLIR Core dialects, or selectively
   // include what you need like above. You only need to register dialects that
   // will be *parsed* by the tool, not the one generated
   // registerAllDialects(registry);
 
-  return mlir::asMainReturnCode(
+  return failed(
       mlir::MlirOptMain(argc, argv, "Standalone optimizer driver\n", registry));
 }

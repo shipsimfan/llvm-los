@@ -56,14 +56,12 @@ llvm::raw_ostream &ConstantBase<RESULT, VALUE>::AsFortran(
     } else if constexpr (Result::category == TypeCategory::Character) {
       o << Result::kind << '_' << parser::QuoteCharacterLiteral(value, true);
     } else if constexpr (Result::category == TypeCategory::Logical) {
-      if (!value.IsCanonical()) {
-        o << "transfer(" << value.word().ToInt64() << "_8,.false._"
-          << Result::kind << ')';
-      } else if (value.IsTrue()) {
-        o << ".true." << '_' << Result::kind;
+      if (value.IsTrue()) {
+        o << ".true.";
       } else {
-        o << ".false." << '_' << Result::kind;
+        o << ".false.";
       }
+      o << '_' << Result::kind;
     } else {
       StructureConstructor{result_.derivedTypeSpec(), value}.AsFortran(o);
     }
@@ -477,15 +475,13 @@ std::string DynamicType::AsFortran() const {
   if (derived_) {
     CHECK(category_ == TypeCategory::Derived);
     return DerivedTypeSpecAsFortran(*derived_);
-  } else if (charLengthParamValue_ || knownLength()) {
+  } else if (charLength_) {
     std::string result{"CHARACTER(KIND="s + std::to_string(kind_) + ",LEN="};
-    if (knownLength()) {
-      result += std::to_string(*knownLength()) + "_8";
-    } else if (charLengthParamValue_->isAssumed()) {
+    if (charLength_->isAssumed()) {
       result += '*';
-    } else if (charLengthParamValue_->isDeferred()) {
+    } else if (charLength_->isDeferred()) {
       result += ':';
-    } else if (const auto &length{charLengthParamValue_->GetExplicit()}) {
+    } else if (const auto &length{charLength_->GetExplicit()}) {
       result += length->AsFortran();
     }
     return result + ')';
@@ -741,7 +737,7 @@ llvm::raw_ostream &DescriptorInquiry::AsFortran(llvm::raw_ostream &o) const {
   if (field_ == Field::Len) {
     return o << "%len";
   } else {
-    if (field_ != Field::Rank && dimension_ >= 0) {
+    if (dimension_ >= 0) {
       o << ",dim=" << (dimension_ + 1);
     }
     return o << ')';
@@ -785,9 +781,6 @@ llvm::raw_ostream &Assignment::AsFortran(llvm::raw_ostream &o) const {
   return o;
 }
 
-#ifdef _MSC_VER // disable bogus warning about missing definitions
-#pragma warning(disable : 4661)
-#endif
 INSTANTIATE_CONSTANT_TEMPLATES
 INSTANTIATE_EXPRESSION_TEMPLATES
 INSTANTIATE_VARIABLE_TEMPLATES

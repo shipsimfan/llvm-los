@@ -9,7 +9,6 @@ unittest("MCTests") {
   ]
   sources = [
     "Disassembler.cpp",
-    "DwarfLineTableHeaders.cpp",
     "DwarfLineTables.cpp",
     "MCDisassemblerTest.cpp",
     "MCInstPrinter.cpp",

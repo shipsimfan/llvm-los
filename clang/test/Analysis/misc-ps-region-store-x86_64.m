@@ -6,7 +6,7 @@
 // we don't crash.
 typedef unsigned long uintptr_t;
 void test_pointer_invalidated_as_int_aux(uintptr_t* ptr);
-void test_pointer_invalidated_as_int(void) {
+void test_pointer_invalidated_as_int() {
   void *x;
   test_pointer_invalidated_as_int_aux((uintptr_t*) &x);
   // Here we have a pointer to integer cast.

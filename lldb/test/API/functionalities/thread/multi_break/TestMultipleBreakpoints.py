@@ -33,7 +33,7 @@ class MultipleBreakpointTestCase(TestBase):
     @expectedFailureNetBSD
     def test(self):
         """Test simultaneous breakpoints in multiple threads."""
-        self.build()
+        self.build(dictionary=self.getBuildFlags())
         exe = self.getBuildArtifact("a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 

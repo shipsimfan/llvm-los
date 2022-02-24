@@ -91,8 +91,12 @@ int main(int argc, const char **argv) {
   llvm::transform(Args, Argv.begin(),
                   [](const std::string &Arg) { return Arg.c_str(); });
 
-  IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts =
-      CreateAndPopulateDiagOpts(Argv);
+  IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
+  unsigned MissingArgIndex, MissingArgCount;
+  auto Opts = driver::getDriverOptTable();
+  auto ParsedArgs = Opts.ParseArgs(llvm::makeArrayRef(Argv).slice(1),
+                                   MissingArgIndex, MissingArgCount);
+  ParseDiagnosticArgs(*DiagOpts, ParsedArgs);
 
   // Don't output diagnostics, because common scenarios such as
   // cross-compiling fail with diagnostics.  This is not fatal, but

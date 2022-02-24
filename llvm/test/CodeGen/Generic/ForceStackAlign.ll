@@ -1,12 +1,9 @@
 ; Check that stack alignment can be forced. Individual targets should test their
 ; specific implementation details.
 
-; RUN: llc < %s -stackrealign | FileCheck %s
+; RUN: llc < %s -stackrealign -stack-alignment=32 | FileCheck %s
 ; CHECK-LABEL: @f
 ; CHECK-LABEL: @g
-
-; Stack realignment not supported.
-; XFAIL: sparc
 
 define i32 @f(i8* %p) nounwind {
 entry:
@@ -28,6 +25,3 @@ if.then:
 }
 
 declare void @llvm.memset.p0i8.i32(i8*, i8, i32, i1) nounwind
-
-!llvm.module.flags = !{!0}
-!0 = !{i32 2, !"override-stack-alignment", i32 32}

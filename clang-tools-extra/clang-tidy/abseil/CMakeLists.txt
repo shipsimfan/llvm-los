@@ -5,7 +5,6 @@ set(LLVM_LINK_COMPONENTS
 
 add_clang_library(clangTidyAbseilModule
   AbseilTidyModule.cpp
-  CleanupCtadCheck.cpp
   DurationAdditionCheck.cpp
   DurationComparisonCheck.cpp
   DurationConversionCastCheck.cpp

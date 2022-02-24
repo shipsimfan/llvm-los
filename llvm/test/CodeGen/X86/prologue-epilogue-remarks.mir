@@ -23,7 +23,7 @@ stack:
 constants:
 body:             |
   bb.0:
-    RET64
+    RETQ
 
 ...
 ---
@@ -41,7 +41,7 @@ stack:
 constants:
 body:             |
   bb.0:
-    RET64
+    RETQ
 
 ...
 ---
@@ -59,6 +59,6 @@ stack:
 constants:
 body:             |
   bb.0:
-    RET64
+    RETQ
 
 ...

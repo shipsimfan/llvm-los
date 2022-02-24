@@ -6,10 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_UNITTESTS_TESTINDEX_H
-#define LLVM_CLANG_TOOLS_EXTRA_CLANGD_UNITTESTS_TESTINDEX_H
+#ifndef LLVM_CLANG_TOOLS_EXTRA_UNITTESTS_CLANGD_INDEXTESTCOMMON_H
+#define LLVM_CLANG_TOOLS_EXTRA_UNITTESTS_CLANGD_INDEXTESTCOMMON_H
 
 #include "index/Index.h"
+#include "index/Merge.h"
 
 namespace clang {
 namespace clangd {
@@ -25,8 +26,6 @@ Symbol sym(llvm::StringRef QName, index::SymbolKind Kind,
 Symbol func(llvm::StringRef Name);
 // Creates a class symbol.
 Symbol cls(llvm::StringRef Name);
-// Creates an enum symbol.
-Symbol enm(llvm::StringRef Name);
 // Creates a variable symbol.
 Symbol var(llvm::StringRef Name);
 // Creates a namespace symbol.

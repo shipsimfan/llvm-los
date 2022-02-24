@@ -15,6 +15,7 @@
 #include "BitstreamRemarkParser.h"
 #include "YAMLRemarkParser.h"
 #include "llvm-c/Remarks.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/CBindingWrapping.h"
 
 using namespace llvm;

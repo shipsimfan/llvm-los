@@ -32,9 +32,9 @@ public:
 
   static void Terminate();
 
-  static llvm::StringRef GetPluginNameStatic() { return "darwin-kernel"; }
+  static lldb_private::ConstString GetPluginNameStatic();
 
-  static llvm::StringRef GetDescriptionStatic();
+  static const char *GetDescriptionStatic();
 
   // Class Methods
   PlatformDarwinKernel(lldb_private::LazyBool is_ios_debug_session);
@@ -42,10 +42,14 @@ public:
   virtual ~PlatformDarwinKernel();
 
   // lldb_private::PluginInterface functions
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  lldb_private::ConstString GetPluginName() override {
+    return GetPluginNameStatic();
+  }
+
+  uint32_t GetPluginVersion() override { return 1; }
 
   // lldb_private::Platform functions
-  llvm::StringRef GetDescription() override { return GetDescriptionStatic(); }
+  const char *GetDescription() override { return GetDescriptionStatic(); }
 
   void GetStatus(lldb_private::Stream &strm) override;
 
@@ -56,7 +60,8 @@ public:
                   llvm::SmallVectorImpl<lldb::ModuleSP> *old_modules,
                   bool *did_create_ptr) override;
 
-  std::vector<lldb_private::ArchSpec> GetSupportedArchitectures() override;
+  bool GetSupportedArchitectureAtIndex(uint32_t idx,
+                                       lldb_private::ArchSpec &arch) override;
 
   bool SupportsModules() override { return false; }
 
@@ -218,7 +223,7 @@ public:
 
 class PlatformDarwinKernel {
 public:
-  static llvm::StringRef GetPluginNameStatic() { return "darwin-kernel"; }
+  static lldb_private::ConstString GetPluginNameStatic();
 };
 
 #endif // __APPLE__

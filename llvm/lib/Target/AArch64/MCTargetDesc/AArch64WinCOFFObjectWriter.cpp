@@ -6,7 +6,6 @@
 //
 //===---------------------------------------------------------------------===//
 
-#include "AArch64MCTargetDesc.h"
 #include "MCTargetDesc/AArch64FixupKinds.h"
 #include "MCTargetDesc/AArch64MCExpr.h"
 #include "llvm/ADT/Twine.h"
@@ -19,7 +18,6 @@
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/MC/MCWinCOFFObjectWriter.h"
-#include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
@@ -49,11 +47,7 @@ unsigned AArch64WinCOFFObjectWriter::getRelocType(
     bool IsCrossSection, const MCAsmBackend &MAB) const {
   unsigned FixupKind = Fixup.getKind();
   if (IsCrossSection) {
-    // IMAGE_REL_ARM64_REL64 does not exist. We treat FK_Data_8 as FK_PCRel_4 so
-    // that .xword a-b can lower to IMAGE_REL_ARM64_REL32. This allows generic
-    // instrumentation to not bother with the COFF limitation. A negative value
-    // needs attention.
-    if (FixupKind != FK_Data_4 && FixupKind != FK_Data_8) {
+    if (FixupKind != FK_Data_4) {
       Ctx.reportError(Fixup.getLoc(), "Cannot represent this expression");
       return COFF::IMAGE_REL_ARM64_ADDR32;
     }
@@ -159,6 +153,10 @@ bool AArch64WinCOFFObjectWriter::recordRelocation(const MCFixup &Fixup) const {
   return true;
 }
 
-std::unique_ptr<MCObjectTargetWriter> llvm::createAArch64WinCOFFObjectWriter() {
+namespace llvm {
+
+std::unique_ptr<MCObjectTargetWriter> createAArch64WinCOFFObjectWriter() {
   return std::make_unique<AArch64WinCOFFObjectWriter>();
 }
+
+} // end namespace llvm

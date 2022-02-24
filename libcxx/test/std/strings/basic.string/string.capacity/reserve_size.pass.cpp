@@ -13,7 +13,13 @@
 // This test relies on https://llvm.org/PR45368 being fixed, which isn't in
 // older Apple dylibs
 //
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11|12|13|14|15}}
+// XFAIL: with_system_cxx_lib=macosx10.15
+// XFAIL: with_system_cxx_lib=macosx10.14
+// XFAIL: with_system_cxx_lib=macosx10.13
+// XFAIL: with_system_cxx_lib=macosx10.12
+// XFAIL: with_system_cxx_lib=macosx10.11
+// XFAIL: with_system_cxx_lib=macosx10.10
+// XFAIL: with_system_cxx_lib=macosx10.9
 
 #include <string>
 #include <stdexcept>
@@ -63,50 +69,41 @@ test(typename S::size_type min_cap, typename S::size_type erased_index, typename
 #endif
 }
 
-bool test() {
-  {
-    typedef std::string S;
-    {
-      test<S>(0, 0, 5);
-      test<S>(0, 0, 10);
-      test<S>(0, 0, 50);
-    }
-    {
-      test<S>(100, 50, 5);
-      test<S>(100, 50, 10);
-      test<S>(100, 50, 50);
-      test<S>(100, 50, 100);
-      test<S>(100, 50, 1000);
-      test<S>(100, 50, S::npos);
-    }
-  }
-#if TEST_STD_VER >= 11
-  {
-    typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
-    {
-      test<S>(0, 0, 5);
-      test<S>(0, 0, 10);
-      test<S>(0, 0, 50);
-    }
-    {
-      test<S>(100, 50, 5);
-      test<S>(100, 50, 10);
-      test<S>(100, 50, 50);
-      test<S>(100, 50, 100);
-      test<S>(100, 50, 1000);
-      test<S>(100, 50, S::npos);
-    }
-  }
-#endif
-
-  return true;
-}
-
 int main(int, char**)
 {
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
+    {
+    typedef std::string S;
+    {
+    test<S>(0, 0, 5);
+    test<S>(0, 0, 10);
+    test<S>(0, 0, 50);
+    }
+    {
+    test<S>(100, 50, 5);
+    test<S>(100, 50, 10);
+    test<S>(100, 50, 50);
+    test<S>(100, 50, 100);
+    test<S>(100, 50, 1000);
+    test<S>(100, 50, S::npos);
+    }
+    }
+#if TEST_STD_VER >= 11
+    {
+    typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
+    {
+    test<S>(0, 0, 5);
+    test<S>(0, 0, 10);
+    test<S>(0, 0, 50);
+    }
+    {
+    test<S>(100, 50, 5);
+    test<S>(100, 50, 10);
+    test<S>(100, 50, 50);
+    test<S>(100, 50, 100);
+    test<S>(100, 50, 1000);
+    test<S>(100, 50, S::npos);
+    }
+    }
 #endif
 
   return 0;

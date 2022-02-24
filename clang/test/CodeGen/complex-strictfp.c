@@ -20,16 +20,16 @@ double D;
 // CHECK-NEXT:    [[TMP0:%.*]] = load double, double* @D, align 8
 // CHECK-NEXT:    [[CF_REAL:%.*]] = load float, float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 0), align 4
 // CHECK-NEXT:    [[CF_IMAG:%.*]] = load float, float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 1), align 4
-// CHECK-NEXT:    [[CONV:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_REAL]], metadata !"fpexcept.strict") #[[ATTR2:[0-9]+]]
-// CHECK-NEXT:    [[CONV1:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_IMAG]], metadata !"fpexcept.strict") #[[ATTR2]]
-// CHECK-NEXT:    [[ADD_R:%.*]] = call double @llvm.experimental.constrained.fadd.f64(double [[CONV]], double [[TMP0]], metadata !"round.upward", metadata !"fpexcept.strict") #[[ATTR2]]
-// CHECK-NEXT:    [[CONV2:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double [[ADD_R]], metadata !"round.upward", metadata !"fpexcept.strict") #[[ATTR2]]
-// CHECK-NEXT:    [[CONV3:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double [[CONV1]], metadata !"round.upward", metadata !"fpexcept.strict") #[[ATTR2]]
+// CHECK-NEXT:    [[CONV:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_REAL]], metadata !"fpexcept.strict") [[ATTR2:#.*]]
+// CHECK-NEXT:    [[CONV1:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_IMAG]], metadata !"fpexcept.strict") [[ATTR2]]
+// CHECK-NEXT:    [[ADD_R:%.*]] = call double @llvm.experimental.constrained.fadd.f64(double [[CONV]], double [[TMP0]], metadata !"round.upward", metadata !"fpexcept.strict") [[ATTR2]]
+// CHECK-NEXT:    [[CONV2:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double [[ADD_R]], metadata !"round.upward", metadata !"fpexcept.strict") [[ATTR2]]
+// CHECK-NEXT:    [[CONV3:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double [[CONV1]], metadata !"round.upward", metadata !"fpexcept.strict") [[ATTR2]]
 // CHECK-NEXT:    store float [[CONV2]], float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 0), align 4
 // CHECK-NEXT:    store float [[CONV3]], float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 1), align 4
 // CHECK-NEXT:    ret void
 //
-void test3a(void) {
+void test3a() {
   cf += D;
 }
 
@@ -37,14 +37,14 @@ void test3a(void) {
 // CHECK-NEXT:  entry:
 // CHECK-NEXT:    [[CF_REAL:%.*]] = load float, float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 0), align 4
 // CHECK-NEXT:    [[CF_IMAG:%.*]] = load float, float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 1), align 4
-// CHECK-NEXT:    [[CONV:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_REAL]], metadata !"fpexcept.strict") #[[ATTR2]]
-// CHECK-NEXT:    [[CONV1:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_IMAG]], metadata !"fpexcept.strict") #[[ATTR2]]
+// CHECK-NEXT:    [[CONV:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_REAL]], metadata !"fpexcept.strict") [[ATTR2]]
+// CHECK-NEXT:    [[CONV1:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_IMAG]], metadata !"fpexcept.strict") [[ATTR2]]
 // CHECK-NEXT:    [[TMP0:%.*]] = load double, double* @D, align 8
-// CHECK-NEXT:    [[ADD_R:%.*]] = call double @llvm.experimental.constrained.fadd.f64(double [[TMP0]], double [[CONV]], metadata !"round.upward", metadata !"fpexcept.strict") #[[ATTR2]]
+// CHECK-NEXT:    [[ADD_R:%.*]] = call double @llvm.experimental.constrained.fadd.f64(double [[TMP0]], double [[CONV]], metadata !"round.upward", metadata !"fpexcept.strict") [[ATTR2]]
 // CHECK-NEXT:    store double [[ADD_R]], double* @D, align 8
 // CHECK-NEXT:    ret void
 //
-void test3b(void) {
+void test3b() {
   D += cf;
 }
 
@@ -54,18 +54,18 @@ void test3b(void) {
 // CHECK-NEXT:    [[G1_IMAG:%.*]] = load double, double* getelementptr inbounds ({ double, double }, { double, double }* @g1, i32 0, i32 1), align 8
 // CHECK-NEXT:    [[CF_REAL:%.*]] = load float, float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 0), align 4
 // CHECK-NEXT:    [[CF_IMAG:%.*]] = load float, float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 1), align 4
-// CHECK-NEXT:    [[CONV:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_REAL]], metadata !"fpexcept.strict") #[[ATTR2]]
-// CHECK-NEXT:    [[CONV1:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_IMAG]], metadata !"fpexcept.strict") #[[ATTR2]]
-// CHECK-NEXT:    [[CALL:%.*]] = call { double, double } @__divdc3(double noundef [[CONV]], double noundef [[CONV1]], double noundef [[G1_REAL]], double noundef [[G1_IMAG]]) #[[ATTR3:[0-9]+]]
+// CHECK-NEXT:    [[CONV:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_REAL]], metadata !"fpexcept.strict") [[ATTR2]]
+// CHECK-NEXT:    [[CONV1:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float [[CF_IMAG]], metadata !"fpexcept.strict") [[ATTR2]]
+// CHECK-NEXT:    [[CALL:%.*]] = call { double, double } @__divdc3(double [[CONV]], double [[CONV1]], double [[G1_REAL]], double [[G1_IMAG]]) [[ATTR3:#.*]]
 // CHECK-NEXT:    [[TMP0:%.*]] = extractvalue { double, double } [[CALL]], 0
 // CHECK-NEXT:    [[TMP1:%.*]] = extractvalue { double, double } [[CALL]], 1
-// CHECK-NEXT:    [[CONV2:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double [[TMP0]], metadata !"round.upward", metadata !"fpexcept.strict") #[[ATTR2]]
-// CHECK-NEXT:    [[CONV3:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double [[TMP1]], metadata !"round.upward", metadata !"fpexcept.strict") #[[ATTR2]]
+// CHECK-NEXT:    [[CONV2:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double [[TMP0]], metadata !"round.upward", metadata !"fpexcept.strict") [[ATTR2]]
+// CHECK-NEXT:    [[CONV3:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double [[TMP1]], metadata !"round.upward", metadata !"fpexcept.strict") [[ATTR2]]
 // CHECK-NEXT:    store float [[CONV2]], float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 0), align 4
 // CHECK-NEXT:    store float [[CONV3]], float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 1), align 4
 // CHECK-NEXT:    ret void
 //
-void test3c(void) {
+void test3c() {
   cf /= g1;
 }
 
@@ -74,12 +74,12 @@ void test3c(void) {
 // CHECK-NEXT:    [[G1_REAL:%.*]] = load double, double* getelementptr inbounds ({ double, double }, { double, double }* @g1, i32 0, i32 0), align 8
 // CHECK-NEXT:    [[G1_IMAG:%.*]] = load double, double* getelementptr inbounds ({ double, double }, { double, double }* @g1, i32 0, i32 1), align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load double, double* @D, align 8
-// CHECK-NEXT:    [[ADD_R:%.*]] = call double @llvm.experimental.constrained.fadd.f64(double [[G1_REAL]], double [[TMP0]], metadata !"round.tonearest", metadata !"fpexcept.maytrap") #[[ATTR2]]
+// CHECK-NEXT:    [[ADD_R:%.*]] = call double @llvm.experimental.constrained.fadd.f64(double [[G1_REAL]], double [[TMP0]], metadata !"round.tonearest", metadata !"fpexcept.maytrap") [[ATTR2]]
 // CHECK-NEXT:    store double [[ADD_R]], double* getelementptr inbounds ({ double, double }, { double, double }* @g1, i32 0, i32 0), align 8
 // CHECK-NEXT:    store double [[G1_IMAG]], double* getelementptr inbounds ({ double, double }, { double, double }* @g1, i32 0, i32 1), align 8
 // CHECK-NEXT:    ret void
 //
-void test3d(void) {
+void test3d() {
   g1 = g1 + D;
 }
 
@@ -88,32 +88,32 @@ void test3d(void) {
 // CHECK-NEXT:    [[TMP0:%.*]] = load double, double* @D, align 8
 // CHECK-NEXT:    [[G1_REAL:%.*]] = load double, double* getelementptr inbounds ({ double, double }, { double, double }* @g1, i32 0, i32 0), align 8
 // CHECK-NEXT:    [[G1_IMAG:%.*]] = load double, double* getelementptr inbounds ({ double, double }, { double, double }* @g1, i32 0, i32 1), align 8
-// CHECK-NEXT:    [[ADD_R:%.*]] = call double @llvm.experimental.constrained.fadd.f64(double [[TMP0]], double [[G1_REAL]], metadata !"round.tonearest", metadata !"fpexcept.maytrap") #[[ATTR2]]
+// CHECK-NEXT:    [[ADD_R:%.*]] = call double @llvm.experimental.constrained.fadd.f64(double [[TMP0]], double [[G1_REAL]], metadata !"round.tonearest", metadata !"fpexcept.maytrap") [[ATTR2]]
 // CHECK-NEXT:    store double [[ADD_R]], double* getelementptr inbounds ({ double, double }, { double, double }* @g1, i32 0, i32 0), align 8
 // CHECK-NEXT:    store double [[G1_IMAG]], double* getelementptr inbounds ({ double, double }, { double, double }* @g1, i32 0, i32 1), align 8
 // CHECK-NEXT:    ret void
 //
-void test3e(void) {
+void test3e() {
   g1 = D + g1;
 }
 
 // CHECK-LABEL: @t1(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[CONV:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double 4.000000e+00, metadata !"round.upward", metadata !"fpexcept.strict") #[[ATTR2]]
+// CHECK-NEXT:    [[CONV:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double 4.000000e+00, metadata !"round.upward", metadata !"fpexcept.strict") [[ATTR2]]
 // CHECK-NEXT:    store float [[CONV]], float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 0), align 4
 // CHECK-NEXT:    ret void
 //
-void t1(void) {
+void t1() {
   (__real__ cf) = 4.0;
 }
 
 // CHECK-LABEL: @t2(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[CONV:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double 4.000000e+00, metadata !"round.upward", metadata !"fpexcept.strict") #[[ATTR2]]
+// CHECK-NEXT:    [[CONV:%.*]] = call float @llvm.experimental.constrained.fptrunc.f32.f64(double 4.000000e+00, metadata !"round.upward", metadata !"fpexcept.strict") [[ATTR2]]
 // CHECK-NEXT:    store float [[CONV]], float* getelementptr inbounds ({ float, float }, { float, float }* @cf, i32 0, i32 1), align 4
 // CHECK-NEXT:    ret void
 //
-void t2(void) {
+void t2() {
   (__imag__ cf) = 4.0;
 }
 
@@ -122,17 +122,17 @@ void t2(void) {
 // CHECK-NEXT:    [[C:%.*]] = alloca [0 x i8], align 1
 // CHECK-NEXT:    br i1 false, label [[COND_TRUE:%.*]], label [[COND_FALSE:%.*]]
 // CHECK:       cond.true:
-// CHECK-NEXT:    [[CONV:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float 2.000000e+00, metadata !"fpexcept.strict") #[[ATTR2]]
+// CHECK-NEXT:    [[CONV:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float 2.000000e+00, metadata !"fpexcept.strict") [[ATTR2]]
 // CHECK-NEXT:    br label [[COND_END:%.*]]
 // CHECK:       cond.false:
-// CHECK-NEXT:    [[CONV1:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float 2.000000e+00, metadata !"fpexcept.strict") #[[ATTR2]]
+// CHECK-NEXT:    [[CONV1:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float 2.000000e+00, metadata !"fpexcept.strict") [[ATTR2]]
 // CHECK-NEXT:    br label [[COND_END]]
 // CHECK:       cond.end:
 // CHECK-NEXT:    [[COND_R:%.*]] = phi double [ [[CONV]], [[COND_TRUE]] ], [ [[CONV1]], [[COND_FALSE]] ]
 // CHECK-NEXT:    [[COND_I:%.*]] = phi double [ 0.000000e+00, [[COND_TRUE]] ], [ 0.000000e+00, [[COND_FALSE]] ]
 // CHECK-NEXT:    ret void
 //
-void t91(void) {
+void t91() {
   // Check for proper type promotion of conditional expression
   char c[(int)(sizeof(typeof((0 ? 2.0f : (_Complex double) 2.0f))) - sizeof(_Complex double))];
   // Check for proper codegen
@@ -144,17 +144,17 @@ void t91(void) {
 // CHECK-NEXT:    [[C:%.*]] = alloca [0 x i8], align 1
 // CHECK-NEXT:    br i1 false, label [[COND_TRUE:%.*]], label [[COND_FALSE:%.*]]
 // CHECK:       cond.true:
-// CHECK-NEXT:    [[CONV:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float 2.000000e+00, metadata !"fpexcept.strict") #[[ATTR2]]
+// CHECK-NEXT:    [[CONV:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float 2.000000e+00, metadata !"fpexcept.strict") [[ATTR2]]
 // CHECK-NEXT:    br label [[COND_END:%.*]]
 // CHECK:       cond.false:
-// CHECK-NEXT:    [[CONV1:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float 2.000000e+00, metadata !"fpexcept.strict") #[[ATTR2]]
+// CHECK-NEXT:    [[CONV1:%.*]] = call double @llvm.experimental.constrained.fpext.f64.f32(float 2.000000e+00, metadata !"fpexcept.strict") [[ATTR2]]
 // CHECK-NEXT:    br label [[COND_END]]
 // CHECK:       cond.end:
 // CHECK-NEXT:    [[COND_R:%.*]] = phi double [ [[CONV]], [[COND_TRUE]] ], [ [[CONV1]], [[COND_FALSE]] ]
 // CHECK-NEXT:    [[COND_I:%.*]] = phi double [ 0.000000e+00, [[COND_TRUE]] ], [ 0.000000e+00, [[COND_FALSE]] ]
 // CHECK-NEXT:    ret void
 //
-void t92(void) {
+void t92() {
   // Check for proper type promotion of conditional expression
   char c[(int)(sizeof(typeof((0 ? (_Complex double) 2.0f : 2.0f))) - sizeof(_Complex double))];
   // Check for proper codegen

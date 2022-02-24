@@ -24,17 +24,19 @@
 
 #include <memory>
 
-#include <cassert>
+#include <assert.h>
 
 using namespace lldb;
 using namespace lldb_private;
 
 DynamicLoader *DynamicLoader::FindPlugin(Process *process,
-                                         llvm::StringRef plugin_name) {
+                                         const char *plugin_name) {
   DynamicLoaderCreateInstance create_callback = nullptr;
-  if (!plugin_name.empty()) {
+  if (plugin_name) {
+    ConstString const_plugin_name(plugin_name);
     create_callback =
-        PluginManager::GetDynamicLoaderCreateCallbackForPluginName(plugin_name);
+        PluginManager::GetDynamicLoaderCreateCallbackForPluginName(
+            const_plugin_name);
     if (create_callback) {
       std::unique_ptr<DynamicLoader> instance_up(
           create_callback(process, true));

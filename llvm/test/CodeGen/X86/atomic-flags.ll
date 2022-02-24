@@ -124,9 +124,7 @@ L4:
   ret i32 4
 }
 
-; PR20841 - ensure we don't reuse the ZF flag from XADD for compares with zero,
-; the flags are set for the result of the add result (the value stored to memory),
-; not the value returned by the atomicrmw add.
+; FIXME: PR20841 - ensure we reuse the ZF flag from XADD for compares with zero.
 
 define zeroext i1 @xadd_cmp0_i64(i64* %x) nounwind {
 ; X64-LABEL: xadd_cmp0_i64:

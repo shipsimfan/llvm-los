@@ -18,9 +18,12 @@
 using namespace llvm;
 
 /// Removes all the Initialized GVs that aren't inside the desired Chunks.
-static void extractGVsFromModule(Oracle &O, Module &Program) {
+static void extractGVsFromModule(std::vector<Chunk> ChunksToKeep,
+                                 Module *Program) {
+  Oracle O(ChunksToKeep);
+
   // Drop initializers of out-of-chunk GVs
-  for (auto &GV : Program.globals())
+  for (auto &GV : Program->globals())
     if (GV.hasInitializer() && !O.shouldKeep()) {
       GV.setInitializer(nullptr);
       GV.setLinkage(GlobalValue::LinkageTypes::ExternalLinkage);
@@ -28,7 +31,22 @@ static void extractGVsFromModule(Oracle &O, Module &Program) {
     }
 }
 
+/// Counts the amount of initialized GVs and displays their
+/// respective name & index
+static int countGVs(Module *Program) {
+  // TODO: Silence index with --quiet flag
+  outs() << "----------------------------\n";
+  outs() << "GlobalVariable Index Reference:\n";
+  int GVCount = 0;
+  for (auto &GV : Program->globals())
+    if (GV.hasInitializer())
+      outs() << "\t" << ++GVCount << ": " << GV.getName() << "\n";
+  outs() << "----------------------------\n";
+  return GVCount;
+}
+
 void llvm::reduceGlobalsInitializersDeltaPass(TestRunner &Test) {
   outs() << "*** Reducing GVs initializers...\n";
-  runDeltaPass(Test, extractGVsFromModule);
+  int GVCount = countGVs(Test.getProgram());
+  runDeltaPass(Test, GVCount, extractGVsFromModule);
 }

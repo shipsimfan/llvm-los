@@ -13,7 +13,7 @@ typedef signed char BOOL;
 +(instancetype)numberWithBool:(BOOL)value;
 @end
 
-void test(void) {
+void test() {
   NSNumber *n = YES; // expected-error{{numeric literal must be prefixed by '@'}}
   NSNumber *n1 = 1; // expected-error{{numeric literal must be prefixed by '@'}}
 

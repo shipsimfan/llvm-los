@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "R600RegisterInfo.h"
-#include "MCTargetDesc/R600MCTargetDesc.h"
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "R600Defines.h"
 #include "R600Subtarget.h"
 
@@ -54,8 +54,10 @@ BitVector R600RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   reserveRegisterTuples(Reserved, R600::PRED_SEL_ONE);
   reserveRegisterTuples(Reserved, R600::INDIRECT_BASE_ADDR);
 
-  for (MCPhysReg R : R600::R600_AddrRegClass)
-    reserveRegisterTuples(Reserved, R);
+  for (TargetRegisterClass::iterator I = R600::R600_AddrRegClass.begin(),
+                        E = R600::R600_AddrRegClass.end(); I != E; ++I) {
+    reserveRegisterTuples(Reserved, *I);
+  }
 
   TII->reserveIndirectRegisters(Reserved, MF, *this);
 

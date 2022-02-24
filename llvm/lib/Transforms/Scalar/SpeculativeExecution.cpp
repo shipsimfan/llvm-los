@@ -268,7 +268,7 @@ bool SpeculativeExecutionPass::considerHoistingFromTo(
     if (const auto *DVI = dyn_cast<DbgVariableIntrinsic>(U)) {
       return all_of(DVI->location_ops(), [&NotHoisted](Value *V) {
         if (const auto *I = dyn_cast_or_null<Instruction>(V)) {
-          if (!NotHoisted.contains(I))
+          if (NotHoisted.count(I) == 0)
             return true;
         }
         return false;
@@ -343,6 +343,7 @@ PreservedAnalyses SpeculativeExecutionPass::run(Function &F,
   if (!Changed)
     return PreservedAnalyses::all();
   PreservedAnalyses PA;
+  PA.preserve<GlobalsAA>();
   PA.preserveSet<CFGAnalyses>();
   return PA;
 }

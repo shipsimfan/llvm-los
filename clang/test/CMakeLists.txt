@@ -11,18 +11,15 @@ string(REPLACE ${CMAKE_CFG_INTDIR} ${LLVM_BUILD_MODE} CLANG_TOOLS_DIR ${LLVM_RUN
 
 llvm_canonicalize_cmake_booleans(
   CLANG_BUILD_EXAMPLES
-  CLANG_DEFAULT_PIE_ON_LINUX
   CLANG_ENABLE_ARCMT
   CLANG_ENABLE_STATIC_ANALYZER
-  CLANG_PLUGIN_SUPPORT
   CLANG_SPAWN_CC1
   ENABLE_BACKTRACES
   LLVM_ENABLE_NEW_PASS_MANAGER
   LLVM_ENABLE_ZLIB
   LLVM_ENABLE_PER_TARGET_RUNTIME_DIR
-  LLVM_ENABLE_THREADS
-  LLVM_WITH_Z3
-  )
+  LLVM_ENABLE_PLUGINS
+  LLVM_ENABLE_THREADS)
 
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
@@ -36,11 +33,9 @@ configure_lit_site_cfg(
   "LLVM_LIBS_DIR"
   "SHLIBDIR"
   "LLVM_LIT_TOOLS_DIR"
-  "LLVM_EXTERNAL_LIT"
   "CLANG_BINARY_DIR"
   "CLANG_SOURCE_DIR"
   "CLANG_TOOLS_DIR"
-  "CMAKE_LIBRARY_OUTPUT_DIRECTORY"
   )
 
 configure_lit_site_cfg(
@@ -73,10 +68,8 @@ list(APPEND CLANG_TEST_DEPS
   clang-import-test
   clang-rename
   clang-refactor
-  clang-repl
   clang-diff
   clang-scan-deps
-  clang-pseudo
   diagtool
   hmaptool
   )
@@ -95,12 +88,12 @@ if (CLANG_ENABLE_ARCMT)
   )
 endif ()
 
-if(CLANG_BUILD_EXAMPLES AND CLANG_PLUGIN_SUPPORT)
+if (CLANG_BUILD_EXAMPLES)
   list(APPEND CLANG_TEST_DEPS
     Attribute
     AnnotateFunctions
     CallSuperAttr
-    PluginsOrder
+    clang-interpreter
     PrintFunctionNames
     )
 endif ()
@@ -114,7 +107,6 @@ if( NOT CLANG_BUILT_STANDALONE )
     llvm-config
     FileCheck count not
     llc
-    llvm-ar
     llvm-as
     llvm-bcanalyzer
     llvm-cat
@@ -127,7 +119,6 @@ if( NOT CLANG_BUILT_STANDALONE )
     llvm-nm
     llvm-objcopy
     llvm-objdump
-    llvm-pdbutil
     llvm-profdata
     llvm-rc
     llvm-readelf
@@ -145,8 +136,8 @@ if( NOT CLANG_BUILT_STANDALONE )
   endif()
 endif()
 
-if(CLANG_ENABLE_STATIC_ANALYZER)
-  if(CLANG_PLUGIN_SUPPORT AND LLVM_ENABLE_PLUGINS) # Determine if we built them
+if (CLANG_ENABLE_STATIC_ANALYZER)
+  if (LLVM_ENABLE_PLUGINS)
     list(APPEND CLANG_TEST_DEPS
       SampleAnalyzerPlugin
       CheckerDependencyHandlingAnalyzerPlugin

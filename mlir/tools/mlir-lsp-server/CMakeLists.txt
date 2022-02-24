@@ -29,10 +29,11 @@ set(LIBS
   ${dialect_libs}
   ${conversion_libs}
   ${test_libs}
-  MLIRAffineAnalysis
+  MLIRLoopAnalysis
   MLIRAnalysis
   MLIRDialect
-  MLIRLspServerLib
+  MLIREDSC
+  MlirLspServerLib
   MLIRParser
   MLIRPass
   MLIRTransforms

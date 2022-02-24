@@ -10,8 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <utility>
-
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
 
 #include "mlir/Dialect/CommonFolders.h"
@@ -58,7 +56,7 @@ static Attribute extractCompositeElement(Attribute composite,
 
   if (auto vector = composite.dyn_cast<ElementsAttr>()) {
     assert(indices.size() == 1 && "must have exactly one index for a vector");
-    return vector.getValues<Attribute>()[indices[0]];
+    return vector.getValue({indices[0]});
   }
 
   if (auto array = composite.dyn_cast<ArrayAttr>()) {
@@ -76,7 +74,7 @@ static Attribute extractCompositeElement(Attribute composite,
 
 namespace {
 #include "SPIRVCanonicalization.inc"
-} // namespace
+}
 
 //===----------------------------------------------------------------------===//
 // spv.AccessChainOp
@@ -110,7 +108,7 @@ struct CombineChainedAccessChain
     return success();
   }
 };
-} // namespace
+} // end anonymous namespace
 
 void spirv::AccessChainOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
@@ -163,8 +161,8 @@ OpFoldResult spirv::IAddOp::fold(ArrayRef<Attribute> operands) {
   // The resulting value will equal the low-order N bits of the correct result
   // R, where N is the component width and R is computed with enough precision
   // to avoid overflow and underflow.
-  return constFoldBinaryOp<IntegerAttr>(
-      operands, [](APInt a, const APInt &b) { return std::move(a) + b; });
+  return constFoldBinaryOp<IntegerAttr>(operands,
+                                        [](APInt a, APInt b) { return a + b; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -185,8 +183,8 @@ OpFoldResult spirv::IMulOp::fold(ArrayRef<Attribute> operands) {
   // The resulting value will equal the low-order N bits of the correct result
   // R, where N is the component width and R is computed with enough precision
   // to avoid overflow and underflow.
-  return constFoldBinaryOp<IntegerAttr>(
-      operands, [](const APInt &a, const APInt &b) { return a * b; });
+  return constFoldBinaryOp<IntegerAttr>(operands,
+                                        [](APInt a, APInt b) { return a * b; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -203,8 +201,8 @@ OpFoldResult spirv::ISubOp::fold(ArrayRef<Attribute> operands) {
   // The resulting value will equal the low-order N bits of the correct result
   // R, where N is the component width and R is computed with enough precision
   // to avoid overflow and underflow.
-  return constFoldBinaryOp<IntegerAttr>(
-      operands, [](APInt a, const APInt &b) { return std::move(a) - b; });
+  return constFoldBinaryOp<IntegerAttr>(operands,
+                                        [](APInt a, APInt b) { return a - b; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -416,7 +414,7 @@ LogicalResult ConvertSelectionOpToSelect::canCanonicalizeSelection(
 
   return success();
 }
-} // namespace
+} // end anonymous namespace
 
 void spirv::SelectionOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                      MLIRContext *context) {

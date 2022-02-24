@@ -55,7 +55,7 @@ private:
   // Initialize class variables.
   void initialize(MachineFunction &MFParm);
 
-  bool removeLD();
+  bool removeLD(void);
   void processCandidate(MachineRegisterInfo *MRI, MachineBasicBlock &MBB,
                         MachineInstr &MI, Register &SrcReg, Register &DstReg,
                         const GlobalValue *GVal, bool IsAma);
@@ -97,13 +97,15 @@ void BPFMISimplifyPatchable::checkADDrr(MachineRegisterInfo *MRI,
 
   // Go through all uses of %1 as in %1 = ADD_rr %2, %3
   const MachineOperand Op0 = Inst->getOperand(0);
-  for (MachineOperand &MO :
-       llvm::make_early_inc_range(MRI->use_operands(Op0.getReg()))) {
+  auto Begin = MRI->use_begin(Op0.getReg()), End = MRI->use_end();
+  decltype(End) NextI;
+  for (auto I = Begin; I != End; I = NextI) {
+    NextI = std::next(I);
     // The candidate needs to have a unique definition.
-    if (!MRI->getUniqueVRegDef(MO.getReg()))
+    if (!MRI->getUniqueVRegDef(I->getReg()))
       continue;
 
-    MachineInstr *DefInst = MO.getParent();
+    MachineInstr *DefInst = I->getParent();
     unsigned Opcode = DefInst->getOpcode();
     unsigned COREOp;
     if (Opcode == BPF::LDB || Opcode == BPF::LDH || Opcode == BPF::LDW ||
@@ -129,7 +131,7 @@ void BPFMISimplifyPatchable::checkADDrr(MachineRegisterInfo *MRI,
         Opcode == BPF::STD || Opcode == BPF::STB32 || Opcode == BPF::STH32 ||
         Opcode == BPF::STW32) {
       const MachineOperand &Opnd = DefInst->getOperand(0);
-      if (Opnd.isReg() && Opnd.getReg() == MO.getReg())
+      if (Opnd.isReg() && Opnd.getReg() == I->getReg())
         continue;
     }
 

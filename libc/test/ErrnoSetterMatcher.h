@@ -9,9 +9,8 @@
 #ifndef LLVM_LIBC_TEST_ERRNOSETTERMATCHER_H
 #define LLVM_LIBC_TEST_ERRNOSETTERMATCHER_H
 
+#include "src/errno/llvmlibc_errno.h"
 #include "utils/UnitTest/Test.h"
-
-#include <errno.h>
 
 namespace __llvm_libc {
 namespace testing {
@@ -43,8 +42,8 @@ public:
 
   bool match(T Got) {
     ActualReturn = Got;
-    ActualErrno = errno;
-    errno = 0;
+    ActualErrno = llvmlibc_errno;
+    llvmlibc_errno = 0;
     return Got == ExpectedReturn && ActualErrno == ExpectedErrno;
   }
 };

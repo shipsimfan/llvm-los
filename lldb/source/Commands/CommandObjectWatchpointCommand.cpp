@@ -61,12 +61,11 @@ public:
   CommandObjectWatchpointCommandAdd(CommandInterpreter &interpreter)
       : CommandObjectParsed(interpreter, "add",
                             "Add a set of LLDB commands to a watchpoint, to be "
-                            "executed whenever the watchpoint is hit.  "
-                            "The commands added to the watchpoint replace any "
-                            "commands previously added to it.",
+                            "executed whenever the watchpoint is hit.",
                             nullptr, eCommandRequiresTarget),
         IOHandlerDelegateMultiline("DONE",
-                                   IOHandlerDelegate::Completion::LLDBCommand) {
+                                   IOHandlerDelegate::Completion::LLDBCommand),
+        m_options() {
     SetHelpLong(
         R"(
 General information about entering watchpoint commands
@@ -313,7 +312,10 @@ are no syntax errors may indicate that a function was declared but never called.
 
   class CommandOptions : public Options {
   public:
-    CommandOptions() {}
+    CommandOptions()
+        : Options(), m_use_commands(false), m_use_script_language(false),
+          m_script_language(eScriptLanguageNone), m_use_one_liner(false),
+          m_one_liner(), m_function_name() {}
 
     ~CommandOptions() override = default;
 
@@ -383,12 +385,12 @@ are no syntax errors may indicate that a function was declared but never called.
 
     // Instance variables to hold the values for command options.
 
-    bool m_use_commands = false;
-    bool m_use_script_language = false;
-    lldb::ScriptLanguage m_script_language = eScriptLanguageNone;
+    bool m_use_commands;
+    bool m_use_script_language;
+    lldb::ScriptLanguage m_script_language;
 
     // Instance variables to hold the values for one_liner options.
-    bool m_use_one_liner = false;
+    bool m_use_one_liner;
     std::string m_one_liner;
     bool m_stop_on_error;
     std::string m_function_name;
@@ -403,6 +405,7 @@ protected:
 
     if (num_watchpoints == 0) {
       result.AppendError("No watchpoints exist to have commands added");
+      result.SetStatus(eReturnStatusFailed);
       return false;
     }
 
@@ -417,6 +420,7 @@ protected:
     if (!CommandObjectMultiwordWatchpoint::VerifyWatchpointIDs(target, command,
                                                                valid_wp_ids)) {
       result.AppendError("Invalid watchpoints specification.");
+      result.SetStatus(eReturnStatusFailed);
       return false;
     }
 
@@ -511,12 +515,14 @@ protected:
 
     if (num_watchpoints == 0) {
       result.AppendError("No watchpoints exist to have commands deleted");
+      result.SetStatus(eReturnStatusFailed);
       return false;
     }
 
     if (command.GetArgumentCount() == 0) {
       result.AppendError(
           "No watchpoint specified from which to delete the commands");
+      result.SetStatus(eReturnStatusFailed);
       return false;
     }
 
@@ -524,6 +530,7 @@ protected:
     if (!CommandObjectMultiwordWatchpoint::VerifyWatchpointIDs(target, command,
                                                                valid_wp_ids)) {
       result.AppendError("Invalid watchpoints specification.");
+      result.SetStatus(eReturnStatusFailed);
       return false;
     }
 
@@ -537,6 +544,7 @@ protected:
           wp->ClearCallback();
       } else {
         result.AppendErrorWithFormat("Invalid watchpoint ID: %u.\n", cur_wp_id);
+        result.SetStatus(eReturnStatusFailed);
         return false;
       }
     }
@@ -579,12 +587,14 @@ protected:
 
     if (num_watchpoints == 0) {
       result.AppendError("No watchpoints exist for which to list commands");
+      result.SetStatus(eReturnStatusFailed);
       return false;
     }
 
     if (command.GetArgumentCount() == 0) {
       result.AppendError(
           "No watchpoint specified for which to list the commands");
+      result.SetStatus(eReturnStatusFailed);
       return false;
     }
 
@@ -592,6 +602,7 @@ protected:
     if (!CommandObjectMultiwordWatchpoint::VerifyWatchpointIDs(target, command,
                                                                valid_wp_ids)) {
       result.AppendError("Invalid watchpoints specification.");
+      result.SetStatus(eReturnStatusFailed);
       return false;
     }
 
@@ -623,6 +634,7 @@ protected:
         } else {
           result.AppendErrorWithFormat("Invalid watchpoint ID: %u.\n",
                                        cur_wp_id);
+          result.SetStatus(eReturnStatusFailed);
         }
       }
     }

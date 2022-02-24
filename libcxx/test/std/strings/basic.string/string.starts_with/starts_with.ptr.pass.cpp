@@ -16,8 +16,9 @@
 
 #include "test_macros.h"
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     typedef std::string S;
     const char *s = "abcde";
     S  s0 {};
@@ -56,17 +57,7 @@ bool test() {
     assert (!sNot.starts_with("abcd"));
     assert (!sNot.starts_with("abcde"));
     assert ( sNot.starts_with("def"));
-  }
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
-#endif
+    }
 
   return 0;
 }

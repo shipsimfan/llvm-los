@@ -319,7 +319,7 @@ public:
   }
 
   LookupResultKind getResultKind() const {
-    assert(checkDebugAssumptions());
+    assert(sanity());
     return ResultKind;
   }
 
@@ -706,9 +706,10 @@ private:
   void addDeclsFromBasePaths(const CXXBasePaths &P);
   void configure();
 
-  bool checkDebugAssumptions() const;
+  // Sanity checks.
+  bool sanity() const;
 
-  bool checkUnresolved() const {
+  bool sanityCheckUnresolved() const {
     for (iterator I = begin(), E = end(); I != E; ++I)
       if (isa<UnresolvedUsingValueDecl>((*I)->getUnderlyingDecl()))
         return true;

@@ -1,14 +1,11 @@
 add_lldb_unittest(TargetTests
   ABITest.cpp
-  DynamicRegisterInfoTest.cpp
   ExecutionContextTest.cpp
   MemoryRegionInfoTest.cpp
-  MemoryTagMapTest.cpp
   ModuleCacheTest.cpp
   PathMappingListTest.cpp
   RemoteAwarePlatformTest.cpp
   StackFrameRecognizerTest.cpp
-  FindFileTest.cpp
 
   LINK_LIBS
       lldbCore

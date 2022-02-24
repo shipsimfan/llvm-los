@@ -1,3 +1,4 @@
+; RUN: opt -metarenamer -S < %s | FileCheck %s
 ; RUN: opt -passes=metarenamer -S < %s | FileCheck %s
 
 ; CHECK: target triple {{.*}}

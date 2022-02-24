@@ -26,8 +26,9 @@ test(S s, const typename S::value_type* str, S expected)
     assert(s == expected);
 }
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     typedef std::string S;
     test(S(), "", S());
     test(S(), "12345", S("12345"));
@@ -41,9 +42,9 @@ bool test() {
     test(S("12345678901234567890"), "12345", S("1234567890123456789012345"));
     test(S("12345678901234567890"), "12345678901234567890",
          S("1234567890123456789012345678901234567890"));
-  }
+    }
 #if TEST_STD_VER >= 11
-  {
+    {
     typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
     test(S(), "", S());
     test(S(), "12345", S("12345"));
@@ -57,10 +58,10 @@ bool test() {
     test(S("12345678901234567890"), "12345", S("1234567890123456789012345"));
     test(S("12345678901234567890"), "12345678901234567890",
          S("1234567890123456789012345678901234567890"));
-  }
+    }
 #endif
 
-  { // test appending to self
+    { // test appending to self
     typedef std::string S;
     S s_short = "123/";
     S s_long  = "Lorem ipsum dolor sit amet, consectetur/";
@@ -74,17 +75,7 @@ bool test() {
 
     s_long.append(s_long.c_str());
     assert(s_long == "Lorem ipsum dolor sit amet, consectetur/Lorem ipsum dolor sit amet, consectetur/");
-  }
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
-#endif
+    }
 
   return 0;
 }

@@ -14,6 +14,7 @@
 #ifndef LLVM_SUPPORT_ITANIUMMANGLINGCANONICALIZER_H
 #define LLVM_SUPPORT_ITANIUMMANGLINGCANONICALIZER_H
 
+#include <cstddef>
 #include <cstdint>
 
 namespace llvm {

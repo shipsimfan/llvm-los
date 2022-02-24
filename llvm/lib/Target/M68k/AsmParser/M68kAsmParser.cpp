@@ -1,4 +1,4 @@
-//===-- M68kAsmParser.cpp - Parse M68k assembly to MCInst instructions ----===//
+//===---- M68kAsmParser.cpp - Parse M68k assembly to MCInst instructions --===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,11 +11,10 @@
 #include "TargetInfo/M68kTargetInfo.h"
 
 #include "llvm/MC/MCContext.h"
-#include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/MC/MCStreamer.h"
-#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/TargetRegistry.h"
 
 #include <sstream>
 
@@ -50,10 +49,9 @@ class M68kAsmParser : public MCTargetAsmParser {
   // Parser functions.
   void eatComma();
 
-  bool isExpr();
+  bool isExpr() const;
   OperandMatchResultTy parseImm(OperandVector &Operands);
   OperandMatchResultTy parseMemOp(OperandVector &Operands);
-  OperandMatchResultTy parseRegOrMoveMask(OperandVector &Operands);
 
 public:
   M68kAsmParser(const MCSubtargetInfo &STI, MCAsmParser &Parser,
@@ -82,7 +80,6 @@ public:
 struct M68kMemOp {
   enum class Kind {
     Addr,
-    RegMask,
     Reg,
     RegIndirect,
     RegPostIncrement,
@@ -93,7 +90,6 @@ struct M68kMemOp {
 
   // These variables are used for the following forms:
   // Addr: (OuterDisp)
-  // RegMask: RegMask (as register mask)
   // Reg: %OuterReg
   // RegIndirect: (%OuterReg)
   // RegPostIncrement: (%OuterReg)+
@@ -110,7 +106,6 @@ struct M68kMemOp {
   uint8_t Size : 4;
   uint8_t Scale : 4;
   const MCExpr *Expr;
-  uint16_t RegMask;
 
   M68kMemOp() {}
   M68kMemOp(Kind Op) : Op(Op) {}
@@ -122,14 +117,14 @@ struct M68kMemOp {
 class M68kOperand : public MCParsedAsmOperand {
   typedef MCParsedAsmOperand Base;
 
-  enum class KindTy {
+  enum class Kind {
     Invalid,
     Token,
     Imm,
     MemOp,
   };
 
-  KindTy Kind;
+  Kind Kind;
   SMLoc Start, End;
   union {
     StringRef Token;
@@ -138,10 +133,8 @@ class M68kOperand : public MCParsedAsmOperand {
     M68kMemOp MemOp;
   };
 
-  template <unsigned N> bool isAddrN() const;
-
 public:
-  M68kOperand(KindTy Kind, SMLoc Start, SMLoc End)
+  M68kOperand(enum Kind Kind, SMLoc Start, SMLoc End)
       : Base(), Kind(Kind), Start(Start), End(End) {}
 
   SMLoc getStartLoc() const override { return Start; }
@@ -150,14 +143,12 @@ public:
   void print(raw_ostream &OS) const override;
 
   bool isMem() const override { return false; }
-  bool isMemOp() const { return Kind == KindTy::MemOp; }
+  bool isMemOp() const { return Kind == Kind::MemOp; }
 
   static void addExpr(MCInst &Inst, const MCExpr *Expr);
 
   // Reg
   bool isReg() const override;
-  bool isAReg() const;
-  bool isDReg() const;
   unsigned getReg() const override;
   void addRegOperands(MCInst &Inst, unsigned N) const;
 
@@ -177,15 +168,8 @@ public:
   static std::unique_ptr<M68kOperand> createImm(const MCExpr *Expr, SMLoc Start,
                                                 SMLoc End);
 
-  // MoveMask
-  bool isMoveMask() const;
-  void addMoveMaskOperands(MCInst &Inst, unsigned N) const;
-
   // Addr
   bool isAddr() const;
-  bool isAddr8() const { return isAddrN<8>(); }
-  bool isAddr16() const { return isAddrN<16>(); }
-  bool isAddr32() const { return isAddrN<32>(); }
   void addAddrOperands(MCInst &Inst, unsigned N) const;
 
   // ARI
@@ -226,44 +210,10 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeM68kAsmParser() {
 #define GET_MATCHER_IMPLEMENTATION
 #include "M68kGenAsmMatcher.inc"
 
-static inline unsigned getRegisterByIndex(unsigned RegisterIndex) {
-  static unsigned RegistersByIndex[] = {
-      M68k::D0, M68k::D1, M68k::D2, M68k::D3, M68k::D4, M68k::D5,
-      M68k::D6, M68k::D7, M68k::A0, M68k::A1, M68k::A2, M68k::A3,
-      M68k::A4, M68k::A5, M68k::A6, M68k::SP,
-  };
-  assert(RegisterIndex <=
-         sizeof(RegistersByIndex) / sizeof(RegistersByIndex[0]));
-  return RegistersByIndex[RegisterIndex];
-}
-
-static inline unsigned getRegisterIndex(unsigned Register) {
-  if (Register >= M68k::D0 && Register <= M68k::D7)
-    return Register - M68k::D0;
-  if (Register >= M68k::A0 && Register <= M68k::A6)
-    return Register - M68k::A0 + 8;
-
-  switch (Register) {
-  case M68k::SP:
-    // SP is sadly not contiguous with the rest of the An registers
-    return 15;
-
-  case M68k::PC:
-  case M68k::CCR:
-    return 16;
-
-  default:
-    llvm_unreachable("unexpected register number");
-  }
-}
-
 void M68kMemOp::print(raw_ostream &OS) const {
   switch (Op) {
   case Kind::Addr:
     OS << OuterDisp;
-    break;
-  case Kind::RegMask:
-    OS << "RegMask(" << format("%04x", RegMask) << ")";
     break;
   case Kind::Reg:
     OS << '%' << OuterReg;
@@ -298,7 +248,7 @@ void M68kOperand::addExpr(MCInst &Inst, const MCExpr *Expr) {
 
 // Reg
 bool M68kOperand::isReg() const {
-  return Kind == KindTy::MemOp && MemOp.Op == M68kMemOp::Kind::Reg;
+  return Kind == Kind::MemOp && MemOp.Op == M68kMemOp::Kind::Reg;
 }
 
 unsigned M68kOperand::getReg() const {
@@ -315,13 +265,13 @@ void M68kOperand::addRegOperands(MCInst &Inst, unsigned N) const {
 
 std::unique_ptr<M68kOperand> M68kOperand::createMemOp(M68kMemOp MemOp,
                                                       SMLoc Start, SMLoc End) {
-  auto Op = std::make_unique<M68kOperand>(KindTy::MemOp, Start, End);
+  auto Op = std::make_unique<M68kOperand>(Kind::MemOp, Start, End);
   Op->MemOp = MemOp;
   return Op;
 }
 
 // Token
-bool M68kOperand::isToken() const { return Kind == KindTy::Token; }
+bool M68kOperand::isToken() const { return Kind == Kind::Token; }
 StringRef M68kOperand::getToken() const {
   assert(isToken());
   return Token;
@@ -329,15 +279,15 @@ StringRef M68kOperand::getToken() const {
 
 std::unique_ptr<M68kOperand> M68kOperand::createToken(StringRef Token,
                                                       SMLoc Start, SMLoc End) {
-  auto Op = std::make_unique<M68kOperand>(KindTy::Token, Start, End);
+  auto Op = std::make_unique<M68kOperand>(Kind::Token, Start, End);
   Op->Token = Token;
   return Op;
 }
 
 // Imm
-bool M68kOperand::isImm() const { return Kind == KindTy::Imm; }
+bool M68kOperand::isImm() const { return Kind == Kind::Imm; }
 void M68kOperand::addImmOperands(MCInst &Inst, unsigned N) const {
-  assert(isImm() && "wrong operand kind");
+  assert(isImm() && "wrong oeprand kind");
   assert((N == 1) && "can only handle one register operand");
 
   M68kOperand::addExpr(Inst, Expr);
@@ -345,52 +295,14 @@ void M68kOperand::addImmOperands(MCInst &Inst, unsigned N) const {
 
 std::unique_ptr<M68kOperand> M68kOperand::createImm(const MCExpr *Expr,
                                                     SMLoc Start, SMLoc End) {
-  auto Op = std::make_unique<M68kOperand>(KindTy::Imm, Start, End);
+  auto Op = std::make_unique<M68kOperand>(Kind::Imm, Start, End);
   Op->Expr = Expr;
   return Op;
-}
-
-// MoveMask
-bool M68kOperand::isMoveMask() const {
-  if (!isMemOp())
-    return false;
-
-  if (MemOp.Op == M68kMemOp::Kind::RegMask)
-    return true;
-
-  if (MemOp.Op != M68kMemOp::Kind::Reg)
-    return false;
-
-  // Only regular address / data registers are allowed to be used
-  // in register masks.
-  return getRegisterIndex(MemOp.OuterReg) < 16;
-}
-
-void M68kOperand::addMoveMaskOperands(MCInst &Inst, unsigned N) const {
-  assert(isMoveMask() && "wrong operand kind");
-  assert((N == 1) && "can only handle one immediate operand");
-
-  uint16_t MoveMask = MemOp.RegMask;
-  if (MemOp.Op == M68kMemOp::Kind::Reg)
-    MoveMask = 1 << getRegisterIndex(MemOp.OuterReg);
-
-  Inst.addOperand(MCOperand::createImm(MoveMask));
 }
 
 // Addr
 bool M68kOperand::isAddr() const {
   return isMemOp() && MemOp.Op == M68kMemOp::Kind::Addr;
-}
-// TODO: Maybe we can also store the size of OuterDisp
-// in Size?
-template <unsigned N> bool M68kOperand::isAddrN() const {
-  if (isAddr()) {
-    int64_t Res;
-    if (MemOp.OuterDisp->evaluateAsAbsolute(Res))
-      return isInt<N>(Res);
-    return true;
-  }
-  return false;
 }
 void M68kOperand::addAddrOperands(MCInst &Inst, unsigned N) const {
   M68kOperand::addExpr(Inst, MemOp.OuterDisp);
@@ -500,18 +412,6 @@ static inline bool checkRegisterClass(unsigned RegNo, bool Data, bool Address,
   }
 }
 
-bool M68kOperand::isAReg() const {
-  return isReg() && checkRegisterClass(getReg(),
-                                       /*Data=*/false,
-                                       /*Address=*/true, /*SP=*/true);
-}
-
-bool M68kOperand::isDReg() const {
-  return isReg() && checkRegisterClass(getReg(),
-                                       /*Data=*/true,
-                                       /*Address=*/false, /*SP=*/false);
-}
-
 unsigned M68kAsmParser::validateTargetOperandClass(MCParsedAsmOperand &Op,
                                                    unsigned Kind) {
   M68kOperand &Operand = (M68kOperand &)Op;
@@ -579,14 +479,13 @@ bool M68kAsmParser::parseRegisterName(unsigned &RegNo, SMLoc Loc,
                                       StringRef RegisterName) {
   auto RegisterNameLower = RegisterName.lower();
 
-  // CCR register
-  if (RegisterNameLower == "ccr") {
-    RegNo = M68k::CCR;
-    return true;
-  }
-
   // Parse simple general-purpose registers.
   if (RegisterNameLower.size() == 2) {
+    static unsigned RegistersByIndex[] = {
+        M68k::D0, M68k::D1, M68k::D2, M68k::D3, M68k::D4, M68k::D5,
+        M68k::D6, M68k::D7, M68k::A0, M68k::A1, M68k::A2, M68k::A3,
+        M68k::A4, M68k::A5, M68k::A6, M68k::SP,
+    };
 
     switch (RegisterNameLower[0]) {
     case 'd':
@@ -595,12 +494,19 @@ bool M68kAsmParser::parseRegisterName(unsigned &RegNo, SMLoc Loc,
         unsigned IndexOffset = (RegisterNameLower[0] == 'a') ? 8 : 0;
         unsigned RegIndex = (unsigned)(RegisterNameLower[1] - '0');
         if (RegIndex < 8) {
-          RegNo = getRegisterByIndex(IndexOffset + RegIndex);
+          RegNo = RegistersByIndex[IndexOffset + RegIndex];
           return true;
         }
       }
       break;
     }
+
+    case 'c':
+      if (RegisterNameLower[1] == 'c' && RegisterNameLower[2] == 'r') {
+        RegNo = M68k::CCR;
+        return true;
+      }
+      break;
 
     case 's':
       if (RegisterNameLower[1] == 'p') {
@@ -675,13 +581,11 @@ OperandMatchResultTy M68kAsmParser::tryParseRegister(unsigned &RegNo,
   return Result;
 }
 
-bool M68kAsmParser::isExpr() {
+bool M68kAsmParser::isExpr() const {
   switch (Parser.getTok().getKind()) {
   case AsmToken::Identifier:
   case AsmToken::Integer:
     return true;
-  case AsmToken::Minus:
-    return getLexer().peekTok().getKind() == AsmToken::Integer;
 
   default:
     return false;
@@ -711,9 +615,16 @@ OperandMatchResultTy M68kAsmParser::parseMemOp(OperandVector &Operands) {
   bool IsPD = false;
   M68kMemOp MemOp;
 
-  // Check for a plain register or register mask.
-  auto Result = parseRegOrMoveMask(Operands);
-  if (Result != llvm::MatchOperand_NoMatch) {
+  // Check for a plain register.
+  auto Result = parseRegister(MemOp.OuterReg);
+  if (Result == MatchOperand_Success) {
+    MemOp.Op = M68kMemOp::Kind::Reg;
+    Operands.push_back(
+        M68kOperand::createMemOp(MemOp, Start, getLexer().getLoc()));
+    return MatchOperand_Success;
+  }
+
+  if (Result == MatchOperand_ParseFail) {
     return Result;
   }
 
@@ -831,87 +742,6 @@ OperandMatchResultTy M68kAsmParser::parseMemOp(OperandVector &Operands) {
   return MatchOperand_Success;
 }
 
-OperandMatchResultTy
-M68kAsmParser::parseRegOrMoveMask(OperandVector &Operands) {
-  SMLoc Start = getLexer().getLoc();
-  M68kMemOp MemOp(M68kMemOp::Kind::RegMask);
-  MemOp.RegMask = 0;
-
-  for (;;) {
-    bool IsFirstRegister =
-        (MemOp.Op == M68kMemOp::Kind::RegMask) && (MemOp.RegMask == 0);
-
-    unsigned FirstRegister;
-    auto Result = parseRegister(FirstRegister);
-    if (IsFirstRegister && (Result == llvm::MatchOperand_NoMatch)) {
-      return MatchOperand_NoMatch;
-    }
-    if (Result != llvm::MatchOperand_Success) {
-      Error(getLexer().getLoc(), "expected start register");
-      return MatchOperand_ParseFail;
-    }
-
-    unsigned LastRegister = FirstRegister;
-    if (getLexer().is(AsmToken::Minus)) {
-      getLexer().Lex();
-      Result = parseRegister(LastRegister);
-      if (Result != llvm::MatchOperand_Success) {
-        Error(getLexer().getLoc(), "expected end register");
-        return MatchOperand_ParseFail;
-      }
-    }
-
-    unsigned FirstRegisterIndex = getRegisterIndex(FirstRegister);
-    unsigned LastRegisterIndex = getRegisterIndex(LastRegister);
-
-    uint16_t NumNewBits = LastRegisterIndex - FirstRegisterIndex + 1;
-    uint16_t NewMaskBits = ((1 << NumNewBits) - 1) << FirstRegisterIndex;
-
-    if (IsFirstRegister && (FirstRegister == LastRegister)) {
-      // First register range is a single register, simplify to just Reg
-      // so that it matches more operands.
-      MemOp.Op = M68kMemOp::Kind::Reg;
-      MemOp.OuterReg = FirstRegister;
-    } else {
-      if (MemOp.Op == M68kMemOp::Kind::Reg) {
-        // This is the second register being specified - expand the Reg operand
-        // into a mask first.
-        MemOp.Op = M68kMemOp::Kind::RegMask;
-        MemOp.RegMask = 1 << getRegisterIndex(MemOp.OuterReg);
-
-        if (MemOp.RegMask == 0) {
-          Error(getLexer().getLoc(),
-                "special registers cannot be used in register masks");
-          return MatchOperand_ParseFail;
-        }
-      }
-
-      if ((FirstRegisterIndex >= 16) || (LastRegisterIndex >= 16)) {
-        Error(getLexer().getLoc(),
-              "special registers cannot be used in register masks");
-        return MatchOperand_ParseFail;
-      }
-
-      if (NewMaskBits & MemOp.RegMask) {
-        Error(getLexer().getLoc(), "conflicting masked registers");
-        return MatchOperand_ParseFail;
-      }
-
-      MemOp.RegMask |= NewMaskBits;
-    }
-
-    if (getLexer().isNot(AsmToken::Slash)) {
-      break;
-    }
-
-    getLexer().Lex();
-  }
-
-  Operands.push_back(
-      M68kOperand::createMemOp(MemOp, Start, getLexer().getLoc()));
-  return MatchOperand_Success;
-}
-
 void M68kAsmParser::eatComma() {
   if (Parser.getTok().is(AsmToken::Comma)) {
     Parser.Lex();
@@ -1011,19 +841,19 @@ bool M68kAsmParser::MatchAndEmitInstruction(SMLoc Loc, unsigned &Opcode,
 
 void M68kOperand::print(raw_ostream &OS) const {
   switch (Kind) {
-  case KindTy::Invalid:
+  case Kind::Invalid:
     OS << "invalid";
     break;
 
-  case KindTy::Token:
+  case Kind::Token:
     OS << "token '" << Token << "'";
     break;
 
-  case KindTy::Imm:
+  case Kind::Imm:
     OS << "immediate " << Imm;
     break;
 
-  case KindTy::MemOp:
+  case Kind::MemOp:
     MemOp.print(OS);
     break;
   }

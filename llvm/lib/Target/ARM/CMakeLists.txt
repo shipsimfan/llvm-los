@@ -25,7 +25,6 @@ add_llvm_target(ARMCodeGen
   ARMBaseInstrInfo.cpp
   ARMBaseRegisterInfo.cpp
   ARMBasicBlockInfo.cpp
-  ARMBranchTargets.cpp
   ARMCallingConv.cpp
   ARMCallLowering.cpp
   ARMConstantIslandPass.cpp
@@ -75,7 +74,6 @@ add_llvm_target(ARMCodeGen
   AsmPrinter
   CodeGen
   Core
-  IPO
   MC
   Scalar
   SelectionDAG

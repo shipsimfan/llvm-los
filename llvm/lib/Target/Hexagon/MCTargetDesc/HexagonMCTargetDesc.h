@@ -85,6 +85,7 @@ namespace Hexagon_MC {
 }
 
 MCCodeEmitter *createHexagonMCCodeEmitter(const MCInstrInfo &MCII,
+                                          const MCRegisterInfo &MRI,
                                           MCContext &MCT);
 
 MCAsmBackend *createHexagonAsmBackend(const Target &T,

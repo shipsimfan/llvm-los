@@ -7,7 +7,7 @@
 - copy;
 @end
 
-int main(void) {
+int main() {
     NSObject *object = 0;
     __weak __block NSObject* weak_object = object;
     void (^callback) (void) = [^{

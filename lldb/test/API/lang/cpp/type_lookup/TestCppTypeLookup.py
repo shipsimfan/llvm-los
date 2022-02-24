@@ -14,10 +14,12 @@ class TestCppTypeLookup(TestBase):
     mydir = TestBase.compute_mydir(__file__)
 
     def check_value(self, value, ivar_name, ivar_value):
-        self.assertSuccess(value.GetError(), "Invalid valobj")
+        self.assertTrue(value.GetError().Success(),
+                        "Invalid valobj: %s" % (
+                                value.GetError().GetCString()))
         ivar = value.GetChildMemberWithName(ivar_name)
-        self.assertSuccess(ivar.GetError(),
-                           "Failed to fetch ivar named '%s'" % (ivar_name))
+        self.assertTrue(ivar.GetError().Success(),
+                        "Failed to fetch ivar named '%s'" % (ivar_name))
         self.assertEqual(ivar_value,
                          ivar.GetValueAsSigned(),
                          "Got the right value for ivar")

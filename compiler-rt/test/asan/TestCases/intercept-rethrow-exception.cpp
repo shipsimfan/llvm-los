@@ -1,8 +1,6 @@
 // Regression test for
 // https://bugs.llvm.org/show_bug.cgi?id=32434
 
-// REQUIRES: shared_cxxabi
-
 // RUN: %clangxx_asan -fexceptions -O0 %s -o %t
 // RUN: %run %t
 
@@ -11,9 +9,6 @@
 // XFAIL: netbsd
 // FIXME: Bug 42703
 // XFAIL: solaris
-
-// https://reviews.llvm.org/D111703 made compiler incompatible with released NDK.
-// UNSUPPORTED: android && arm-target-arch
 
 #include <assert.h>
 #include <exception>

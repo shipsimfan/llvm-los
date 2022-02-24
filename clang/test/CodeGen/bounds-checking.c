@@ -13,7 +13,7 @@ double f(int b, int i) {
 }
 
 // CHECK-LABEL: @f2
-void f2(void) {
+void f2() {
   // everything is constant; no trap possible
   // CHECK-NOT: call {{.*}} @llvm.{{(ubsan)?trap}}
   int a[2];
@@ -26,7 +26,7 @@ void f2(void) {
 }
 
 // CHECK-LABEL: @f3
-void f3(void) {
+void f3() {
   int a[1];
   // CHECK: call {{.*}} @llvm.{{(ubsan)?trap}}
   a[2] = 1;

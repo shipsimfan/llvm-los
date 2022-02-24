@@ -15,11 +15,10 @@
 #define MLIR_DIALECT_SPIRV_IR_ARITHMETIC_OPS
 
 include "mlir/Dialect/SPIRV/IR/SPIRVBase.td"
-include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 class SPV_ArithmeticBinaryOp<string mnemonic, Type type,
-                       list<Trait> traits = []> :
+                       list<OpTrait> traits = []> :
       // Operands type same as result type.
       SPV_BinaryOp<mnemonic, type, type,
                    !listconcat(traits,
@@ -34,11 +33,10 @@ class SPV_ArithmeticBinaryOp<string mnemonic, Type type,
   let results = (outs
     SPV_ScalarOrVectorOrCoopMatrixOf<type>:$result
   );
-  let assemblyFormat = "operands attr-dict `:` type($result)";
 }
 
 class SPV_ArithmeticUnaryOp<string mnemonic, Type type,
-                            list<Trait> traits = []> :
+                            list<OpTrait> traits = []> :
       // Operand type same as result type.
       SPV_UnaryOp<mnemonic, type, type,
                    !listconcat(traits,

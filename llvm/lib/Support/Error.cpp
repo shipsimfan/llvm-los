@@ -80,11 +80,8 @@ std::error_code inconvertibleErrorCode() {
 }
 
 std::error_code FileError::convertToErrorCode() const {
-  std::error_code NestedEC = Err->convertToErrorCode();
-  if (NestedEC == inconvertibleErrorCode())
-    return std::error_code(static_cast<int>(ErrorErrorCode::FileError),
-                           *ErrorErrorCat);
-  return NestedEC;
+  return std::error_code(static_cast<int>(ErrorErrorCode::FileError),
+                         *ErrorErrorCat);
 }
 
 Error errorCodeToError(std::error_code EC) {
@@ -99,7 +96,7 @@ std::error_code errorToErrorCode(Error Err) {
     EC = EI.convertToErrorCode();
   });
   if (EC == inconvertibleErrorCode())
-    report_fatal_error(Twine(EC.message()));
+    report_fatal_error(EC.message());
   return EC;
 }
 
@@ -147,7 +144,7 @@ void report_fatal_error(Error Err, bool GenCrashDiag) {
     raw_string_ostream ErrStream(ErrMsg);
     logAllUnhandledErrors(std::move(Err), ErrStream);
   }
-  report_fatal_error(Twine(ErrMsg));
+  report_fatal_error(ErrMsg);
 }
 
 } // end namespace llvm

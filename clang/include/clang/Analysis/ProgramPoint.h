@@ -30,6 +30,7 @@
 namespace clang {
 
 class AnalysisDeclContext;
+class FunctionDecl;
 class LocationContext;
 
 /// ProgramPoints can be "tagged" as representing points specific to a given

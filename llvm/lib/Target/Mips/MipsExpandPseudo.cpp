@@ -896,8 +896,9 @@ bool MipsExpandPseudo::runOnMachineFunction(MachineFunction &MF) {
   TII = STI->getInstrInfo();
 
   bool Modified = false;
-  for (MachineBasicBlock &MBB : MF)
-    Modified |= expandMBB(MBB);
+  for (MachineFunction::iterator MFI = MF.begin(), E = MF.end(); MFI != E;
+       ++MFI)
+    Modified |= expandMBB(*MFI);
 
   if (Modified)
     MF.RenumberBlocks();

@@ -1,4 +1,4 @@
-! RUN: %python %S/test_errors.py %s %flang_fc1
+! RUN: %S/test_errors.sh %s %t %flang_fc1
   write(*,*)
   write(*,'()')
   write(*,'(A)')
@@ -37,9 +37,6 @@
   write(*,'($)')
   write(*,'(\)')
   write(*,'(RZ,RU,RP,RN,RD,RC,SS,SP,S,3G15.3e2)')
-  write(*, '(' // achar( 9) // ')') ! horizontal tab
-  write(*, '(' // achar(11) // ')') ! vertical tab
-  write(*, '(' // achar(32) // ')') ! space
 
   ! C1302 warnings; no errors
   write(*,'(3P7I2)')
@@ -192,10 +189,10 @@
   !ERROR: Expected 'G' edit descriptor '.d' value
   write(*,'(G4)')
 
-  !ERROR: A 'G0' edit descriptor must not have an 'e' value
+  !ERROR: Unexpected 'e' in 'G0' edit descriptor
   write(*,'(G0.8e)')
 
-  !ERROR: A 'G0' edit descriptor must not have an 'e' value
+  !ERROR: Unexpected 'e' in 'G0' edit descriptor
   write(*,'(G0.8e2)')
 
   !ERROR: Kind parameter '_' character in format expression

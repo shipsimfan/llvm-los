@@ -23,7 +23,7 @@ int NODEREF *func(int NODEREF *arg) {  // expected-note{{arg declared here}}
 
 void func2(int x) {}
 
-int test(void) {
+int test() {
   int NODEREF *p; // expected-note 34 {{p declared here}}
   int *p2;
 

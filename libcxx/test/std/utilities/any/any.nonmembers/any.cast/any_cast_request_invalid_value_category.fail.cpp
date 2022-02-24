@@ -9,7 +9,10 @@
 // UNSUPPORTED: c++03, c++11, c++14
 
 // Throwing bad_any_cast is supported starting in macosx10.13
-// UNSUPPORTED: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11|12}}
+// UNSUPPORTED: with_system_cxx_lib=macosx10.12
+// UNSUPPORTED: with_system_cxx_lib=macosx10.11
+// UNSUPPORTED: with_system_cxx_lib=macosx10.10
+// UNSUPPORTED: with_system_cxx_lib=macosx10.9
 
 // <any>
 
@@ -21,41 +24,43 @@
 #include <any>
 
 struct TestType {};
+using std::any;
+using std::any_cast;
 
 void test_const_lvalue_cast_request_non_const_lvalue()
 {
-    const std::any a;
+    const any a;
     // expected-error-re@any:* {{static_assert failed{{.*}} "ValueType is required to be a const lvalue reference or a CopyConstructible type"}}
     // expected-error@any:* {{drops 'const' qualifier}}
-    std::any_cast<TestType &>(a); // expected-note {{requested here}}
+    any_cast<TestType &>(a); // expected-note {{requested here}}
 
-    const std::any a2(42);
+    const any a2(42);
     // expected-error-re@any:* {{static_assert failed{{.*}} "ValueType is required to be a const lvalue reference or a CopyConstructible type"}}
     // expected-error@any:* {{drops 'const' qualifier}}
-    std::any_cast<int&>(a2); // expected-note {{requested here}}
+    any_cast<int&>(a2); // expected-note {{requested here}}
 }
 
 void test_lvalue_any_cast_request_rvalue()
 {
-    std::any a;
+    any a;
     // expected-error-re@any:* {{static_assert failed{{.*}} "ValueType is required to be an lvalue reference or a CopyConstructible type"}}
-    std::any_cast<TestType &&>(a); // expected-note {{requested here}}
+    any_cast<TestType &&>(a); // expected-note {{requested here}}
 
-    std::any a2(42);
+    any a2(42);
     // expected-error-re@any:* {{static_assert failed{{.*}} "ValueType is required to be an lvalue reference or a CopyConstructible type"}}
-    std::any_cast<int&&>(a2); // expected-note {{requested here}}
+    any_cast<int&&>(a2); // expected-note {{requested here}}
 }
 
 void test_rvalue_any_cast_request_lvalue()
 {
-    std::any a;
+    any a;
     // expected-error-re@any:* {{static_assert failed{{.*}} "ValueType is required to be an rvalue reference or a CopyConstructible type"}}
     // expected-error@any:* {{non-const lvalue reference to type 'TestType' cannot bind to a temporary}}
-    std::any_cast<TestType &>(std::move(a)); // expected-note {{requested here}}
+    any_cast<TestType &>(std::move(a)); // expected-note {{requested here}}
 
     // expected-error-re@any:* {{static_assert failed{{.*}} "ValueType is required to be an rvalue reference or a CopyConstructible type"}}
     // expected-error@any:* {{non-const lvalue reference to type 'int' cannot bind to a temporary}}
-    std::any_cast<int&>(42);
+    any_cast<int&>(42);
 }
 
 int main(int, char**)

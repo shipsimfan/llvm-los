@@ -12,7 +12,6 @@
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Support/LogicalResult.h"
-#include "mlir/Support/Timing.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/iterator.h"
@@ -23,23 +22,22 @@
 
 namespace llvm {
 class Any;
-} // namespace llvm
+} // end namespace llvm
 
 namespace mlir {
 class AnalysisManager;
+class Identifier;
 class MLIRContext;
 class Operation;
 class Pass;
 class PassInstrumentation;
 class PassInstrumentor;
-class StringAttr;
 
 namespace detail {
 struct OpPassManagerImpl;
 class OpToOpPassAdaptor;
-class PassCrashReproducerGenerator;
 struct PassExecutionState;
-} // namespace detail
+} // end namespace detail
 
 //===----------------------------------------------------------------------===//
 // OpPassManager
@@ -51,7 +49,7 @@ struct PassExecutionState;
 class OpPassManager {
 public:
   enum class Nesting { Implicit, Explicit };
-  OpPassManager(StringAttr name, Nesting nesting = Nesting::Explicit);
+  OpPassManager(Identifier name, Nesting nesting = Nesting::Explicit);
   OpPassManager(StringRef name, Nesting nesting = Nesting::Explicit);
   OpPassManager(OpPassManager &&rhs);
   OpPassManager(const OpPassManager &rhs);
@@ -75,7 +73,7 @@ public:
 
   /// Nest a new operation pass manager for the given operation kind under this
   /// pass manager.
-  OpPassManager &nest(StringAttr nestedName);
+  OpPassManager &nest(Identifier nestedName);
   OpPassManager &nest(StringRef nestedName);
   template <typename OpT> OpPassManager &nest() {
     return nest(OpT::getOperationName());
@@ -84,9 +82,6 @@ public:
   /// Add the given pass to this pass manager. If this pass has a concrete
   /// operation type, it must be the same type as this pass manager.
   void addPass(std::unique_ptr<Pass> pass);
-
-  /// Clear the pipeline, but not the other options set on this OpPassManager.
-  void clear();
 
   /// Add the given pass to a nested pass manager for the given operation kind
   /// `OpT`.
@@ -98,7 +93,7 @@ public:
   size_t size() const;
 
   /// Return the operation name that this pass manager operates on.
-  StringAttr getOpName(MLIRContext &context) const;
+  Identifier getOpName(MLIRContext &context) const;
 
   /// Return the operation name that this pass manager operates on.
   StringRef getOpName() const;
@@ -175,7 +170,7 @@ public:
   /// style. The created pass manager can schedule operations that match
   /// `operationName`.
   PassManager(MLIRContext *ctx, Nesting nesting = Nesting::Explicit,
-              StringRef operationName = "builtin.module");
+              StringRef operationName = "module");
   PassManager(MLIRContext *ctx, StringRef operationName)
       : PassManager(ctx, Nesting::Explicit, operationName) {}
   ~PassManager();
@@ -246,15 +241,10 @@ public:
     ///   pass, in the case of a non-failure, we should first check if any
     ///   potential mutations were made. This allows for reducing the number of
     ///   logs that don't contain meaningful changes.
-    /// * 'printAfterOnlyOnFailure' signals that when printing the IR after a
-    ///   pass, we only print in the case of a failure.
-    ///     - This option should *not* be used with the other `printAfter` flags
-    ///       above.
     /// * 'opPrintingFlags' sets up the printing flags to use when printing the
     ///   IR.
     explicit IRPrinterConfig(
         bool printModuleScope = false, bool printAfterOnlyOnChange = false,
-        bool printAfterOnlyOnFailure = false,
         OpPrintingFlags opPrintingFlags = OpPrintingFlags());
     virtual ~IRPrinterConfig();
 
@@ -279,12 +269,6 @@ public:
     /// "changed".
     bool shouldPrintAfterOnlyOnChange() const { return printAfterOnlyOnChange; }
 
-    /// Returns true if the IR should only printed after a pass if the pass
-    /// "failed".
-    bool shouldPrintAfterOnlyOnFailure() const {
-      return printAfterOnlyOnFailure;
-    }
-
     /// Returns the printing flags to be used to print the IR.
     OpPrintingFlags getOpPrintingFlags() const { return opPrintingFlags; }
 
@@ -295,10 +279,6 @@ public:
     /// A flag that indicates that the IR after a pass should only be printed if
     /// a change is detected.
     bool printAfterOnlyOnChange;
-
-    /// A flag that indicates that the IR after a pass should only be printed if
-    /// the pass failed.
-    bool printAfterOnlyOnFailure;
 
     /// Flags to control printing behavior.
     OpPrintingFlags opPrintingFlags;
@@ -318,55 +298,53 @@ public:
   /// * 'printAfterOnlyOnChange' signals that when printing the IR after a
   ///   pass, in the case of a non-failure, we should first check if any
   ///   potential mutations were made.
-  /// * 'printAfterOnlyOnFailure' signals that when printing the IR after a
-  ///   pass, we only print in the case of a failure.
-  ///     - This option should *not* be used with the other `printAfter` flags
-  ///       above.
-  /// * 'out' corresponds to the stream to output the printed IR to.
   /// * 'opPrintingFlags' sets up the printing flags to use when printing the
   ///   IR.
+  /// * 'out' corresponds to the stream to output the printed IR to.
   void enableIRPrinting(
       std::function<bool(Pass *, Operation *)> shouldPrintBeforePass =
           [](Pass *, Operation *) { return true; },
       std::function<bool(Pass *, Operation *)> shouldPrintAfterPass =
           [](Pass *, Operation *) { return true; },
       bool printModuleScope = true, bool printAfterOnlyOnChange = true,
-      bool printAfterOnlyOnFailure = false, raw_ostream &out = llvm::errs(),
+      raw_ostream &out = llvm::errs(),
       OpPrintingFlags opPrintingFlags = OpPrintingFlags());
 
   //===--------------------------------------------------------------------===//
   // Pass Timing
 
+  /// A configuration struct provided to the pass timing feature.
+  class PassTimingConfig {
+  public:
+    using PrintCallbackFn = function_ref<void(raw_ostream &)>;
+
+    /// Initialize the configuration.
+    /// * 'displayMode' switch between list or pipeline display (see the
+    /// `PassDisplayMode` enum documentation).
+    explicit PassTimingConfig(
+        PassDisplayMode displayMode = PassDisplayMode::Pipeline)
+        : displayMode(displayMode) {}
+
+    virtual ~PassTimingConfig();
+
+    /// A hook that may be overridden by a derived config to control the
+    /// printing. The callback is supplied by the framework and the config is
+    /// responsible to call it back with a stream for the output.
+    virtual void printTiming(PrintCallbackFn printCallback);
+
+    /// Return the `PassDisplayMode` this config was created with.
+    PassDisplayMode getDisplayMode() { return displayMode; }
+
+  private:
+    PassDisplayMode displayMode;
+  };
+
   /// Add an instrumentation to time the execution of passes and the computation
-  /// of analyses. Timing will be reported by nesting timers into the provided
-  /// `timingScope`.
-  ///
+  /// of analyses.
   /// Note: Timing should be enabled after all other instrumentations to avoid
   /// any potential "ghost" timing from other instrumentations being
   /// unintentionally included in the timing results.
-  void enableTiming(TimingScope &timingScope);
-
-  /// Add an instrumentation to time the execution of passes and the computation
-  /// of analyses. The pass manager will take ownership of the timing manager
-  /// passed to the function and timing will be reported by nesting timers into
-  /// the timing manager's root scope.
-  ///
-  /// Note: Timing should be enabled after all other instrumentations to avoid
-  /// any potential "ghost" timing from other instrumentations being
-  /// unintentionally included in the timing results.
-  void enableTiming(std::unique_ptr<TimingManager> tm);
-
-  /// Add an instrumentation to time the execution of passes and the computation
-  /// of analyses. Creates a temporary TimingManager owned by this PassManager
-  /// which will be used to report timing.
-  ///
-  /// Note: Timing should be enabled after all other instrumentations to avoid
-  /// any potential "ghost" timing from other instrumentations being
-  /// unintentionally included in the timing results.
-  void enableTiming();
-
-  //===--------------------------------------------------------------------===//
-  // Pass Statistics
+  void enableTiming(std::unique_ptr<PassTimingConfig> config = nullptr);
 
   /// Prompts the pass manager to print the statistics collected for each of the
   /// held passes after each call to 'run'.
@@ -377,11 +355,12 @@ private:
   /// Dump the statistics of the passes within this pass manager.
   void dumpStatistics();
 
-  /// Run the pass manager with crash recovery enabled.
+  /// Run the pass manager with crash recover enabled.
   LogicalResult runWithCrashRecovery(Operation *op, AnalysisManager am);
-
-  /// Run the passes of the pass manager, and return the result.
-  LogicalResult runPasses(Operation *op, AnalysisManager am);
+  /// Run the given passes with crash recover enabled.
+  LogicalResult
+  runWithCrashRecovery(MutableArrayRef<std::unique_ptr<Pass>> passes,
+                       Operation *op, AnalysisManager am);
 
   /// Context this PassManager was initialized with.
   MLIRContext *context;
@@ -392,15 +371,17 @@ private:
   /// A manager for pass instrumentations.
   std::unique_ptr<PassInstrumentor> instrumentor;
 
-  /// An optional crash reproducer generator, if this pass manager is setup to
-  /// generate reproducers.
-  std::unique_ptr<detail::PassCrashReproducerGenerator> crashReproGenerator;
+  /// An optional factory to use when generating a crash reproducer if valid.
+  ReproducerStreamFactory crashReproducerStreamFactory;
 
   /// A hash key used to detect when reinitialization is necessary.
   llvm::hash_code initializationKey;
 
   /// Flag that specifies if pass timing is enabled.
   bool passTiming : 1;
+
+  /// Flag that specifies if the generated crash reproducer should be local.
+  bool localReproducer : 1;
 
   /// A flag that indicates if the IR should be verified in between passes.
   bool verifyPasses : 1;
@@ -414,13 +395,6 @@ void registerPassManagerCLOptions();
 /// Apply any values provided to the pass manager options that were registered
 /// with 'registerPassManagerOptions'.
 void applyPassManagerCLOptions(PassManager &pm);
-
-/// Apply any values provided to the timing manager options that were registered
-/// with `registerDefaultTimingManagerOptions`. This is a handy helper function
-/// if you do not want to bother creating your own timing manager and passing it
-/// to the pass manager.
-void applyDefaultTimingPassManagerCLOptions(PassManager &pm);
-
-} // namespace mlir
+} // end namespace mlir
 
 #endif // MLIR_PASS_PASSMANAGER_H

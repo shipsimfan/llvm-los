@@ -30,8 +30,8 @@
 #include <cstring>
 #include <memory>
 
-#include <cinttypes>
-#include <cstdio>
+#include <inttypes.h>
+#include <stdio.h>
 
 namespace lldb_private {
 class Target;
@@ -46,9 +46,10 @@ EmulateInstruction::FindPlugin(const ArchSpec &arch,
                                const char *plugin_name) {
   EmulateInstructionCreateInstance create_callback = nullptr;
   if (plugin_name) {
+    ConstString const_plugin_name(plugin_name);
     create_callback =
         PluginManager::GetEmulateInstructionCreateCallbackForPluginName(
-            plugin_name);
+            const_plugin_name);
     if (create_callback) {
       EmulateInstruction *emulate_insn_ptr =
           create_callback(arch, supported_inst_type);

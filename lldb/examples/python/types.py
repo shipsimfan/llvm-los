@@ -351,7 +351,7 @@ if __name__ == '__main__':
             continue
         verify_types(target, options)
 
-def __lldb_init_module(debugger, internal_dict):
-    debugger.HandleCommand(
+elif getattr(lldb, 'debugger', None):
+    lldb.debugger.HandleCommand(
         'command script add -f types.check_padding_command check_padding')
     print('"check_padding" command installed, use the "--help" option for detailed help')

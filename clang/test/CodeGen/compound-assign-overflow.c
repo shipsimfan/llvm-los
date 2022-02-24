@@ -12,21 +12,21 @@
 int32_t x;
 
 // CHECK: @compaddsigned
-void compaddsigned(void) {
+void compaddsigned() {
 #line 100
   x += ((int32_t)1);
   // CHECK: @__ubsan_handle_add_overflow(i8* bitcast ({{.*}} @[[LINE_100]] to i8*), {{.*}})
 }
 
 // CHECK: @compaddunsigned
-void compaddunsigned(void) {
+void compaddunsigned() {
 #line 200
   x += ((uint32_t)1U);
   // CHECK: @__ubsan_handle_add_overflow(i8* bitcast ({{.*}} @[[LINE_200]] to i8*), {{.*}})
 }
 
 // CHECK: @compdiv
-void compdiv(void) {
+void compdiv() {
 #line 300
   x /= x;
   // CHECK: @__ubsan_handle_divrem_overflow(i8* bitcast ({{.*}} @[[LINE_300]] to i8*), {{.*}})

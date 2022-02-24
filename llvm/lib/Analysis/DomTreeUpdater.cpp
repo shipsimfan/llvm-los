@@ -14,7 +14,6 @@
 #include "llvm/Analysis/DomTreeUpdater.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Analysis/PostDominators.h"
-#include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Support/GenericDomTree.h"
 #include <algorithm>

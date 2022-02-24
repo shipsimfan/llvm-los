@@ -99,7 +99,8 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<AssumptionCacheTracker>();
     AU.addRequired<TargetTransformInfoWrapperPass>();
-    AU.addPreserved<MemorySSAWrapperPass>();
+    if (EnableMSSALoopDependency)
+      AU.addPreserved<MemorySSAWrapperPass>();
     getLoopAnalysisUsage(AU);
 
     // Lazy BFI and BPI are marked as preserved here so LoopRotate
@@ -120,11 +121,13 @@ public:
     auto &SE = getAnalysis<ScalarEvolutionWrapperPass>().getSE();
     const SimplifyQuery SQ = getBestSimplifyQuery(*this, F);
     Optional<MemorySSAUpdater> MSSAU;
-    // Not requiring MemorySSA and getting it only if available will split
-    // the loop pass pipeline when LoopRotate is being run first.
-    auto *MSSAA = getAnalysisIfAvailable<MemorySSAWrapperPass>();
-    if (MSSAA)
-      MSSAU = MemorySSAUpdater(&MSSAA->getMSSA());
+    if (EnableMSSALoopDependency) {
+      // Not requiring MemorySSA and getting it only if available will split
+      // the loop pass pipeline when LoopRotate is being run first.
+      auto *MSSAA = getAnalysisIfAvailable<MemorySSAWrapperPass>();
+      if (MSSAA)
+        MSSAU = MemorySSAUpdater(&MSSAA->getMSSA());
+    }
     // Vectorization requires loop-rotation. Use default threshold for loops the
     // user explicitly marked for vectorization, even when header duplication is
     // disabled.

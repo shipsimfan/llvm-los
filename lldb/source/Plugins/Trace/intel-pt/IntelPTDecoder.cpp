@@ -9,12 +9,11 @@
 
 #include "llvm/Support/MemoryBuffer.h"
 
-#include "../common/ThreadPostMortemTrace.h"
-#include "DecodedThread.h"
 #include "TraceIntelPT.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/Section.h"
 #include "lldb/Target/Target.h"
+#include "lldb/Target/ThreadPostMortemTrace.h"
 #include "lldb/Utility/StringExtractor.h"
 
 using namespace lldb;
@@ -137,23 +136,7 @@ DecodeInstructions(pt_insn_decoder &decoder) {
         break;
       }
 
-      uint64_t time;
-      int time_error = pt_insn_time(&decoder, &time, nullptr, nullptr);
-      if (time_error == -pte_invalid) {
-        // This happens if we invoke the pt_insn_time method incorrectly,
-        // but the instruction is good though.
-        instructions.emplace_back(
-            make_error<IntelPTError>(time_error, insn.ip));
-        instructions.emplace_back(insn);
-        break;
-      }
-      if (time_error == -pte_no_time) {
-        // We simply don't have time information, i.e. None of TSC, MTC or CYC
-        // was enabled.
-        instructions.emplace_back(insn);
-      } else {
-        instructions.emplace_back(insn, time);
-      }
+      instructions.emplace_back(insn);
     }
   }
 
@@ -211,7 +194,7 @@ DecodeInMemoryTrace(Process &process, TraceIntelPT &trace_intel_pt,
 
 static Expected<std::vector<IntelPTInstruction>>
 DecodeTraceFile(Process &process, TraceIntelPT &trace_intel_pt,
-                const FileSpec &trace_file, size_t &raw_trace_size) {
+                const FileSpec &trace_file) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> trace_or_error =
       MemoryBuffer::getFile(trace_file.GetPath());
   if (std::error_code err = trace_or_error.getError())
@@ -223,17 +206,15 @@ DecodeTraceFile(Process &process, TraceIntelPT &trace_intel_pt,
       // following cast is safe.
       reinterpret_cast<uint8_t *>(const_cast<char *>(trace.getBufferStart())),
       trace.getBufferSize());
-  raw_trace_size = trace_data.size();
   return DecodeInMemoryTrace(process, trace_intel_pt, trace_data);
 }
 
 static Expected<std::vector<IntelPTInstruction>>
-DecodeLiveThread(Thread &thread, TraceIntelPT &trace, size_t &raw_trace_size) {
+DecodeLiveThread(Thread &thread, TraceIntelPT &trace) {
   Expected<std::vector<uint8_t>> buffer =
       trace.GetLiveThreadBuffer(thread.GetID());
   if (!buffer)
     return buffer.takeError();
-  raw_trace_size = buffer->size();
   if (Expected<pt_cpu> cpu_info = trace.GetCPUInfo())
     return DecodeInMemoryTrace(*thread.GetProcess(), trace,
                                MutableArrayRef<uint8_t>(*buffer));
@@ -241,7 +222,7 @@ DecodeLiveThread(Thread &thread, TraceIntelPT &trace, size_t &raw_trace_size) {
     return cpu_info.takeError();
 }
 
-DecodedThreadSP ThreadDecoder::Decode() {
+const DecodedThread &ThreadDecoder::Decode() {
   if (!m_decoded_thread.hasValue())
     m_decoded_thread = DoDecode();
   return *m_decoded_thread;
@@ -251,29 +232,22 @@ PostMortemThreadDecoder::PostMortemThreadDecoder(
     const lldb::ThreadPostMortemTraceSP &trace_thread, TraceIntelPT &trace)
     : m_trace_thread(trace_thread), m_trace(trace) {}
 
-DecodedThreadSP PostMortemThreadDecoder::DoDecode() {
-  size_t raw_trace_size = 0;
+DecodedThread PostMortemThreadDecoder::DoDecode() {
   if (Expected<std::vector<IntelPTInstruction>> instructions =
           DecodeTraceFile(*m_trace_thread->GetProcess(), m_trace,
-                          m_trace_thread->GetTraceFile(), raw_trace_size))
-    return std::make_shared<DecodedThread>(m_trace_thread->shared_from_this(),
-                                           std::move(*instructions),
-                                           raw_trace_size);
+                          m_trace_thread->GetTraceFile()))
+    return DecodedThread(std::move(*instructions));
   else
-    return std::make_shared<DecodedThread>(m_trace_thread->shared_from_this(),
-                                           instructions.takeError());
+    return DecodedThread(instructions.takeError());
 }
 
 LiveThreadDecoder::LiveThreadDecoder(Thread &thread, TraceIntelPT &trace)
     : m_thread_sp(thread.shared_from_this()), m_trace(trace) {}
 
-DecodedThreadSP LiveThreadDecoder::DoDecode() {
-  size_t raw_trace_size = 0;
+DecodedThread LiveThreadDecoder::DoDecode() {
   if (Expected<std::vector<IntelPTInstruction>> instructions =
-          DecodeLiveThread(*m_thread_sp, m_trace, raw_trace_size))
-    return std::make_shared<DecodedThread>(
-        m_thread_sp, std::move(*instructions), raw_trace_size);
+          DecodeLiveThread(*m_thread_sp, m_trace))
+    return DecodedThread(std::move(*instructions));
   else
-    return std::make_shared<DecodedThread>(m_thread_sp,
-                                           instructions.takeError());
+    return DecodedThread(instructions.takeError());
 }

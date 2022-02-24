@@ -62,21 +62,6 @@ else:
     import queue as queue
 
 
-def strtobool(val):
-  """Convert a string representation of truth to a bool following LLVM's CLI argument parsing."""
-
-  val = val.lower()
-  if val in ['', 'true', '1']:
-    return True
-  elif val in ['false', '0']:
-    return False
-
-  # Return ArgumentTypeError so that argparse does not substitute its own error message
-  raise argparse.ArgumentTypeError(
-    "'{}' is invalid value for boolean argument! Try 0 or 1.".format(val)
-  )
-
-
 def find_compilation_database(path):
   """Adjusts the directory until a compilation database is found."""
   result = './'
@@ -96,21 +81,13 @@ def make_absolute(f, directory):
 
 def get_tidy_invocation(f, clang_tidy_binary, checks, tmpdir, build_path,
                         header_filter, allow_enabling_alpha_checkers,
-                        extra_arg, extra_arg_before, quiet, config,
-                        line_filter, use_color):
+                        extra_arg, extra_arg_before, quiet, config):
   """Gets a command line for clang-tidy."""
-  start = [clang_tidy_binary]
+  start = [clang_tidy_binary, '--use-color']
   if allow_enabling_alpha_checkers:
     start.append('-allow-enabling-analyzer-alpha-checkers')
   if header_filter is not None:
     start.append('-header-filter=' + header_filter)
-  if line_filter is not None:
-    start.append('-line-filter=' + line_filter)
-  if use_color is not None:
-    if use_color:
-      start.append('--use-color')
-    else:
-      start.append('--use-color=false')
   if checks:
     start.append('-checks=' + checks)
   if tmpdir is not None:
@@ -188,15 +165,11 @@ def run_tidy(args, tmpdir, build_path, queue, lock, failed_files):
                                      tmpdir, build_path, args.header_filter,
                                      args.allow_enabling_alpha_checkers,
                                      args.extra_arg, args.extra_arg_before,
-                                     args.quiet, args.config, args.line_filter,
-                                     args.use_color)
+                                     args.quiet, args.config)
 
     proc = subprocess.Popen(invocation, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     output, err = proc.communicate()
     if proc.returncode != 0:
-      if proc.returncode < 0:
-        msg = "%s: terminated by signal %d\n" % (name, -proc.returncode)
-        err += msg.encode('utf-8')
       failed_files.append(name)
     with lock:
       sys.stdout.write(' '.join(invocation) + '\n' + output.decode('utf-8'))
@@ -236,9 +209,6 @@ def main():
                       'headers to output diagnostics from. Diagnostics from '
                       'the main file of each translation unit are always '
                       'displayed.')
-  parser.add_argument('-line-filter', default=None,
-                      help='List of files with line ranges to filter the'
-                      'warnings.')
   if yaml:
     parser.add_argument('-export-fixes', metavar='filename', dest='export_fixes',
                         help='Create a yaml file to store suggested fixes in, '
@@ -252,10 +222,6 @@ def main():
                       'after applying fixes')
   parser.add_argument('-style', default='file', help='The style of reformat '
                       'code after applying fixes')
-  parser.add_argument('-use-color', type=strtobool, nargs='?', const=True,
-                      help='Use colors in diagnostics, overriding clang-tidy\'s'
-                      ' default behavior. This option overrides the \'UseColor'
-                      '\' option in .clang-tidy file, if any.')
   parser.add_argument('-p', dest='build_path',
                       help='Path used to read a compile command database.')
   parser.add_argument('-extra-arg', dest='extra_arg',
@@ -279,13 +245,12 @@ def main():
     build_path = find_compilation_database(db_path)
 
   try:
-    invocation = get_tidy_invocation("", args.clang_tidy_binary, args.checks,
-                                     None, build_path, args.header_filter,
-                                     args.allow_enabling_alpha_checkers,
-                                     args.extra_arg, args.extra_arg_before,
-                                     args.quiet, args.config, args.line_filter,
-                                     args.use_color)
-    invocation.append('-list-checks')
+    invocation = [args.clang_tidy_binary, '-list-checks']
+    if args.allow_enabling_alpha_checkers:
+      invocation.append('-allow-enabling-analyzer-alpha-checkers')
+    invocation.append('-p=' + build_path)
+    if args.checks:
+      invocation.append('-checks=' + args.checks)
     invocation.append('-')
     if args.quiet:
       # Even with -quiet we still want to check if we can call clang-tidy.
@@ -299,8 +264,8 @@ def main():
 
   # Load the database and extract all files.
   database = json.load(open(os.path.join(build_path, db_path)))
-  files = set([make_absolute(entry['file'], entry['directory'])
-           for entry in database])
+  files = [make_absolute(entry['file'], entry['directory'])
+           for entry in database]
 
   max_task = args.j
   if max_task == 0:

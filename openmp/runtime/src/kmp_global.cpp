@@ -110,8 +110,8 @@ char const *__kmp_barrier_type_name[bs_last_barrier] = {"plain", "forkjoin"
                                                         "reduction"
 #endif // KMP_FAST_REDUCTION_BARRIER
 };
-char const *__kmp_barrier_pattern_name[bp_last_bar] = {
-    "linear", "tree", "hyper", "hierarchical", "dist"};
+char const *__kmp_barrier_pattern_name[bp_last_bar] = {"linear", "tree",
+                                                       "hyper", "hierarchical"};
 
 int __kmp_allThreadsSpecified = 0;
 size_t __kmp_align_alloc = CACHE_LINE;
@@ -219,13 +219,6 @@ int __kmp_mwait_enabled = FALSE;
 int __kmp_mwait_hints = 0;
 #endif
 
-#if KMP_HAVE_UMWAIT
-int __kmp_waitpkg_enabled = 0;
-int __kmp_tpause_state = 0;
-int __kmp_tpause_hint = 1;
-int __kmp_tpause_enabled = 0;
-#endif
-
 /* map OMP 3.0 schedule types with our internal schedule types */
 enum sched_type __kmp_sch_map[kmp_sched_upper - kmp_sched_lower_ext +
                               kmp_sched_upper_std - kmp_sched_lower - 2] = {
@@ -254,6 +247,8 @@ KMPAffinity *__kmp_affinity_dispatch = NULL;
 #if KMP_USE_HWLOC
 int __kmp_hwloc_error = FALSE;
 hwloc_topology_t __kmp_hwloc_topology = NULL;
+int __kmp_numa_detected = FALSE;
+int __kmp_tile_depth = 0;
 #endif
 
 #if KMP_OS_WINDOWS
@@ -268,7 +263,7 @@ kmp_SetThreadGroupAffinity_t __kmp_SetThreadGroupAffinity = NULL;
 
 size_t __kmp_affin_mask_size = 0;
 enum affinity_type __kmp_affinity_type = affinity_default;
-kmp_hw_t __kmp_affinity_gran = KMP_HW_UNKNOWN;
+enum affinity_gran __kmp_affinity_gran = affinity_gran_default;
 int __kmp_affinity_gran_levels = -1;
 int __kmp_affinity_dups = TRUE;
 enum affinity_top_method __kmp_affinity_top_method =
@@ -287,10 +282,18 @@ char *__kmp_cpuinfo_file = NULL;
 #endif /* KMP_AFFINITY_SUPPORTED */
 
 kmp_nested_proc_bind_t __kmp_nested_proc_bind = {NULL, 0, 0};
-kmp_proc_bind_t __kmp_teams_proc_bind = proc_bind_spread;
 int __kmp_affinity_num_places = 0;
 int __kmp_display_affinity = FALSE;
 char *__kmp_affinity_format = NULL;
+
+kmp_hws_item_t __kmp_hws_socket = {0, 0};
+kmp_hws_item_t __kmp_hws_die = {0, 0};
+kmp_hws_item_t __kmp_hws_node = {0, 0};
+kmp_hws_item_t __kmp_hws_tile = {0, 0};
+kmp_hws_item_t __kmp_hws_core = {0, 0};
+kmp_hws_item_t __kmp_hws_proc = {0, 0};
+int __kmp_hws_requested = 0;
+int __kmp_hws_abs_flag = 0; // absolute or per-item number requested
 
 kmp_int32 __kmp_default_device = 0;
 
@@ -432,7 +435,6 @@ kmp_int32 __kmp_use_yield_exp_set = 0;
 
 kmp_uint32 __kmp_yield_init = KMP_INIT_WAIT;
 kmp_uint32 __kmp_yield_next = KMP_NEXT_WAIT;
-kmp_uint64 __kmp_pause_init = 1; // for tpause
 
 /* ------------------------------------------------------ */
 /* STATE mostly syncronized with global lock */
@@ -556,10 +558,5 @@ kmp_target_offload_kind_t __kmp_target_offload = tgt_default;
 
 // OMP Pause Resources
 kmp_pause_status_t __kmp_pause_status = kmp_not_paused;
-
-// Nesting mode
-int __kmp_nesting_mode = 0;
-int __kmp_nesting_mode_nlevels = 1;
-int *__kmp_nesting_nth_level;
 
 // end of file //

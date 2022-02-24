@@ -1,5 +1,5 @@
-; RUN: llc < %s -experimental-debug-variable-locations=true | FileCheck %s --check-prefix=ASM
-; RUN: llc < %s -filetype=obj -experimental-debug-variable-locations=true | llvm-readobj --codeview - | FileCheck %s --check-prefix=OBJ
+; RUN: llc < %s | FileCheck %s --check-prefix=ASM
+; RUN: llc < %s -filetype=obj | llvm-readobj --codeview - | FileCheck %s --check-prefix=OBJ
 
 ; Generated from:
 ; volatile int x;
@@ -29,6 +29,7 @@
 ; ASM:         subq    $32, %rsp
 ; ASM:         movl    %ecx, %esi
 ; ASM: [[p_ecx_esi:\.Ltmp.*]]:
+; ASM:         #DEBUG_VALUE: f:p <- $esi
 ; ASM:         callq   getint
 ; ASM: [[after_getint:\.Ltmp.*]]:
 ; ASM:         testl   %esi, %esi
@@ -45,9 +46,7 @@
 ; ASM: [[after_if:\.Ltmp.*]]:
 ; ASM: .LBB0_2:                                # %if.else
 ; ASM:         #DEBUG_VALUE: f:p <- $esi
-;; FIXME: tail-merging causes the location of "c" to be dropped in instruction
-;; referencing mode.
-; ASM:         #DEBUG_VALUE: c <- undef
+; ASM:         #DEBUG_VALUE: c <- $eax
 ; ASM:         movl    %eax, %ecx
 ; ASM:         addq    $32, %rsp
 ; ASM:         popq    %rsi
@@ -57,8 +56,8 @@
 
 ; ASM:         .short  4414                    # Record kind: S_LOCAL
 ; ASM:         .asciz  "p"
-; ASM:         .cv_def_range    .Lfunc_begin0 [[after_getint]], reg, 18
-; ASM:         .cv_def_range    [[after_getint]] [[func_end]], reg, 23
+; ASM:         .cv_def_range    .Lfunc_begin0 [[p_ecx_esi]], reg, 18
+; ASM:         .cv_def_range    [[p_ecx_esi]] [[func_end]], reg, 23
 ; ASM:         .short  4414                    # Record kind: S_LOCAL
 ; ASM:         .asciz  "c"
 ; ASM:         .short  4414                    # Record kind: S_LOCAL
@@ -95,15 +94,15 @@
 ; OBJ:     LocalVariableAddrRange {
 ; OBJ:       OffsetStart: .text+0x0
 ; OBJ:       ISectStart: 0x0
-; OBJ:       Range: 0xC
+; OBJ:       Range: 0x7
 ; OBJ:     }
 ; OBJ:   }
 ; OBJ:   DefRangeRegisterSym {
 ; OBJ:     Register: ESI (0x17)
 ; OBJ:     LocalVariableAddrRange {
-; OBJ:       OffsetStart: .text+0xC
+; OBJ:       OffsetStart: .text+0x7
 ; OBJ:       ISectStart: 0x0
-; OBJ:       Range: 0x15
+; OBJ:       Range: 0x1A
 ; OBJ:     }
 ; OBJ:   }
 ; OBJ:   LocalSym {

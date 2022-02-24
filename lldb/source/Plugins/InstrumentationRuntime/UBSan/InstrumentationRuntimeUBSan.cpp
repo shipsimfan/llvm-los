@@ -29,7 +29,7 @@
 #include "lldb/Target/Thread.h"
 #include "lldb/Utility/RegularExpression.h"
 #include "lldb/Utility/Stream.h"
-#include <cctype>
+#include <ctype.h>
 
 #include <memory>
 
@@ -54,6 +54,10 @@ void InstrumentationRuntimeUBSan::Initialize() {
 
 void InstrumentationRuntimeUBSan::Terminate() {
   PluginManager::UnregisterPlugin(CreateInstance);
+}
+
+lldb_private::ConstString InstrumentationRuntimeUBSan::GetPluginNameStatic() {
+  return ConstString("UndefinedBehaviorSanitizer");
 }
 
 lldb::InstrumentationRuntimeType InstrumentationRuntimeUBSan::GetTypeStatic() {

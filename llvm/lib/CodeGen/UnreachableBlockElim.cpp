@@ -144,22 +144,23 @@ bool UnreachableMachineBlockElim::runOnMachineFunction(MachineFunction &F) {
   }
 
   // Actually remove the blocks now.
-  for (MachineBasicBlock *BB : DeadBlocks) {
+  for (unsigned i = 0, e = DeadBlocks.size(); i != e; ++i) {
     // Remove any call site information for calls in the block.
-    for (auto &I : BB->instrs())
+    for (auto &I : DeadBlocks[i]->instrs())
       if (I.shouldUpdateCallSiteInfo())
-        BB->getParent()->eraseCallSiteInfo(&I);
+        DeadBlocks[i]->getParent()->eraseCallSiteInfo(&I);
 
-    BB->eraseFromParent();
+    DeadBlocks[i]->eraseFromParent();
   }
 
   // Cleanup PHI nodes.
-  for (MachineBasicBlock &BB : F) {
+  for (MachineFunction::iterator I = F.begin(), E = F.end(); I != E; ++I) {
+    MachineBasicBlock *BB = &*I;
     // Prune unneeded PHI entries.
-    SmallPtrSet<MachineBasicBlock*, 8> preds(BB.pred_begin(),
-                                             BB.pred_end());
-    MachineBasicBlock::iterator phi = BB.begin();
-    while (phi != BB.end() && phi->isPHI()) {
+    SmallPtrSet<MachineBasicBlock*, 8> preds(BB->pred_begin(),
+                                             BB->pred_end());
+    MachineBasicBlock::iterator phi = BB->begin();
+    while (phi != BB->end() && phi->isPHI()) {
       for (unsigned i = phi->getNumOperands() - 1; i >= 2; i-=2)
         if (!preds.count(phi->getOperand(i).getMBB())) {
           phi->RemoveOperand(i);
@@ -188,7 +189,7 @@ bool UnreachableMachineBlockElim::runOnMachineFunction(MachineFunction &F) {
             // insert a COPY instead of simply replacing the output
             // with the input.
             const TargetInstrInfo *TII = F.getSubtarget().getInstrInfo();
-            BuildMI(BB, BB.getFirstNonPHI(), phi->getDebugLoc(),
+            BuildMI(*BB, BB->getFirstNonPHI(), phi->getDebugLoc(),
                     TII->get(TargetOpcode::COPY), OutputReg)
                 .addReg(InputReg, getRegState(Input), InputSub);
           }

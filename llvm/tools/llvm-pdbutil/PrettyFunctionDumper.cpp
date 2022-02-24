@@ -10,8 +10,6 @@
 #include "LinePrinter.h"
 #include "PrettyBuiltinDumper.h"
 
-#include "llvm/DebugInfo/PDB/ConcreteSymbolEnumerator.h"
-#include "llvm/DebugInfo/PDB/IPDBLineNumber.h"
 #include "llvm/DebugInfo/PDB/IPDBSession.h"
 #include "llvm/DebugInfo/PDB/PDBExtras.h"
 #include "llvm/DebugInfo/PDB/PDBSymbolData.h"
@@ -19,7 +17,6 @@
 #include "llvm/DebugInfo/PDB/PDBSymbolFuncDebugEnd.h"
 #include "llvm/DebugInfo/PDB/PDBSymbolFuncDebugStart.h"
 #include "llvm/DebugInfo/PDB/PDBSymbolTypeArray.h"
-#include "llvm/DebugInfo/PDB/PDBSymbolTypeBuiltin.h"
 #include "llvm/DebugInfo/PDB/PDBSymbolTypeEnum.h"
 #include "llvm/DebugInfo/PDB/PDBSymbolTypeFunctionArg.h"
 #include "llvm/DebugInfo/PDB/PDBSymbolTypeFunctionSig.h"

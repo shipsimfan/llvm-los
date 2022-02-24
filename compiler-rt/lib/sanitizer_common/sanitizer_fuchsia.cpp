@@ -14,18 +14,17 @@
 #include "sanitizer_fuchsia.h"
 #if SANITIZER_FUCHSIA
 
-#  include <pthread.h>
-#  include <stdlib.h>
-#  include <unistd.h>
-#  include <zircon/errors.h>
-#  include <zircon/process.h>
-#  include <zircon/syscalls.h>
-#  include <zircon/utc.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <zircon/errors.h>
+#include <zircon/process.h>
+#include <zircon/syscalls.h>
+#include <zircon/utc.h>
 
-#  include "sanitizer_common.h"
-#  include "sanitizer_interface_internal.h"
-#  include "sanitizer_libc.h"
-#  include "sanitizer_mutex.h"
+#include "sanitizer_common.h"
+#include "sanitizer_libc.h"
+#include "sanitizer_mutex.h"
 
 namespace __sanitizer {
 
@@ -37,9 +36,14 @@ uptr internal_sched_yield() {
   return 0;  // Why doesn't this return void?
 }
 
-void internal_usleep(u64 useconds) {
-  zx_status_t status = _zx_nanosleep(_zx_deadline_after(ZX_USEC(useconds)));
+static void internal_nanosleep(zx_time_t ns) {
+  zx_status_t status = _zx_nanosleep(_zx_deadline_after(ns));
   CHECK_EQ(status, ZX_OK);
+}
+
+unsigned int internal_sleep(unsigned int seconds) {
+  internal_nanosleep(ZX_SEC(seconds));
+  return 0;
 }
 
 u64 NanoTime() {
@@ -74,6 +78,10 @@ void Abort() { abort(); }
 
 int Atexit(void (*function)(void)) { return atexit(function); }
 
+void SleepForSeconds(int seconds) { internal_sleep(seconds); }
+
+void SleepForMillis(int millis) { internal_nanosleep(ZX_MSEC(millis)); }
+
 void GetThreadStackTopAndBottom(bool, uptr *stack_top, uptr *stack_bottom) {
   pthread_attr_t attr;
   CHECK_EQ(pthread_getattr_np(pthread_self(), &attr), 0);
@@ -90,7 +98,7 @@ void InitializePlatformEarly() {}
 void MaybeReexec() {}
 void CheckASLR() {}
 void CheckMPROTECT() {}
-void PlatformPrepareForSandboxing(void *args) {}
+void PlatformPrepareForSandboxing(__sanitizer_sandbox_arguments *args) {}
 void DisableCoreDumperIfNecessary() {}
 void InstallDeadlySignalHandlers(SignalHandlerType handler) {}
 void SetAlternateSignalStack() {}
@@ -101,16 +109,45 @@ bool SignalContext::IsStackOverflow() const { return false; }
 void SignalContext::DumpAllRegisters(void *context) { UNIMPLEMENTED(); }
 const char *SignalContext::Describe() const { UNIMPLEMENTED(); }
 
-void FutexWait(atomic_uint32_t *p, u32 cmp) {
-  zx_status_t status = _zx_futex_wait(reinterpret_cast<zx_futex_t *>(p), cmp,
-                                      ZX_HANDLE_INVALID, ZX_TIME_INFINITE);
-  if (status != ZX_ERR_BAD_STATE)  // Normal race.
-    CHECK_EQ(status, ZX_OK);
+enum MutexState : int { MtxUnlocked = 0, MtxLocked = 1, MtxSleeping = 2 };
+
+BlockingMutex::BlockingMutex() {
+  // NOTE!  It's important that this use internal_memset, because plain
+  // memset might be intercepted (e.g., actually be __asan_memset).
+  // Defining this so the compiler initializes each field, e.g.:
+  //   BlockingMutex::BlockingMutex() : BlockingMutex(LINKER_INITIALIZED) {}
+  // might result in the compiler generating a call to memset, which would
+  // have the same problem.
+  internal_memset(this, 0, sizeof(*this));
 }
 
-void FutexWake(atomic_uint32_t *p, u32 count) {
-  zx_status_t status = _zx_futex_wake(reinterpret_cast<zx_futex_t *>(p), count);
-  CHECK_EQ(status, ZX_OK);
+void BlockingMutex::Lock() {
+  CHECK_EQ(owner_, 0);
+  atomic_uint32_t *m = reinterpret_cast<atomic_uint32_t *>(&opaque_storage_);
+  if (atomic_exchange(m, MtxLocked, memory_order_acquire) == MtxUnlocked)
+    return;
+  while (atomic_exchange(m, MtxSleeping, memory_order_acquire) != MtxUnlocked) {
+    zx_status_t status =
+        _zx_futex_wait(reinterpret_cast<zx_futex_t *>(m), MtxSleeping,
+                       ZX_HANDLE_INVALID, ZX_TIME_INFINITE);
+    if (status != ZX_ERR_BAD_STATE)  // Normal race.
+      CHECK_EQ(status, ZX_OK);
+  }
+}
+
+void BlockingMutex::Unlock() {
+  atomic_uint32_t *m = reinterpret_cast<atomic_uint32_t *>(&opaque_storage_);
+  u32 v = atomic_exchange(m, MtxUnlocked, memory_order_release);
+  CHECK_NE(v, MtxUnlocked);
+  if (v == MtxSleeping) {
+    zx_status_t status = _zx_futex_wake(reinterpret_cast<zx_futex_t *>(m), 1);
+    CHECK_EQ(status, ZX_OK);
+  }
+}
+
+void BlockingMutex::CheckLocked() {
+  atomic_uint32_t *m = reinterpret_cast<atomic_uint32_t *>(&opaque_storage_);
+  CHECK_NE(MtxUnlocked, atomic_load(m, memory_order_relaxed));
 }
 
 uptr GetPageSize() { return _zx_system_get_page_size(); }
@@ -119,10 +156,8 @@ uptr GetMmapGranularity() { return _zx_system_get_page_size(); }
 
 sanitizer_shadow_bounds_t ShadowBounds;
 
-void InitShadowBounds() { ShadowBounds = __sanitizer_shadow_bounds(); }
-
 uptr GetMaxUserVirtualAddress() {
-  InitShadowBounds();
+  ShadowBounds = __sanitizer_shadow_bounds();
   return ShadowBounds.memory_limit - 1;
 }
 
@@ -275,15 +310,6 @@ void *MmapFixedNoAccess(uptr fixed_addr, uptr size, const char *name) {
   UNIMPLEMENTED();
 }
 
-bool MprotectNoAccess(uptr addr, uptr size) {
-  return _zx_vmar_protect(_zx_vmar_root_self(), 0, addr, size) == ZX_OK;
-}
-
-bool MprotectReadOnly(uptr addr, uptr size) {
-  return _zx_vmar_protect(_zx_vmar_root_self(), ZX_VM_PERM_READ, addr, size) ==
-         ZX_OK;
-}
-
 void *MmapAlignedOrDieOnFatalError(uptr size, uptr alignment,
                                    const char *mem_type) {
   CHECK_GE(size, GetPageSize());
@@ -382,7 +408,7 @@ bool IsAccessibleMemoryRange(uptr beg, uptr size) {
 }
 
 // FIXME implement on this platform.
-void GetMemoryProfile(fill_profile_f cb, uptr *stats) {}
+void GetMemoryProfile(fill_profile_f cb, uptr *stats, uptr stats_size) {}
 
 bool ReadFileToBuffer(const char *file_name, char **buff, uptr *buff_size,
                       uptr *read_len, uptr max_len, error_t *errno_p) {
@@ -484,9 +510,6 @@ bool GetRandom(void *buffer, uptr length, bool blocking) {
 u32 GetNumberOfCPUs() { return zx_system_get_num_cpus(); }
 
 uptr GetRSS() { UNIMPLEMENTED(); }
-
-void *internal_start_thread(void *(*func)(void *arg), void *arg) { return 0; }
-void internal_join_thread(void *th) {}
 
 void InitializePlatformCommonFlags(CommonFlags *cf) {}
 

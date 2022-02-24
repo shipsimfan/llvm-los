@@ -14,14 +14,14 @@
 
 #include <concepts>
 
-constexpr bool check_subsumption(std::regular_invocable auto) {
+[[nodiscard]] constexpr bool check_subsumption(std::regular_invocable auto) {
   return false;
 }
 
 // clang-format off
 template<class F>
 requires std::predicate<F> && true
-constexpr bool check_subsumption(F)
+[[nodiscard]] constexpr bool check_subsumption(F)
 {
   return true;
 }

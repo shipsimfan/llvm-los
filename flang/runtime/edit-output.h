@@ -29,9 +29,8 @@ namespace Fortran::runtime::io {
 // The DataEdit reference is const here (and elsewhere in this header) so that
 // one edit descriptor with a repeat factor may safely serve to edit
 // multiple elements of an array.
-template <int KIND>
-bool EditIntegerOutput(
-    IoStatementState &, const DataEdit &, common::HostSignedIntType<8 * KIND>);
+template <typename INT = std::int64_t, typename UINT = std::uint64_t>
+bool EditIntegerOutput(IoStatementState &, const DataEdit &, INT);
 
 // Encapsulates the state of a REAL output conversion.
 class RealOutputEditingBase {
@@ -84,7 +83,7 @@ private:
   bool IsZero() const { return x_.IsZero(); }
 
   decimal::ConversionToDecimalResult Convert(
-      int significantDigits, enum decimal::FortranRounding, int flags = 0);
+      int significantDigits, const DataEdit &, int flags = 0);
 
   BinaryFloatingPoint x_;
   char buffer_[BinaryFloatingPoint::maxDecimalConversionDigits +
@@ -99,16 +98,10 @@ bool ListDirectedDefaultCharacterOutput(IoStatementState &,
 bool EditDefaultCharacterOutput(
     IoStatementState &, const DataEdit &, const char *, std::size_t);
 
-extern template bool EditIntegerOutput<1>(
-    IoStatementState &, const DataEdit &, std::int8_t);
-extern template bool EditIntegerOutput<2>(
-    IoStatementState &, const DataEdit &, std::int16_t);
-extern template bool EditIntegerOutput<4>(
-    IoStatementState &, const DataEdit &, std::int32_t);
-extern template bool EditIntegerOutput<8>(
+extern template bool EditIntegerOutput<std::int64_t, std::uint64_t>(
     IoStatementState &, const DataEdit &, std::int64_t);
-extern template bool EditIntegerOutput<16>(
-    IoStatementState &, const DataEdit &, common::int128_t);
+extern template bool EditIntegerOutput<common::uint128_t, common::uint128_t>(
+    IoStatementState &, const DataEdit &, common::uint128_t);
 
 extern template class RealOutputEditing<2>;
 extern template class RealOutputEditing<3>;

@@ -3,10 +3,10 @@
 struct Foo;
 struct Bar;
 
-__declspec(allocator) void *alloc_void(void);
-__declspec(allocator) struct Foo *alloc_foo(void);
+__declspec(allocator) void *alloc_void();
+__declspec(allocator) struct Foo *alloc_foo();
 
-void call_alloc(void) {
+void call_alloc() {
   struct Foo *p = alloc_void();
   struct Foo *w = alloc_foo();
   struct Foo *q = (struct Foo*)alloc_void();
@@ -19,8 +19,8 @@ void call_alloc(void) {
 // CHECK: call i8* {{.*}}@alloc_void{{.*}} !heapallocsite [[DBG2]]
 // CHECK: call i8* {{.*}}@alloc_void{{.*}} !heapallocsite [[DBG3:!.*]]
 
+// CHECK: [[DBG1]] = !{}
 // CHECK: [[DBG2]] = !DICompositeType(tag: DW_TAG_structure_type,
 // CHECK-SAME:                                 name: "Foo"
 // CHECK: [[DBG3]] = !DICompositeType(tag: DW_TAG_structure_type,
 // CHECK-SAME:                                 name: "Bar"
-// CHECK: [[DBG1]] = !{}

@@ -58,6 +58,7 @@ bool CommandObjectIterateOverThreads::DoExecute(Args &command,
       if (!llvm::to_integer(command.GetArgumentAtIndex(i), thread_idx)) {
         result.AppendErrorWithFormat("invalid thread specification: \"%s\"\n",
                                      command.GetArgumentAtIndex(i));
+        result.SetStatus(eReturnStatusFailed);
         return false;
       }
 
@@ -67,6 +68,7 @@ bool CommandObjectIterateOverThreads::DoExecute(Args &command,
       if (!thread) {
         result.AppendErrorWithFormat("no thread with index: \"%s\"\n",
                                      command.GetArgumentAtIndex(i));
+        result.SetStatus(eReturnStatusFailed);
         return false;
       }
 
@@ -127,6 +129,7 @@ bool CommandObjectIterateOverThreads::BucketThread(
   Thread *thread = process->GetThreadList().FindThreadByID(tid).get();
   if (thread == nullptr) {
     result.AppendErrorWithFormatv("Failed to process thread #{0}.\n", tid);
+    result.SetStatus(eReturnStatusFailed);
     return false;
   }
 
@@ -178,6 +181,7 @@ bool CommandObjectMultipleThreads::DoExecute(Args &command,
       if (!llvm::to_integer(command.GetArgumentAtIndex(i), thread_idx)) {
         result.AppendErrorWithFormat("invalid thread specification: \"%s\"\n",
                                      command.GetArgumentAtIndex(i));
+        result.SetStatus(eReturnStatusFailed);
         return false;
       }
 
@@ -186,6 +190,7 @@ bool CommandObjectMultipleThreads::DoExecute(Args &command,
       if (!thread) {
         result.AppendErrorWithFormat("no thread with index: \"%s\"\n",
                                      command.GetArgumentAtIndex(i));
+        result.SetStatus(eReturnStatusFailed);
         return false;
       }
 

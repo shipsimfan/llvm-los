@@ -15,9 +15,8 @@
 #include "lldb/Symbol/Function.h"
 #include "lldb/Symbol/Symbol.h"
 #include "lldb/Symbol/SymbolContext.h"
-#include "lldb/Target/Language.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/LLDBLog.h"
+#include "lldb/Target/Language.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
 
@@ -29,11 +28,12 @@ BreakpointResolverName::BreakpointResolverName(const BreakpointSP &bkpt,
     LanguageType language, Breakpoint::MatchType type, lldb::addr_t offset,
     bool skip_prologue)
     : BreakpointResolver(bkpt, BreakpointResolver::NameResolver, offset),
-      m_match_type(type), m_language(language), m_skip_prologue(skip_prologue) {
+      m_class_name(), m_regex(), m_match_type(type), m_language(language),
+      m_skip_prologue(skip_prologue) {
   if (m_match_type == Breakpoint::Regexp) {
-    m_regex = RegularExpression(name_cstr);
+    m_regex = RegularExpression(llvm::StringRef::withNullAsEmpty(name_cstr));
     if (!m_regex.IsValid()) {
-      Log *log = GetLog(LLDBLog::Breakpoints);
+      Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_BREAKPOINTS));
 
       if (log)
         log->Warning("function name regexp: \"%s\" did not compile.",
@@ -220,15 +220,11 @@ void BreakpointResolverName::AddNameLookup(ConstString name,
   m_lookups.emplace_back(lookup);
 
   auto add_variant_funcs = [&](Language *lang) {
-    for (Language::MethodNameVariant variant :
-         lang->GetMethodNameVariants(name)) {
-      // FIXME: Should we be adding variants that aren't of type Full?
-      if (variant.GetType() & lldb::eFunctionNameTypeFull) {
-        Module::LookupInfo variant_lookup(name, variant.GetType(),
-                                          lang->GetLanguageType());
-        variant_lookup.SetLookupName(variant.GetName());
-        m_lookups.emplace_back(variant_lookup);
-      }
+    for (ConstString variant_name : lang->GetMethodNameVariants(name)) {
+      Module::LookupInfo variant_lookup(name, name_type_mask,
+                                        lang->GetLanguageType());
+      variant_lookup.SetLookupName(variant_name);
+      m_lookups.emplace_back(variant_lookup);
     }
     return true;
   };
@@ -252,7 +248,7 @@ void BreakpointResolverName::AddNameLookup(ConstString name,
 Searcher::CallbackReturn
 BreakpointResolverName::SearchCallback(SearchFilter &filter,
                                        SymbolContext &context, Address *addr) {
-  Log *log = GetLog(LLDBLog::Breakpoints);
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_BREAKPOINTS));
 
   if (m_class_name) {
     if (log)
@@ -264,10 +260,8 @@ BreakpointResolverName::SearchCallback(SearchFilter &filter,
   bool filter_by_cu =
       (filter.GetFilterRequiredItems() & eSymbolContextCompUnit) != 0;
   bool filter_by_language = (m_language != eLanguageTypeUnknown);
-
-  ModuleFunctionSearchOptions function_options;
-  function_options.include_symbols = !filter_by_cu;
-  function_options.include_inlines = true;
+  const bool include_symbols = !filter_by_cu;
+  const bool include_inlines = true;
 
   switch (m_match_type) {
   case Breakpoint::Exact:
@@ -276,7 +270,8 @@ BreakpointResolverName::SearchCallback(SearchFilter &filter,
         const size_t start_func_idx = func_list.GetSize();
         context.module_sp->FindFunctions(
             lookup.GetLookupName(), CompilerDeclContext(),
-            lookup.GetNameTypeMask(), function_options, func_list);
+            lookup.GetNameTypeMask(), include_symbols, include_inlines,
+            func_list);
 
         const size_t end_func_idx = func_list.GetSize();
 
@@ -287,7 +282,10 @@ BreakpointResolverName::SearchCallback(SearchFilter &filter,
     break;
   case Breakpoint::Regexp:
     if (context.module_sp) {
-      context.module_sp->FindFunctions(m_regex, function_options, func_list);
+      context.module_sp->FindFunctions(
+          m_regex,
+          !filter_by_cu, // include symbols only if we aren't filtering by CU
+          include_inlines, func_list);
     }
     break;
   case Breakpoint::Glob:

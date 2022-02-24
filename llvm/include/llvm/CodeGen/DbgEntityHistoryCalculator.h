@@ -17,6 +17,7 @@
 
 namespace llvm {
 
+class DILocalVariable;
 class DILocation;
 class DINode;
 class MachineFunction;

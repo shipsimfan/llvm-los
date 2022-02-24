@@ -46,8 +46,7 @@ int main() {
   fprintf(stderr, "Done.\n");
 }
 
-__attribute__((disable_sanitizer_instrumentation)) void
-__tsan_on_report(void *report) {
+void __tsan_on_report(void *report) {
   fprintf(stderr, "__tsan_on_report(%p)\n", report);
   fprintf(stderr, "__tsan_get_current_report() = %p\n",
           __tsan_get_current_report());

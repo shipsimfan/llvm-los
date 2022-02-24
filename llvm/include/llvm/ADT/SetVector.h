@@ -5,16 +5,15 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// This file implements a set that has insertion order iteration
-/// characteristics. This is useful for keeping a set of things that need to be
-/// visited later but in a deterministic order (insertion order). The interface
-/// is purposefully minimal.
-///
-/// This file defines SetVector and SmallSetVector, which performs no
-/// allocations if the SetVector has less than a certain number of elements.
-///
+//
+// This file implements a set that has insertion order iteration
+// characteristics. This is useful for keeping a set of things that need to be
+// visited later but in a deterministic order (insertion order). The interface
+// is purposefully minimal.
+//
+// This file defines SetVector and SmallSetVector, which performs no allocations
+// if the SetVector has less than a certain number of elements.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_SETVECTOR_H
@@ -24,6 +23,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Compiler.h"
+#include <algorithm>
 #include <cassert>
 #include <iterator>
 #include <vector>

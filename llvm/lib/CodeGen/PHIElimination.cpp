@@ -107,7 +107,6 @@ namespace {
     using BBVRegPair = std::pair<unsigned, Register>;
     using VRegPHIUse = DenseMap<BBVRegPair, unsigned>;
 
-    // Count the number of non-undef PHI uses of each register in each BB.
     VRegPHIUse VRegPHIUseCount;
 
     // Defs of PHI sources which are implicit_def.
@@ -213,7 +212,7 @@ bool PHIElimination::runOnMachineFunction(MachineFunction &MF) {
   for (auto &I : LoweredPHIs) {
     if (LIS)
       LIS->RemoveMachineInstrFromMaps(*I.first);
-    MF.deleteMachineInstr(I.first);
+    MF.DeleteMachineInstr(I.first);
   }
 
   // TODO: we should use the incremental DomTree updater here.
@@ -317,16 +316,6 @@ void PHIElimination::LowerPHINode(MachineBasicBlock &MBB,
                                   IncomingReg, DestReg);
   }
 
-  if (MPhi->peekDebugInstrNum()) {
-    // If referred to by debug-info, store where this PHI was.
-    MachineFunction *MF = MBB.getParent();
-    unsigned ID = MPhi->peekDebugInstrNum();
-    auto P = MachineFunction::DebugPHIRegallocPos(&MBB, IncomingReg, 0);
-    auto Res = MF->DebugPHIPositions.insert({ID, P});
-    assert(Res.second);
-    (void)Res;
-  }
-
   // Update live variable information if there is any.
   if (LV) {
     if (IncomingReg) {
@@ -427,13 +416,9 @@ void PHIElimination::LowerPHINode(MachineBasicBlock &MBB,
   }
 
   // Adjust the VRegPHIUseCount map to account for the removal of this PHI node.
-  for (unsigned i = 1; i != MPhi->getNumOperands(); i += 2) {
-    if (!MPhi->getOperand(i).isUndef()) {
-      --VRegPHIUseCount[BBVRegPair(
-          MPhi->getOperand(i + 1).getMBB()->getNumber(),
-          MPhi->getOperand(i).getReg())];
-    }
-  }
+  for (unsigned i = 1; i != MPhi->getNumOperands(); i += 2)
+    --VRegPHIUseCount[BBVRegPair(MPhi->getOperand(i+1).getMBB()->getNumber(),
+                                 MPhi->getOperand(i).getReg())];
 
   // Now loop over all of the incoming arguments, changing them to copy into the
   // IncomingReg register in the corresponding predecessor basic block.
@@ -466,15 +451,6 @@ void PHIElimination::LowerPHINode(MachineBasicBlock &MBB,
       assert(MRI->use_empty(SrcReg) &&
              "Expected a single use from UnspillableTerminator");
       SrcRegDef->getOperand(0).setReg(IncomingReg);
-
-      // Update LiveVariables.
-      if (LV) {
-        LiveVariables::VarInfo &SrcVI = LV->getVarInfo(SrcReg);
-        LiveVariables::VarInfo &IncomingVI = LV->getVarInfo(IncomingReg);
-        IncomingVI.AliveBlocks = std::move(SrcVI.AliveBlocks);
-        SrcVI.AliveBlocks.clear();
-      }
-
       continue;
     }
 
@@ -529,8 +505,9 @@ void PHIElimination::LowerPHINode(MachineBasicBlock &MBB,
       // case, we should mark the last such terminator as being the killing
       // block, not the copy.
       MachineBasicBlock::iterator KillInst = opBlock.end();
-      for (MachineBasicBlock::iterator Term = InsertPos; Term != opBlock.end();
-           ++Term) {
+      MachineBasicBlock::iterator FirstTerm = opBlock.getFirstTerminator();
+      for (MachineBasicBlock::iterator Term = FirstTerm;
+          Term != opBlock.end(); ++Term) {
         if (Term->readsRegister(SrcReg))
           KillInst = Term;
       }
@@ -540,7 +517,7 @@ void PHIElimination::LowerPHINode(MachineBasicBlock &MBB,
 
         if (reusedIncoming || !IncomingReg) {
           // We may have to rewind a bit if we didn't insert a copy this time.
-          KillInst = InsertPos;
+          KillInst = FirstTerm;
           while (KillInst != opBlock.begin()) {
             --KillInst;
             if (KillInst->isDebugInstr())
@@ -587,8 +564,9 @@ void PHIElimination::LowerPHINode(MachineBasicBlock &MBB,
 
         if (!isLiveOut) {
           MachineBasicBlock::iterator KillInst = opBlock.end();
-          for (MachineBasicBlock::iterator Term = InsertPos;
-               Term != opBlock.end(); ++Term) {
+          MachineBasicBlock::iterator FirstTerm = opBlock.getFirstTerminator();
+          for (MachineBasicBlock::iterator Term = FirstTerm;
+              Term != opBlock.end(); ++Term) {
             if (Term->readsRegister(SrcReg))
               KillInst = Term;
           }
@@ -598,7 +576,7 @@ void PHIElimination::LowerPHINode(MachineBasicBlock &MBB,
 
             if (reusedIncoming || !IncomingReg) {
               // We may have to rewind a bit if we didn't just insert a copy.
-              KillInst = InsertPos;
+              KillInst = FirstTerm;
               while (KillInst != opBlock.begin()) {
                 --KillInst;
                 if (KillInst->isDebugInstr())
@@ -626,7 +604,7 @@ void PHIElimination::LowerPHINode(MachineBasicBlock &MBB,
   if (reusedIncoming || !IncomingReg) {
     if (LIS)
       LIS->RemoveMachineInstrFromMaps(*MPhi);
-    MF.deleteMachineInstr(MPhi);
+    MF.DeleteMachineInstr(MPhi);
   }
 }
 
@@ -635,19 +613,14 @@ void PHIElimination::LowerPHINode(MachineBasicBlock &MBB,
 /// used in a PHI node. We map that to the BB the vreg is coming from. This is
 /// used later to determine when the vreg is killed in the BB.
 void PHIElimination::analyzePHINodes(const MachineFunction& MF) {
-  for (const auto &MBB : MF) {
+  for (const auto &MBB : MF)
     for (const auto &BBI : MBB) {
       if (!BBI.isPHI())
         break;
-      for (unsigned i = 1, e = BBI.getNumOperands(); i != e; i += 2) {
-        if (!BBI.getOperand(i).isUndef()) {
-          ++VRegPHIUseCount[BBVRegPair(
-              BBI.getOperand(i + 1).getMBB()->getNumber(),
-              BBI.getOperand(i).getReg())];
-        }
-      }
+      for (unsigned i = 1, e = BBI.getNumOperands(); i != e; i += 2)
+        ++VRegPHIUseCount[BBVRegPair(BBI.getOperand(i+1).getMBB()->getNumber(),
+                                     BBI.getOperand(i).getReg())];
     }
-  }
 }
 
 bool PHIElimination::SplitPHIEdges(MachineFunction &MF,

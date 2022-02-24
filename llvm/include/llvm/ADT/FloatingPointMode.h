@@ -5,10 +5,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// Utilities for dealing with flags related to floating point mode controls.
-///
+//
+// Utilities for dealing with flags related to floating point mode controls.
+//
 //===----------------------------------------------------------------------===/
 
 #ifndef LLVM_ADT_FLOATINGPOINTMODE_H

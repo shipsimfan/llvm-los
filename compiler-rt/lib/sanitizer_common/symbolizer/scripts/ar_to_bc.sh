@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 function usage() {
   echo "Usage: $0 INPUT... OUTPUT"

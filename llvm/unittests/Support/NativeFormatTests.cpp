@@ -125,8 +125,6 @@ TEST(NativeFormatTest, BoundaryTests) {
                                  FloatStyle::Fixed));
   EXPECT_EQ("INF", format_number(std::numeric_limits<double>::infinity(),
                                  FloatStyle::Fixed));
-  EXPECT_EQ("-INF", format_number(-std::numeric_limits<double>::infinity(),
-                                  FloatStyle::Fixed));
 }
 
 TEST(NativeFormatTest, HexTests) {

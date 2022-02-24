@@ -13,7 +13,6 @@ def fuzz_obj(obj):
     obj.SetInputFileHandle(None, True)
     obj.SetOutputFileHandle(None, True)
     obj.SetErrorFileHandle(None, True)
-    obj.SetInputString("")
     obj.GetInputFileHandle()
     obj.GetOutputFileHandle()
     obj.GetErrorFileHandle()

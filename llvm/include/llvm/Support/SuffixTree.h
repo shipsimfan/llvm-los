@@ -109,7 +109,7 @@ struct SuffixTreeNode {
   SuffixTreeNode(unsigned StartIdx, unsigned *EndIdx, SuffixTreeNode *Link)
       : StartIdx(StartIdx), EndIdx(EndIdx), Link(Link) {}
 
-  SuffixTreeNode() = default;
+  SuffixTreeNode() {}
 };
 
 /// A data structure for fast substring queries.

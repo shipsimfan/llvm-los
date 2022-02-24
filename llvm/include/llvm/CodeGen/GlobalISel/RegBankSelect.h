@@ -253,7 +253,7 @@ public:
 
   public:
     MBBInsertPoint(MachineBasicBlock &MBB, bool Beginning = true)
-        : MBB(MBB), Beginning(Beginning) {
+        : InsertPoint(), MBB(MBB), Beginning(Beginning) {
       // If we try to insert before phis, we should use the insertion
       // points on the incoming edges.
       assert((!Beginning || MBB.getFirstNonPHI() == MBB.begin()) &&
@@ -299,7 +299,7 @@ public:
 
   public:
     EdgeInsertPoint(MachineBasicBlock &Src, MachineBasicBlock &Dst, Pass &P)
-        : Src(Src), DstOrSplit(&Dst), P(P) {}
+        : InsertPoint(), Src(Src), DstOrSplit(&Dst), P(P) {}
 
     bool isSplit() const override {
       return Src.succ_size() > 1 && DstOrSplit->pred_size() > 1;

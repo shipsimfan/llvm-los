@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/SmallString.h"
-#include "llvm/Support/Errc.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/Format.h"
@@ -22,10 +21,11 @@ namespace {
 
 template<typename T> std::string printToString(const T &Value) {
   std::string res;
-  llvm::raw_string_ostream OS(res);
-  OS.SetBuffered();
-  OS << Value;
-  OS.flush();
+  {
+    llvm::raw_string_ostream OS(res);
+    OS.SetBuffered();
+    OS << Value;
+  }
   return res;
 }
 
@@ -141,8 +141,7 @@ TEST(raw_ostreamTest, TinyBuffer) {
   OS << "hello";
   OS << 1;
   OS << 'w' << 'o' << 'r' << 'l' << 'd';
-  OS.flush();
-  EXPECT_EQ("hello1world", Str);
+  EXPECT_EQ("hello1world", OS.str());
 }
 
 TEST(raw_ostreamTest, WriteEscaped) {
@@ -458,9 +457,6 @@ TEST(raw_ostreamTest, flush_tied_to_stream_on_write) {
   TiedTo << "y";
   TiedStream << "0";
   EXPECT_EQ("acegostuv", TiedToBuffer);
-
-  TiedTo.flush();
-  TiedStream.flush();
 }
 
 TEST(raw_ostreamTest, reserve_stream) {
@@ -469,7 +465,7 @@ TEST(raw_ostreamTest, reserve_stream) {
   OS << "11111111111111111111";
   uint64_t CurrentPos = OS.tell();
   OS.reserveExtraSpace(1000);
-  EXPECT_GE(Str.capacity(), CurrentPos + 1000);
+  EXPECT_TRUE(Str.capacity() >= CurrentPos + 1000);
   OS << "hello";
   OS << 1;
   OS << 'w' << 'o' << 'r' << 'l' << 'd';
@@ -547,5 +543,4 @@ TEST(raw_ostreamTest, writeToStdOut) {
   std::string CapturedStdOut = testing::internal::GetCapturedStdout();
   EXPECT_EQ(CapturedStdOut, "HelloWorld");
 }
-
-} // namespace
+}

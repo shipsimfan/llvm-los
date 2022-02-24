@@ -11,8 +11,8 @@
 
 namespace lld {
 namespace elf {
-void writeMapAndCref();
-void writeWhyExtract();
+void writeMapFile();
+void writeCrossReferenceTable();
 void writeArchiveStats();
 } // namespace elf
 } // namespace lld

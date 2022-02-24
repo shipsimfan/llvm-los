@@ -29,8 +29,8 @@
 #include <x86/specialreg.h>
 #include <elf.h>
 #include <err.h>
-#include <cstdint>
-#include <cstdlib>
+#include <stdint.h>
+#include <stdlib.h>
 // clang-format on
 
 using namespace lldb_private;

@@ -7,9 +7,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Utility/Broadcaster.h"
+
 #include "lldb/Utility/Event.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Listener.h"
+#include "lldb/Utility/Log.h"
+#include "lldb/Utility/Logging.h"
 #include "lldb/Utility/Stream.h"
 #include "lldb/Utility/StreamString.h"
 
@@ -17,8 +19,8 @@
 #include <memory>
 #include <utility>
 
-#include <cassert>
-#include <cstddef>
+#include <assert.h>
+#include <stddef.h>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -26,7 +28,7 @@ using namespace lldb_private;
 Broadcaster::Broadcaster(BroadcasterManagerSP manager_sp, const char *name)
     : m_broadcaster_sp(std::make_shared<BroadcasterImpl>(*this)),
       m_manager_sp(std::move(manager_sp)), m_broadcaster_name(name) {
-  Log *log = GetLog(LLDBLog::Object);
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_OBJECT));
   LLDB_LOG(log, "{0} Broadcaster::Broadcaster(\"{1}\")",
            static_cast<void *>(this), GetBroadcasterName());
 }
@@ -36,7 +38,7 @@ Broadcaster::BroadcasterImpl::BroadcasterImpl(Broadcaster &broadcaster)
       m_hijacking_listeners(), m_hijacking_masks() {}
 
 Broadcaster::~Broadcaster() {
-  Log *log = GetLog(LLDBLog::Object);
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_OBJECT));
   LLDB_LOG(log, "{0} Broadcaster::~Broadcaster(\"{1}\")",
            static_cast<void *>(this), GetBroadcasterName());
 
@@ -208,7 +210,7 @@ void Broadcaster::BroadcasterImpl::PrivateBroadcastEvent(EventSP &event_sp,
       hijacking_listener_sp.reset();
   }
 
-  if (Log *log = GetLog(LLDBLog::Events)) {
+  if (Log *log = lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_EVENTS)) {
     StreamString event_description;
     event_sp->Dump(&event_description);
     LLDB_LOGF(log,
@@ -259,7 +261,7 @@ bool Broadcaster::BroadcasterImpl::HijackBroadcaster(
     const lldb::ListenerSP &listener_sp, uint32_t event_mask) {
   std::lock_guard<std::recursive_mutex> guard(m_listeners_mutex);
 
-  Log *log = GetLog(LLDBLog::Events);
+  Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_EVENTS));
   LLDB_LOG(
       log,
       "{0} Broadcaster(\"{1}\")::HijackBroadcaster (listener(\"{2}\")={3})",
@@ -290,7 +292,7 @@ void Broadcaster::BroadcasterImpl::RestoreBroadcaster() {
 
   if (!m_hijacking_listeners.empty()) {
     ListenerSP listener_sp = m_hijacking_listeners.back();
-    Log *log = GetLog(LLDBLog::Events);
+    Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_EVENTS));
     LLDB_LOG(log,
              "{0} Broadcaster(\"{1}\")::RestoreBroadcaster (about to pop "
              "listener(\"{2}\")={3})",

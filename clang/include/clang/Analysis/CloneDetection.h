@@ -11,8 +11,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_ANALYSIS_CLONEDETECTION_H
-#define LLVM_CLANG_ANALYSIS_CLONEDETECTION_H
+#ifndef LLVM_CLANG_AST_CLONEDETECTION_H
+#define LLVM_CLANG_AST_CLONEDETECTION_H
 
 #include "clang/AST/StmtVisitor.h"
 #include "llvm/Support/Regex.h"
@@ -235,7 +235,9 @@ public:
   static void filterGroups(
       std::vector<CloneDetector::CloneGroup> &CloneGroups,
       llvm::function_ref<bool(const CloneDetector::CloneGroup &)> Filter) {
-    llvm::erase_if(CloneGroups, Filter);
+    CloneGroups.erase(
+        std::remove_if(CloneGroups.begin(), CloneGroups.end(), Filter),
+        CloneGroups.end());
   }
 
   /// Splits the given CloneGroups until the given Compare function returns true
@@ -441,4 +443,4 @@ struct MatchingVariablePatternConstraint {
 
 } // end namespace clang
 
-#endif // LLVM_CLANG_ANALYSIS_CLONEDETECTION_H
+#endif // LLVM_CLANG_AST_CLONEDETECTION_H

@@ -1,3 +1,4 @@
+// -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -8,6 +9,9 @@
 
 // Test that headers are not tripped up by the surrounding code defining the
 // min() and max() macros.
+
+// GCC 5 has incomplete support for C++17, so some headers fail when included.
+// UNSUPPORTED: gcc-5 && c++17
 
 // Prevent <ext/hash_map> from generating deprecated warnings for this test.
 #if defined(__DEPRECATED)
@@ -34,8 +38,10 @@ TEST_MACROS();
 TEST_MACROS();
 #include <array>
 TEST_MACROS();
-#include <atomic>
+#ifndef _LIBCPP_HAS_NO_THREADS
+#    include <atomic>
 TEST_MACROS();
+#endif
 #ifndef _LIBCPP_HAS_NO_THREADS
 #    include <barrier>
 TEST_MACROS();
@@ -86,10 +92,6 @@ TEST_MACROS();
 TEST_MACROS();
 #include <condition_variable>
 TEST_MACROS();
-#ifndef _LIBCPP_HAS_NO_CXX20_COROUTINES
-#    include <coroutine>
-TEST_MACROS();
-#endif
 #include <csetjmp>
 TEST_MACROS();
 #include <csignal>
@@ -114,14 +116,10 @@ TEST_MACROS();
 TEST_MACROS();
 #include <ctype.h>
 TEST_MACROS();
-#ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
-#    include <cwchar>
+#include <cwchar>
 TEST_MACROS();
-#endif
-#ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
-#    include <cwctype>
+#include <cwctype>
 TEST_MACROS();
-#endif
 #include <deque>
 TEST_MACROS();
 #include <errno.h>
@@ -138,10 +136,8 @@ TEST_MACROS();
 #endif
 #include <float.h>
 TEST_MACROS();
-#ifndef _LIBCPP_HAS_NO_INCOMPLETE_FORMAT
-#    include <format>
+#include <format>
 TEST_MACROS();
-#endif
 #include <forward_list>
 TEST_MACROS();
 #ifndef _LIBCPP_HAS_NO_LOCALIZATION
@@ -222,10 +218,8 @@ TEST_MACROS();
 TEST_MACROS();
 #include <random>
 TEST_MACROS();
-#ifndef _LIBCPP_HAS_NO_INCOMPLETE_RANGES
-#    include <ranges>
+#include <ranges>
 TEST_MACROS();
-#endif
 #include <ratio>
 TEST_MACROS();
 #ifndef _LIBCPP_HAS_NO_LOCALIZATION
@@ -310,25 +304,25 @@ TEST_MACROS();
 TEST_MACROS();
 #include <version>
 TEST_MACROS();
-#ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
-#    include <wchar.h>
+#include <wchar.h>
 TEST_MACROS();
-#endif
-#ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
-#    include <wctype.h>
+#include <wctype.h>
 TEST_MACROS();
-#endif
 
 // experimental headers
 #if __cplusplus >= 201103L
 #    include <experimental/algorithm>
 TEST_MACROS();
-#    ifndef _LIBCPP_HAS_NO_EXPERIMENTAL_COROUTINES
+#    if defined(__cpp_coroutines)
 #        include <experimental/coroutine>
 TEST_MACROS();
 #    endif
 #    include <experimental/deque>
 TEST_MACROS();
+#    ifndef _LIBCPP_HAS_NO_FILESYSTEM_LIBRARY
+#        include <experimental/filesystem>
+TEST_MACROS();
+#    endif
 #    include <experimental/forward_list>
 TEST_MACROS();
 #    include <experimental/functional>

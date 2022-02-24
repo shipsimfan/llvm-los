@@ -53,7 +53,7 @@ class CallGraphUpdater {
   ///}
 
 public:
-  CallGraphUpdater() = default;
+  CallGraphUpdater() {}
   ~CallGraphUpdater() { finalize(); }
 
   /// Initializers for usage outside of a CGSCC pass, inside a CGSCC pass in

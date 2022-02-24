@@ -22,12 +22,16 @@
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/AllocatorBase.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/MemAlloc.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <iterator>
+#include <type_traits>
 #include <utility>
 
 namespace llvm {
@@ -137,10 +141,8 @@ public:
   }
 
   /// Allocate space at the specified alignment.
-  // This method is *not* marked noalias, because
-  // SpecificBumpPtrAllocator::DestroyAll() loops over all allocations, and
-  // that loop is not based on the Allocate() return value.
-  LLVM_ATTRIBUTE_RETURNS_NONNULL void *Allocate(size_t Size, Align Alignment) {
+  LLVM_ATTRIBUTE_RETURNS_NONNULL LLVM_ATTRIBUTE_RETURNS_NOALIAS void *
+  Allocate(size_t Size, Align Alignment) {
     // Keep track of how many bytes we've allocated.
     BytesAllocated += Size;
 
@@ -196,7 +198,7 @@ public:
     return AlignedPtr;
   }
 
-  inline LLVM_ATTRIBUTE_RETURNS_NONNULL void *
+  inline LLVM_ATTRIBUTE_RETURNS_NONNULL LLVM_ATTRIBUTE_RETURNS_NOALIAS void *
   Allocate(size_t Size, size_t Alignment) {
     assert(Alignment > 0 && "0-byte alignment is not allowed. Use 1 instead.");
     return Allocate(Size, Align(Alignment));
@@ -275,7 +277,7 @@ public:
     size_t TotalMemory = 0;
     for (auto I = Slabs.begin(), E = Slabs.end(); I != E; ++I)
       TotalMemory += computeSlabSize(std::distance(Slabs.begin(), I));
-    for (const auto &PtrAndSize : CustomSizedSlabs)
+    for (auto &PtrAndSize : CustomSizedSlabs)
       TotalMemory += PtrAndSize.second;
     return TotalMemory;
   }

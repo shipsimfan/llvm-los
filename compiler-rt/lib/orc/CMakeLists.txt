@@ -2,43 +2,23 @@
 
 # ORC runtime library implementation files.
 set(ORC_SOURCES
-  debug.cpp
-  extensible_rtti.cpp
-  log_error_to_stderr.cpp
-  macho_ehframe_registration.cpp
-  macho_platform.cpp
-  elfnix_platform.cpp
-  run_program_wrapper.cpp
+  placeholder.cpp
   )
 
 # Implementation files for all ORC architectures.
-set(ALL_ORC_ASM_SOURCES
-  macho_tlv.x86-64.S
-  macho_tlv.arm64.S
-  elfnix_tls.x86-64.S
+set(x86_64_SOURCES
+# x86-64 specific assembly files will go here.
 )
 
 set(ORC_IMPL_HEADERS
 # Implementation headers will go here.
-  adt.h
-  c_api.h
-  common.h
-  compiler.h
-  endianness.h
-  error.h
-  executor_address.h
-  extensible_rtti.h
-  macho_platform.h
-  simple_packed_serialization.h
-  stl_extras.h
-  wrapper_function_utils.h
 )
 
 # Create list of all source files for
 # consumption by tests.
 set(ORC_ALL_SOURCE_FILES
   ${ORC_SOURCES}
-  ${ALL_ORC_ASM_SOURCES}
+  ${x86_64_SOURCES}
   ${ORC_IMPL_HEADERS}
   )
 
@@ -63,19 +43,15 @@ if (TARGET cxx-headers OR HAVE_LIBCXX)
 endif()
 
 if (APPLE)
-  add_asm_sources(ORC_ASM_SOURCES
-    macho_tlv.x86-64.S
-    macho_tlv.arm64.S
-    )
-
   add_compiler_rt_object_libraries(RTOrc
     OS ${ORC_SUPPORTED_OS}
     ARCHS ${ORC_SUPPORTED_ARCH}
-    SOURCES ${ORC_SOURCES} ${ORC_ASM_SOURCES}
+    SOURCES ${ORC_SOURCES} ${x86_64_SOURCES}
     ADDITIONAL_HEADERS ${ORC_IMPL_HEADERS}
     CFLAGS ${ORC_CFLAGS}
     DEPS ${ORC_DEPS})
 
+  # We only support running on osx for now.
   add_compiler_rt_runtime(clang_rt.orc
     STATIC
     OS ${ORC_SUPPORTED_OS}
@@ -86,18 +62,15 @@ if (APPLE)
     LINK_LIBS ${ORC_LINK_LIBS}
     PARENT_TARGET orc)
 else() # not Apple
-  add_asm_sources(ORC_ASM_SOURCES elfnix_tls.x86-64.S)
-
   foreach(arch ${ORC_SUPPORTED_ARCH})
     if(NOT CAN_TARGET_${arch})
       continue()
     endif()
-
     add_compiler_rt_object_libraries(RTOrc
       ARCHS ${arch}
-      SOURCES ${ORC_SOURCES} ${ORC_ASM_SOURCES}
+      SOURCES ${ORC_SOURCES} ${${arch}_SOURCES}
       ADDITIONAL_HEADERS ${ORC_IMPL_HEADERS}
-      CFLAGS ${ORC_CFLAGS}
+      CFLAGS $ORC_CFLAGS}
       DEPS ${ORC_DEPS})
 
     # Common ORC archive for instrumented binaries.
@@ -109,7 +82,3 @@ else() # not Apple
      PARENT_TARGET orc)
   endforeach()
 endif() # not Apple
-
-if(COMPILER_RT_INCLUDE_TESTS)
-  add_subdirectory(unittests)
-endif()

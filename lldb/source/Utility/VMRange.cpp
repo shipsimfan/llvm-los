@@ -15,22 +15,24 @@
 #include <iterator>
 #include <vector>
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 using namespace lldb;
 using namespace lldb_private;
 
 bool VMRange::ContainsValue(const VMRange::collection &coll,
                             lldb::addr_t value) {
-  return llvm::any_of(coll,
-                      [&](const VMRange &r) { return r.Contains(value); });
+  return llvm::find_if(coll, [&](const VMRange &r) {
+           return r.Contains(value);
+         }) != coll.end();
 }
 
 bool VMRange::ContainsRange(const VMRange::collection &coll,
                             const VMRange &range) {
-  return llvm::any_of(coll,
-                      [&](const VMRange &r) { return r.Contains(range); });
+  return llvm::find_if(coll, [&](const VMRange &r) {
+           return r.Contains(range);
+         }) != coll.end();
 }
 
 void VMRange::Dump(llvm::raw_ostream &s, lldb::addr_t offset,

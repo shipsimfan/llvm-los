@@ -16,11 +16,11 @@ using namespace clang;
 
 /// Parse a simple identifier.
 static std::string parseName(StringRef S) {
-  if (S.empty() || !isAsciiIdentifierStart(S[0]))
+  if (S.empty() || !isIdentifierHead(S[0]))
     return "";
 
   unsigned Offset = 1;
-  while (Offset < S.size() && isAsciiIdentifierContinue(S[Offset]))
+  while (Offset < S.size() && isIdentifierBody(S[Offset]))
     ++Offset;
 
   return S.substr(0, Offset).str();
@@ -43,7 +43,7 @@ LayoutOverrideSource::LayoutOverrideSource(StringRef Filename) {
     StringRef LineStr(Line);
 
     // Determine whether the following line will start a
-    if (LineStr.contains("*** Dumping AST Record Layout")) {
+    if (LineStr.find("*** Dumping AST Record Layout") != StringRef::npos)  {
       // Flush the last type/layout, if there is one.
       if (!CurrentType.empty())
         Layouts[CurrentType] = CurrentLayout;

@@ -15,7 +15,6 @@
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/Object/Archive.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/IRObjectFile.h"
 #include "llvm/Object/MachO.h"
@@ -37,13 +36,13 @@ using namespace llvm::object;
 static const StringRef ToolName = "llvm-lipo";
 static LLVMContext LLVMCtx;
 
-[[noreturn]] static void reportError(Twine Message) {
+LLVM_ATTRIBUTE_NORETURN static void reportError(Twine Message) {
   WithColor::error(errs(), ToolName) << Message << "\n";
   errs().flush();
   exit(EXIT_FAILURE);
 }
 
-[[noreturn]] static void reportError(Error E) {
+LLVM_ATTRIBUTE_NORETURN static void reportError(Error E) {
   assert(E);
   std::string Buf;
   raw_string_ostream OS(Buf);
@@ -52,7 +51,7 @@ static LLVMContext LLVMCtx;
   reportError(Buf);
 }
 
-[[noreturn]] static void reportError(StringRef File, Error E) {
+LLVM_ATTRIBUTE_NORETURN static void reportError(StringRef File, Error E) {
   assert(E);
   std::string Buf;
   raw_string_ostream OS(Buf);
@@ -78,7 +77,7 @@ const char *const *LIPO_nullptr = nullptr;
 #include "LipoOpts.inc"
 #undef PREFIX
 
-const opt::OptTable::Info LipoInfoTable[] = {
+static const opt::OptTable::Info LipoInfoTable[] = {
 #define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
                HELPTEXT, METAVAR, VALUES)                                      \
   {LIPO_##PREFIX, NAME,      HELPTEXT,                                         \
@@ -160,14 +159,14 @@ static Config parseLipoOptions(ArrayRef<const char *> ArgsArr) {
                 " option");
 
   if (InputArgs.size() == 0) {
-    // printHelp does not accept Twine.
-    T.printHelp(errs(), "llvm-lipo input[s] option[s]", "llvm-lipo");
+    // PrintHelp does not accept Twine.
+    T.PrintHelp(errs(), "llvm-lipo input[s] option[s]", "llvm-lipo");
     exit(EXIT_FAILURE);
   }
 
   if (InputArgs.hasArg(LIPO_help)) {
-    // printHelp does not accept Twine.
-    T.printHelp(outs(), "llvm-lipo input[s] option[s]", "llvm-lipo");
+    // PrintHelp does not accept Twine.
+    T.PrintHelp(outs(), "llvm-lipo input[s] option[s]", "llvm-lipo");
     exit(EXIT_SUCCESS);
   }
 
@@ -351,9 +350,9 @@ readInputBinaries(ArrayRef<InputFile> InputFiles) {
   return InputBinaries;
 }
 
-[[noreturn]] static void
-verifyArch(ArrayRef<OwningBinary<Binary>> InputBinaries,
-           ArrayRef<std::string> VerifyArchList) {
+LLVM_ATTRIBUTE_NORETURN
+static void verifyArch(ArrayRef<OwningBinary<Binary>> InputBinaries,
+                       ArrayRef<std::string> VerifyArchList) {
   assert(!VerifyArchList.empty() &&
          "The list of architectures should be non-empty");
   assert(InputBinaries.size() == 1 && "Incorrect number of input binaries");
@@ -434,15 +433,15 @@ static void printBinaryArchs(const Binary *Binary, raw_ostream &OS) {
   OS << SliceOrErr->getArchString() << " \n";
 }
 
-[[noreturn]] static void
-printArchs(ArrayRef<OwningBinary<Binary>> InputBinaries) {
+LLVM_ATTRIBUTE_NORETURN
+static void printArchs(ArrayRef<OwningBinary<Binary>> InputBinaries) {
   assert(InputBinaries.size() == 1 && "Incorrect number of input binaries");
   printBinaryArchs(InputBinaries.front().getBinary(), outs());
   exit(EXIT_SUCCESS);
 }
 
-[[noreturn]] static void
-printInfo(ArrayRef<OwningBinary<Binary>> InputBinaries) {
+LLVM_ATTRIBUTE_NORETURN
+static void printInfo(ArrayRef<OwningBinary<Binary>> InputBinaries) {
   // Group universal and thin files together for compatibility with cctools lipo
   for (auto &IB : InputBinaries) {
     const Binary *Binary = IB.getBinary();
@@ -464,9 +463,9 @@ printInfo(ArrayRef<OwningBinary<Binary>> InputBinaries) {
   exit(EXIT_SUCCESS);
 }
 
-[[noreturn]] static void thinSlice(ArrayRef<OwningBinary<Binary>> InputBinaries,
-                                   StringRef ArchType,
-                                   StringRef OutputFileName) {
+LLVM_ATTRIBUTE_NORETURN
+static void thinSlice(ArrayRef<OwningBinary<Binary>> InputBinaries,
+                      StringRef ArchType, StringRef OutputFileName) {
   assert(!ArchType.empty() && "The architecture type should be non-empty");
   assert(InputBinaries.size() == 1 && "Incorrect number of input binaries");
   assert(!OutputFileName.empty() && "Thin expects a single output file");
@@ -600,10 +599,10 @@ buildSlices(ArrayRef<OwningBinary<Binary>> InputBinaries,
   return Slices;
 }
 
-[[noreturn]] static void
-createUniversalBinary(ArrayRef<OwningBinary<Binary>> InputBinaries,
-                      const StringMap<const uint32_t> &Alignments,
-                      StringRef OutputFileName) {
+LLVM_ATTRIBUTE_NORETURN
+static void createUniversalBinary(ArrayRef<OwningBinary<Binary>> InputBinaries,
+                                  const StringMap<const uint32_t> &Alignments,
+                                  StringRef OutputFileName) {
   assert(InputBinaries.size() >= 1 && "Incorrect number of input binaries");
   assert(!OutputFileName.empty() && "Create expects a single output file");
 
@@ -620,10 +619,10 @@ createUniversalBinary(ArrayRef<OwningBinary<Binary>> InputBinaries,
   exit(EXIT_SUCCESS);
 }
 
-[[noreturn]] static void
-extractSlice(ArrayRef<OwningBinary<Binary>> InputBinaries,
-             const StringMap<const uint32_t> &Alignments, StringRef ArchType,
-             StringRef OutputFileName) {
+LLVM_ATTRIBUTE_NORETURN
+static void extractSlice(ArrayRef<OwningBinary<Binary>> InputBinaries,
+                         const StringMap<const uint32_t> &Alignments,
+                         StringRef ArchType, StringRef OutputFileName) {
   assert(!ArchType.empty() &&
          "The architecture type should be non-empty");
   assert(InputBinaries.size() == 1 && "Incorrect number of input binaries");
@@ -679,10 +678,11 @@ buildReplacementSlices(ArrayRef<OwningBinary<Binary>> ReplacementBinaries,
   return Slices;
 }
 
-[[noreturn]] static void
-replaceSlices(ArrayRef<OwningBinary<Binary>> InputBinaries,
-              const StringMap<const uint32_t> &Alignments,
-              StringRef OutputFileName, ArrayRef<InputFile> ReplacementFiles) {
+LLVM_ATTRIBUTE_NORETURN
+static void replaceSlices(ArrayRef<OwningBinary<Binary>> InputBinaries,
+                          const StringMap<const uint32_t> &Alignments,
+                          StringRef OutputFileName,
+                          ArrayRef<InputFile> ReplacementFiles) {
   assert(InputBinaries.size() == 1 && "Incorrect number of input binaries");
   assert(!OutputFileName.empty() && "Replace expects a single output file");
 

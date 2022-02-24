@@ -19,9 +19,7 @@
 #include "lldb/Symbol/Type.h"
 #include "lldb/Symbol/TypeList.h"
 #include "lldb/Symbol/Variable.h"
-#include "lldb/Target/ABI.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Timer.h"
 
@@ -34,7 +32,7 @@ using namespace lldb_private;
 char ObjCLanguageRuntime::ID = 0;
 
 // Destructor
-ObjCLanguageRuntime::~ObjCLanguageRuntime() = default;
+ObjCLanguageRuntime::~ObjCLanguageRuntime() {}
 
 ObjCLanguageRuntime::ObjCLanguageRuntime(Process *process)
     : LanguageRuntime(process), m_impl_cache(),
@@ -64,7 +62,7 @@ bool ObjCLanguageRuntime::AddClass(ObjCISA isa,
 void ObjCLanguageRuntime::AddToMethodCache(lldb::addr_t class_addr,
                                            lldb::addr_t selector,
                                            lldb::addr_t impl_addr) {
-  Log *log = GetLog(LLDBLog::Step);
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
   if (log) {
     LLDB_LOGF(log,
               "Caching: class 0x%" PRIx64 " selector 0x%" PRIx64
@@ -275,17 +273,10 @@ ObjCLanguageRuntime::ClassDescriptorSP
 ObjCLanguageRuntime::GetClassDescriptorFromISA(ObjCISA isa) {
   if (isa) {
     UpdateISAToDescriptorMap();
-
     ObjCLanguageRuntime::ISAToDescriptorIterator pos =
         m_isa_to_descriptor.find(isa);
     if (pos != m_isa_to_descriptor.end())
       return pos->second;
-
-    if (ABISP abi_sp = m_process->GetABI()) {
-      pos = m_isa_to_descriptor.find(abi_sp->FixCodeAddress(isa));
-      if (pos != m_isa_to_descriptor.end())
-        return pos->second;
-    }
   }
   return ClassDescriptorSP();
 }
@@ -314,7 +305,7 @@ ObjCLanguageRuntime::EncodingToType::RealizeType(const char *name,
   return CompilerType();
 }
 
-ObjCLanguageRuntime::EncodingToType::~EncodingToType() = default;
+ObjCLanguageRuntime::EncodingToType::~EncodingToType() {}
 
 ObjCLanguageRuntime::EncodingToTypeSP ObjCLanguageRuntime::GetEncodingToType() {
   return nullptr;
@@ -372,8 +363,7 @@ void ObjCLanguageRuntime::ObjCExceptionPrecondition::AddClassName(
   m_class_names.insert(class_name);
 }
 
-ObjCLanguageRuntime::ObjCExceptionPrecondition::ObjCExceptionPrecondition() =
-    default;
+ObjCLanguageRuntime::ObjCExceptionPrecondition::ObjCExceptionPrecondition() {}
 
 bool ObjCLanguageRuntime::ObjCExceptionPrecondition::EvaluatePrecondition(
     StoppointCallbackContext &context) {

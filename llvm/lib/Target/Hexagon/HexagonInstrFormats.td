@@ -146,6 +146,9 @@ class InstHexagon<dag outs, dag ins, string asmstr, list<dag> pattern,
   bits<1> isFP = 0;
   let TSFlags {50} = isFP; // Floating-point.
 
+  bits<1> isSomeOK = 0;
+  let TSFlags {51} = isSomeOK; // Relax some grouping constraints.
+
   bits<1> hasNewValue2 = 0;
   let TSFlags{52} = hasNewValue2; // Second New-value producer insn.
   bits<3> opNewValue2 = 0;
@@ -157,8 +160,8 @@ class InstHexagon<dag outs, dag ins, string asmstr, list<dag> pattern,
   bits<1> prefersSlot3 = 0;
   let TSFlags{57} = prefersSlot3; // Complex XU
 
-  bits<1> hasHvxTmp = 0;
-  let TSFlags{60} = hasHvxTmp;  // vector register vX.tmp false-write
+  bits<1> hasTmpDst = 0;
+  let TSFlags{60} = hasTmpDst;  // v65 : 'fake" register VTMP is set
 
   bit CVINew = 0;
   let TSFlags{62} = CVINew;
@@ -265,7 +268,8 @@ class OpcodeDuplex {
   let Inst{12-0}  = ISubLo;
 }
 
-class InstDuplex<bits<4> iClass, string cstr = "">
+class InstDuplex<bits<4> iClass, list<dag> pattern = [],
+                 string cstr = "">
   : Instruction, OpcodeDuplex {
   let Namespace = "Hexagon";
   IType Type = TypeDUPLEX;  // uses slot 0,1

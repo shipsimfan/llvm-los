@@ -357,7 +357,7 @@ def parseOptionsAndInitTestdirs():
 
     if args.executable:
         # lldb executable is passed explicitly
-        lldbtest_config.lldbExec = os.path.abspath(args.executable)
+        lldbtest_config.lldbExec = os.path.realpath(args.executable)
         if not is_exe(lldbtest_config.lldbExec):
             lldbtest_config.lldbExec = which(args.executable)
         if not is_exe(lldbtest_config.lldbExec):
@@ -393,6 +393,16 @@ def parseOptionsAndInitTestdirs():
     if do_help:
         usage(parser)
 
+    # Reproducer arguments
+    if args.capture_path and args.replay_path:
+        logging.error('Cannot specify both a capture and a replay path.')
+        sys.exit(-1)
+
+    if args.capture_path:
+        configuration.capture_path = args.capture_path
+
+    if args.replay_path:
+        configuration.replay_path = args.replay_path
     if args.lldb_platform_name:
         configuration.lldb_platform_name = args.lldb_platform_name
     if args.lldb_platform_url:
@@ -467,7 +477,6 @@ def setupSysPath():
     pluginPath = os.path.join(scriptPath, 'plugins')
     toolsLLDBVSCode = os.path.join(scriptPath, 'tools', 'lldb-vscode')
     toolsLLDBServerPath = os.path.join(scriptPath, 'tools', 'lldb-server')
-    intelpt = os.path.join(scriptPath, 'tools', 'intelpt')
 
     # Insert script dir, plugin dir and lldb-server dir to the sys.path.
     sys.path.insert(0, pluginPath)
@@ -475,11 +484,8 @@ def setupSysPath():
     # "import lldb_vscode_testcase" from the VSCode tests
     sys.path.insert(0, toolsLLDBVSCode)
     # Adding test/tools/lldb-server to the path makes it easy
-    # to "import lldbgdbserverutils" from the lldb-server tests
     sys.path.insert(0, toolsLLDBServerPath)
-    # Adding test/tools/intelpt to the path makes it easy
-    # to "import intelpt_testcase" from the lldb-server tests
-    sys.path.insert(0, intelpt)
+    # to "import lldbgdbserverutils" from the lldb-server tests
 
     # This is the root of the lldb git/svn checkout
     # When this changes over to a package instead of a standalone script, this
@@ -745,7 +751,7 @@ def canRunLibcxxTests():
         with tempfile.NamedTemporaryFile() as f:
             cmd = [configuration.compiler, "-xc++", "-stdlib=libc++", "-o", f.name, "-"]
             p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-            _, stderr = p.communicate("#include <cassert>\nint main() {}")
+            _, stderr = p.communicate("#include <algorithm>\nint main() {}")
             if not p.returncode:
                 return True, "Compiling with -stdlib=libc++ works"
             return False, "Compiling with -stdlib=libc++ fails with the error: %s" % stderr
@@ -878,8 +884,19 @@ def run_suite():
 
     setupSysPath()
 
+    import lldbconfig
+    if configuration.capture_path or configuration.replay_path:
+        lldbconfig.INITIALIZE = False
     import lldb
-    lldb.SBDebugger.Initialize()
+
+    if configuration.capture_path:
+        lldb.SBReproducer.Capture(configuration.capture_path)
+        lldb.SBReproducer.SetAutoGenerate(True)
+    elif configuration.replay_path:
+        lldb.SBReproducer.PassiveReplay(configuration.replay_path)
+
+    if not lldbconfig.INITIALIZE:
+        lldb.SBDebugger.Initialize()
 
     # Use host platform by default.
     lldb.selected_platform = lldb.SBPlatform.GetHostPlatform()
@@ -908,7 +925,6 @@ def run_suite():
             err = lldb.remote_platform.ConnectRemote(platform_connect_options)
             if err.Success():
                 print("Connected.")
-                lldb.selected_platform = lldb.remote_platform
             else:
                 print("error: failed to connect to remote platform using URL '%s': %s" % (
                     configuration.lldb_platform_url, err))
@@ -937,6 +953,9 @@ def run_suite():
     # Set up the working directory.
     # Note that it's not dotest's job to clean this directory.
     lldbutil.mkdir_p(configuration.test_build_dir)
+
+    from . import lldbplatformutil
+    target_platform = lldbplatformutil.getPlatform()
 
     checkLibcxxSupport()
     checkLibstdcxxSupport()

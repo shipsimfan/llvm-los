@@ -18,7 +18,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/ConvertUTF.h"
 
-#include <cctype>
+#include <ctype.h>
 #include <locale>
 #include <memory>
 
@@ -408,8 +408,8 @@ static bool ReadEncodedBufferAndDumpToStream(
       options.GetLocation() == LLDB_INVALID_ADDRESS)
     return false;
 
-  lldb::TargetSP target_sp = options.GetTargetSP();
-  if (!target_sp)
+  lldb::ProcessSP process_sp(options.GetProcessSP());
+  if (!process_sp)
     return false;
 
   constexpr int type_width = sizeof(SourceDataType);
@@ -423,7 +423,7 @@ static bool ReadEncodedBufferAndDumpToStream(
   bool needs_zero_terminator = options.GetNeedsZeroTermination();
 
   bool is_truncated = false;
-  const auto max_size = target_sp->GetMaximumSizeOfStringSummary();
+  const auto max_size = process_sp->GetTarget().GetMaximumSizeOfStringSummary();
 
   uint32_t sourceSize;
   if (elem_type == StringElementType::ASCII && !options.GetSourceSize()) {
@@ -462,22 +462,24 @@ static bool ReadEncodedBufferAndDumpToStream(
   char *buffer = reinterpret_cast<char *>(buffer_sp->GetBytes());
 
   if (elem_type == StringElementType::ASCII)
-    target_sp->ReadCStringFromMemory(options.GetLocation(), buffer,
+    process_sp->ReadCStringFromMemory(options.GetLocation(), buffer,
                                       bufferSPSize, error);
   else if (needs_zero_terminator)
-    target_sp->ReadStringFromMemory(options.GetLocation(), buffer,
+    process_sp->ReadStringFromMemory(options.GetLocation(), buffer,
                                      bufferSPSize, error, type_width);
   else
-    target_sp->ReadMemory(options.GetLocation(), buffer, bufferSPSize, error);
+    process_sp->ReadMemoryFromInferior(options.GetLocation(), buffer,
+                                       bufferSPSize, error);
   if (error.Fail()) {
     options.GetStream()->Printf("unable to read data");
     return true;
   }
 
+  DataExtractor data(buffer_sp, process_sp->GetByteOrder(),
+                     process_sp->GetAddressByteSize());
+
   StringPrinter::ReadBufferAndDumpToStreamOptions dump_options(options);
-  dump_options.SetData(
-      DataExtractor(buffer_sp, target_sp->GetArchitecture().GetByteOrder(),
-                    target_sp->GetArchitecture().GetAddressByteSize()));
+  dump_options.SetData(data);
   dump_options.SetSourceSize(sourceSize);
   dump_options.SetIsTruncated(is_truncated);
   dump_options.SetNeedsZeroTermination(needs_zero_terminator);

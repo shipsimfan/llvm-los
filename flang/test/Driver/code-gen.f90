@@ -5,6 +5,8 @@
 ! rejected earlier).
 ! TODO: Replace this file with a proper test once code-generation is available.
 
+! REQUIRES: new-flang-driver
+
 !-----------
 ! RUN LINES
 !-----------

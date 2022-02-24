@@ -56,10 +56,12 @@ static bool runImpl(Function &F) {
   LLVM_DEBUG(dbgs() << "ObjCARCExpand: Visiting Function: " << F.getName()
                     << "\n");
 
-  for (Instruction &Inst : instructions(&F)) {
-    LLVM_DEBUG(dbgs() << "ObjCARCExpand: Visiting: " << Inst << "\n");
+  for (inst_iterator I = inst_begin(&F), E = inst_end(&F); I != E; ++I) {
+    Instruction *Inst = &*I;
 
-    switch (GetBasicARCInstKind(&Inst)) {
+    LLVM_DEBUG(dbgs() << "ObjCARCExpand: Visiting: " << *Inst << "\n");
+
+    switch (GetBasicARCInstKind(Inst)) {
     case ARCInstKind::Retain:
     case ARCInstKind::RetainRV:
     case ARCInstKind::Autorelease:
@@ -71,12 +73,12 @@ static bool runImpl(Function &F) {
       // harder. Undo any uses of this optimization that the front-end
       // emitted here. We'll redo them in the contract pass.
       Changed = true;
-      Value *Value = cast<CallInst>(&Inst)->getArgOperand(0);
-      LLVM_DEBUG(dbgs() << "ObjCARCExpand: Old = " << Inst
+      Value *Value = cast<CallInst>(Inst)->getArgOperand(0);
+      LLVM_DEBUG(dbgs() << "ObjCARCExpand: Old = " << *Inst
                         << "\n"
                            "               New = "
                         << *Value << "\n");
-      Inst.replaceAllUsesWith(Value);
+      Inst->replaceAllUsesWith(Value);
       break;
     }
     default:

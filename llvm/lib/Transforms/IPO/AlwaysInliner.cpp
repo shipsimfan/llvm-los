@@ -1,4 +1,4 @@
-//===- AlwaysInliner.cpp - Code to inline always_inline functions ----------===//
+//===- InlineAlways.cpp - Code to inline always_inline functions ----------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -54,15 +54,14 @@ PreservedAnalyses AlwaysInlinerPass::run(Module &M,
     if (F.isPresplitCoroutine())
       continue;
 
-    if (!F.isDeclaration() && isInlineViable(F).isSuccess()) {
+    if (!F.isDeclaration() && F.hasFnAttribute(Attribute::AlwaysInline) &&
+        isInlineViable(F).isSuccess()) {
       Calls.clear();
 
       for (User *U : F.users())
         if (auto *CB = dyn_cast<CallBase>(U))
-          if (CB->getCalledFunction() == &F &&
-                CB->hasFnAttr(Attribute::AlwaysInline) &&
-                !CB->getAttributes().hasFnAttr(Attribute::NoInline))
-              Calls.insert(CB);
+          if (CB->getCalledFunction() == &F)
+            Calls.insert(CB);
 
       for (CallBase *CB : Calls) {
         Function *Caller = CB->getCaller();
@@ -74,8 +73,8 @@ PreservedAnalyses AlwaysInlinerPass::run(Module &M,
             },
             ORE);
         assert(OIC);
-        emitInlinedIntoBasedOnCost(ORE, CB->getDebugLoc(), CB->getParent(), F,
-                                   *Caller, *OIC, false, DEBUG_TYPE);
+        emitInlinedInto(ORE, CB->getDebugLoc(), CB->getParent(), F, *Caller,
+                        *OIC, false, DEBUG_TYPE);
 
         InlineFunctionInfo IFI(
             /*cg=*/nullptr, GetAssumptionCache, &PSI,
@@ -93,12 +92,10 @@ PreservedAnalyses AlwaysInlinerPass::run(Module &M,
         Changed = true;
       }
 
-      if (F.hasFnAttribute(Attribute::AlwaysInline)) {
-        // Remember to try and delete this function afterward. This both avoids
-        // re-walking the rest of the module and avoids dealing with any
-        // iterator invalidation issues while deleting functions.
-        InlinedFunctions.push_back(&F);
-      }
+      // Remember to try and delete this function afterward. This both avoids
+      // re-walking the rest of the module and avoids dealing with any iterator
+      // invalidation issues while deleting functions.
+      InlinedFunctions.push_back(&F);
     }
   }
 
@@ -111,21 +108,17 @@ PreservedAnalyses AlwaysInlinerPass::run(Module &M,
   // Delete the non-comdat ones from the module and also from our vector.
   auto NonComdatBegin = partition(
       InlinedFunctions, [&](Function *F) { return F->hasComdat(); });
-  for (Function *F : make_range(NonComdatBegin, InlinedFunctions.end())) {
+  for (Function *F : make_range(NonComdatBegin, InlinedFunctions.end()))
     M.getFunctionList().erase(F);
-    Changed = true;
-  }
   InlinedFunctions.erase(NonComdatBegin, InlinedFunctions.end());
 
   if (!InlinedFunctions.empty()) {
     // Now we just have the comdat functions. Filter out the ones whose comdats
     // are not actually dead.
-    filterDeadComdatFunctions(InlinedFunctions);
+    filterDeadComdatFunctions(M, InlinedFunctions);
     // The remaining functions are actually dead.
-    for (Function *F : InlinedFunctions) {
+    for (Function *F : InlinedFunctions)
       M.getFunctionList().erase(F);
-      Changed = true;
-    }
   }
 
   return Changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
@@ -210,9 +203,6 @@ InlineCost AlwaysInlinerLegacyPass::getInlineCost(CallBase &CB) {
 
   if (!CB.hasFnAttr(Attribute::AlwaysInline))
     return InlineCost::getNever("no alwaysinline attribute");
-
-  if (Callee->hasFnAttribute(Attribute::AlwaysInline) && CB.isNoInline())
-    return InlineCost::getNever("noinline call site attribute");
 
   auto IsViable = isInlineViable(*Callee);
   if (!IsViable.isSuccess())

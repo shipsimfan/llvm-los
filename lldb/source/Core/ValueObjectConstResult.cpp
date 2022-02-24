@@ -193,7 +193,7 @@ ValueObjectConstResult::ValueObjectConstResult(ExecutionContextScope *exe_scope,
   m_error = m_value.GetValueAsData(&exe_ctx, m_data, module);
 }
 
-ValueObjectConstResult::~ValueObjectConstResult() = default;
+ValueObjectConstResult::~ValueObjectConstResult() {}
 
 CompilerType ValueObjectConstResult::GetCompilerTypeImpl() {
   return m_value.GetCompilerType();

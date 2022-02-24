@@ -10,13 +10,16 @@
 #define LLD_ELF_WRITER_H
 
 #include "Config.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include <cstdint>
+#include <memory>
 
 namespace lld {
 namespace elf {
 class InputFile;
 class OutputSection;
+class InputSectionBase;
 void copySectionsIntoPartitions();
 template <class ELFT> void createSyntheticSections();
 void combineEhSections();
@@ -48,6 +51,7 @@ struct PhdrEntry {
 };
 
 void addReservedSymbols();
+llvm::StringRef getOutputSectionName(const InputSectionBase *s);
 
 template <class ELFT> uint32_t calcMipsEFlags();
 

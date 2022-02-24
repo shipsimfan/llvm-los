@@ -18,8 +18,8 @@
 #include "io-error.h"
 #include "io-stmt.h"
 #include "lock.h"
+#include "memory.h"
 #include "terminator.h"
-#include "flang/Runtime/memory.h"
 #include <cstdlib>
 #include <cstring>
 #include <optional>
@@ -28,29 +28,25 @@
 namespace Fortran::runtime::io {
 
 class UnitMap;
-class ChildIo;
 
 class ExternalFileUnit : public ConnectionState,
                          public OpenFile,
                          public FileFrame<ExternalFileUnit> {
 public:
   explicit ExternalFileUnit(int unitNumber) : unitNumber_{unitNumber} {}
-  ~ExternalFileUnit() {}
-
   int unitNumber() const { return unitNumber_; }
   bool swapEndianness() const { return swapEndianness_; }
-  bool createdForInternalChildIo() const { return createdForInternalChildIo_; }
 
   static ExternalFileUnit *LookUp(int unit);
   static ExternalFileUnit &LookUpOrCrash(int unit, const Terminator &);
   static ExternalFileUnit &LookUpOrCreate(
       int unit, const Terminator &, bool &wasExtant);
-  static ExternalFileUnit &LookUpOrCreateAnonymous(int unit, Direction,
-      std::optional<bool> isUnformatted, const Terminator &);
+  static ExternalFileUnit &LookUpOrCreateAnonymous(
+      int unit, Direction, bool isUnformatted, const Terminator &);
   static ExternalFileUnit *LookUp(const char *path);
   static ExternalFileUnit &CreateNew(int unit, const Terminator &);
   static ExternalFileUnit *LookUpForClose(int unit);
-  static ExternalFileUnit &NewUnit(const Terminator &, bool forChildIo);
+  static int NewUnit(const Terminator &);
   static void CloseAll(IoErrorHandler &);
   static void FlushAll(IoErrorHandler &);
 
@@ -66,6 +62,7 @@ public:
 
   template <typename A, typename... X>
   IoStatementState &BeginIoStatement(X &&...xs) {
+    // TODO: Child data transfer statements vs. locking
     lock_.Take(); // dropped in EndIoStatement()
     A &state{u_.emplace<A>(std::forward<X>(xs)...)};
     if constexpr (!std::is_same_v<A, OpenStatementState>) {
@@ -78,44 +75,37 @@ public:
   bool Emit(
       const char *, std::size_t, std::size_t elementBytes, IoErrorHandler &);
   bool Receive(char *, std::size_t, std::size_t elementBytes, IoErrorHandler &);
-  std::size_t GetNextInputBytes(const char *&, IoErrorHandler &);
   std::optional<char32_t> GetCurrentChar(IoErrorHandler &);
   void SetLeftTabLimit();
   bool BeginReadingRecord(IoErrorHandler &);
   void FinishReadingRecord(IoErrorHandler &);
   bool AdvanceRecord(IoErrorHandler &);
   void BackspaceRecord(IoErrorHandler &);
-  void FlushOutput(IoErrorHandler &);
   void FlushIfTerminal(IoErrorHandler &);
   void Endfile(IoErrorHandler &);
   void Rewind(IoErrorHandler &);
   void EndIoStatement();
-  void SetPosition(std::int64_t, IoErrorHandler &); // zero-based
-  std::int64_t InquirePos() const {
-    // 12.6.2.11 defines POS=1 as the beginning of file
-    return frameOffsetInFile_ + 1;
+  void SetPosition(std::int64_t pos) {
+    frameOffsetInFile_ = pos;
+    recordOffsetInFrame_ = 0;
+    BeginRecord();
   }
-
-  ChildIo *GetChildIo() { return child_.get(); }
-  ChildIo &PushChildIo(IoStatementState &);
-  void PopChildIo(ChildIo &);
 
 private:
   static UnitMap &GetUnitMap();
   const char *FrameNextInput(IoErrorHandler &, std::size_t);
   void BeginSequentialVariableUnformattedInputRecord(IoErrorHandler &);
-  void BeginVariableFormattedInputRecord(IoErrorHandler &);
+  void BeginSequentialVariableFormattedInputRecord(IoErrorHandler &);
   void BackspaceFixedRecord(IoErrorHandler &);
   void BackspaceVariableUnformattedRecord(IoErrorHandler &);
   void BackspaceVariableFormattedRecord(IoErrorHandler &);
-  bool SetVariableFormattedRecordLength();
+  bool SetSequentialVariableFormattedRecordLength();
   void DoImpliedEndfile(IoErrorHandler &);
   void DoEndfile(IoErrorHandler &);
-  void CommitWrites();
 
   int unitNumber_{-1};
   Direction direction_{Direction::Output};
-  bool impliedEndfile_{false}; // sequential/stream output has taken place
+  bool impliedEndfile_{false}; // seq. output has taken place
   bool beganReadingRecord_{false};
 
   Lock lock_;
@@ -126,8 +116,8 @@ private:
       ExternalFormattedIoStatementState<Direction::Input>,
       ExternalListIoStatementState<Direction::Output>,
       ExternalListIoStatementState<Direction::Input>,
-      ExternalUnformattedIoStatementState<Direction::Output>,
-      ExternalUnformattedIoStatementState<Direction::Input>, InquireUnitState,
+      UnformattedIoStatementState<Direction::Output>,
+      UnformattedIoStatementState<Direction::Input>, InquireUnitState,
       ExternalMiscIoStatementState>
       u_;
 
@@ -142,50 +132,6 @@ private:
   std::size_t recordOffsetInFrame_{0}; // of currentRecordNumber
 
   bool swapEndianness_{false};
-
-  bool createdForInternalChildIo_{false};
-
-  // A stack of child I/O pseudo-units for user-defined derived type
-  // I/O that have this unit number.
-  OwningPtr<ChildIo> child_;
-};
-
-// A pseudo-unit for child I/O statements in user-defined derived type
-// I/O subroutines; it forwards operations to the parent I/O statement,
-// which can also be a child I/O statement.
-class ChildIo {
-public:
-  ChildIo(IoStatementState &parent, OwningPtr<ChildIo> &&previous)
-      : parent_{parent}, previous_{std::move(previous)} {}
-
-  IoStatementState &parent() const { return parent_; }
-
-  void EndIoStatement();
-
-  template <typename A, typename... X>
-  IoStatementState &BeginIoStatement(X &&...xs) {
-    A &state{u_.emplace<A>(std::forward<X>(xs)...)};
-    io_.emplace(state);
-    return *io_;
-  }
-
-  OwningPtr<ChildIo> AcquirePrevious() { return std::move(previous_); }
-
-  bool CheckFormattingAndDirection(
-      Terminator &, const char *what, bool unformatted, Direction);
-
-private:
-  IoStatementState &parent_;
-  OwningPtr<ChildIo> previous_;
-  std::variant<std::monostate,
-      ChildFormattedIoStatementState<Direction::Output>,
-      ChildFormattedIoStatementState<Direction::Input>,
-      ChildListIoStatementState<Direction::Output>,
-      ChildListIoStatementState<Direction::Input>,
-      ChildUnformattedIoStatementState<Direction::Output>,
-      ChildUnformattedIoStatementState<Direction::Input>, InquireUnitState>
-      u_;
-  std::optional<IoStatementState> io_;
 };
 
 } // namespace Fortran::runtime::io

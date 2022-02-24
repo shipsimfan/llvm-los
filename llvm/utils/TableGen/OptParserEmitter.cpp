@@ -13,6 +13,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/TableGenBackend.h"
+#include <cctype>
 #include <cstring>
 #include <map>
 #include <memory>
@@ -250,7 +251,7 @@ void EmitOptParser(RecordKeeper &Records, raw_ostream &OS) {
 
     // Prefix values.
     OS << ", {";
-    for (const auto &PrefixKey : Prefix.first)
+    for (StringRef PrefixKey : Prefix.first)
       OS << "\"" << PrefixKey << "\" COMMA ";
     OS << "nullptr})\n";
   }

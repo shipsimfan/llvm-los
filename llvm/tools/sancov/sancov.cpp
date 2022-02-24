@@ -22,7 +22,6 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCTargetOptions.h"
-#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/COFF.h"
@@ -42,6 +41,7 @@
 #include "llvm/Support/SHA1.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/SpecialCaseList.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/YAMLParser.h"
@@ -687,20 +687,17 @@ findSanitizerCovFunctions(const object::ObjectFile &O) {
   return Result;
 }
 
-// Ported from
-// compiler-rt/lib/sanitizer_common/sanitizer_stacktrace.h:GetPreviousInstructionPc
-// GetPreviousInstructionPc.
 static uint64_t getPreviousInstructionPc(uint64_t PC,
                                          Triple TheTriple) {
-  if (TheTriple.isARM())
+  if (TheTriple.isARM()) {
     return (PC - 3) & (~1);
-  if (TheTriple.isMIPS())
+  } else if (TheTriple.isAArch64()) {
+    return PC - 4;
+  } else if (TheTriple.isMIPS()) {
     return PC - 8;
-  if (TheTriple.isRISCV())
-    return PC - 2;
-  if (TheTriple.isX86() || TheTriple.isSystemZ())
+  } else {
     return PC - 1;
-  return PC - 4;
+  }
 }
 
 // Locate addresses of all coverage points in a file. Coverage point
@@ -729,7 +726,8 @@ static void getObjectCoveragePoints(const object::ObjectFile &O,
       TheTarget->createMCAsmInfo(*MRI, TripleName, MCOptions));
   failIfEmpty(AsmInfo, "no asm info for target " + TripleName);
 
-  MCContext Ctx(TheTriple, AsmInfo.get(), MRI.get(), STI.get());
+  std::unique_ptr<const MCObjectFileInfo> MOFI(new MCObjectFileInfo);
+  MCContext Ctx(AsmInfo.get(), MRI.get(), MOFI.get());
   std::unique_ptr<MCDisassembler> DisAsm(
       TheTarget->createMCDisassembler(*STI, Ctx));
   failIfEmpty(DisAsm, "no disassembler info for target " + TripleName);

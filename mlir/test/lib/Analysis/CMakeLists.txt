@@ -1,27 +1,20 @@
 # Exclude tests from libMLIR.so
 add_mlir_library(MLIRTestAnalysis
   TestAliasAnalysis.cpp
-  TestCallGraph.cpp
-  TestLiveness.cpp
-  TestMatchReduction.cpp
-  TestMemRefBoundCheck.cpp
-  TestMemRefDependenceCheck.cpp
-  TestMemRefStrideCalculation.cpp
-  TestSlice.cpp
-
 
   EXCLUDE_FROM_LIBMLIR
 
+  ADDITIONAL_HEADER_DIRS
+  ${MLIR_MAIN_INCLUDE_DIR}/mlir/Transforms
+
+  DEPENDS
+  MLIRStandardOpsIncGen
+
   LINK_LIBS PUBLIC
-  MLIRAffine
   MLIRAnalysis
-  MLIRMemRef
   MLIRPass
   MLIRTestDialect
   )
 
-target_include_directories(MLIRTestAnalysis
-  PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/../Dialect/Test
-  ${CMAKE_CURRENT_BINARY_DIR}/../Dialect/Test
-  )
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../Dialect/Test)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/../Dialect/Test)

@@ -22,7 +22,6 @@ class formatted_raw_ostream;
 class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
-class MCInst;
 class MCInstrInfo;
 class MCInstPrinter;
 class MCRegisterInfo;
@@ -31,9 +30,14 @@ class MCStreamer;
 class MCSubtargetInfo;
 class MCTargetOptions;
 class MCTargetStreamer;
+class StringRef;
 class Target;
+class Triple;
+class raw_ostream;
+class raw_pwrite_stream;
 
 MCCodeEmitter *createAArch64MCCodeEmitter(const MCInstrInfo &MCII,
+                                          const MCRegisterInfo &MRI,
                                           MCContext &Ctx);
 MCAsmBackend *createAArch64leAsmBackend(const Target &T,
                                         const MCSubtargetInfo &STI,
@@ -58,10 +62,11 @@ MCTargetStreamer *createAArch64AsmTargetStreamer(MCStreamer &S,
                                                  MCInstPrinter *InstPrint,
                                                  bool isVerboseAsm);
 
+MCTargetStreamer *createAArch64ObjectTargetStreamer(MCStreamer &S,
+                                                    const MCSubtargetInfo &STI);
+
 namespace AArch64_MC {
 void initLLVMToCVRegMapping(MCRegisterInfo *MRI);
-bool isQForm(const MCInst &MI, const MCInstrInfo *MCII);
-bool isFpOrNEON(const MCInst &MI, const MCInstrInfo *MCII);
 }
 
 } // End llvm namespace

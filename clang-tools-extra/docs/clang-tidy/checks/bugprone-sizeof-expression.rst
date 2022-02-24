@@ -185,5 +185,5 @@ Options
 .. option:: WarnOnSizeOfCompareToConstant
 
    When `true`, the check will warn on an expression like
-   ``sizeof(expr) <= k`` for a suspicious constant `k` while `k` is `0` or
+   ``sizeof(epxr) <= k`` for a suspicious constant `k` while `k` is `0` or
    greater than `0x8000`. Default is `true`.

@@ -1,3 +1,4 @@
+; RUN: opt -mtriple=amdgcn-- -enable-new-pm=0 -analyze -divergence -use-gpu-divergence-analysis %s | FileCheck %s
 ; RUN: opt -mtriple amdgcn-- -passes='print<divergence>' -disable-output %s 2>&1 | FileCheck %s
 
 ; CHECK-LABEL: 'test1':

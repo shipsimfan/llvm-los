@@ -15,7 +15,7 @@ static struct s a = {
     10
 };
 
-void *f(void)
+void *f()
 {
   if (a.a)
     return v;

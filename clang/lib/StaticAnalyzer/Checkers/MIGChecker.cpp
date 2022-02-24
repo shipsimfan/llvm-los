@@ -27,7 +27,6 @@
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/CallDescription.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 
@@ -160,7 +159,7 @@ static bool isInMIGCall(CheckerContext &C) {
   if (Optional<AnyCall> AC = AnyCall::forDecl(D)) {
     // Even though there's a Sema warning when the return type of an annotated
     // function is not a kern_return_t, this warning isn't an error, so we need
-    // an extra check here.
+    // an extra sanity check here.
     // FIXME: AnyCall doesn't support blocks yet, so they remain unchecked
     // for now.
     if (!AC->getReturnType(C.getASTContext())
@@ -181,7 +180,7 @@ static bool isInMIGCall(CheckerContext &C) {
 }
 
 void MIGChecker::checkPostCall(const CallEvent &Call, CheckerContext &C) const {
-  if (OsRefRetain.matches(Call)) {
+  if (Call.isCalled(OsRefRetain)) {
     // If the code is doing reference counting over the parameter,
     // it opens up an opportunity for safely calling a destructor function.
     // TODO: We should still check for over-releases.
@@ -199,7 +198,7 @@ void MIGChecker::checkPostCall(const CallEvent &Call, CheckerContext &C) const {
 
   auto I = llvm::find_if(Deallocators,
                          [&](const std::pair<CallDescription, unsigned> &Item) {
-                           return Item.first.matches(Call);
+                           return Call.isCalled(Item.first);
                          });
   if (I == Deallocators.end())
     return;
@@ -285,9 +284,8 @@ void MIGChecker::checkReturnAux(const ReturnStmt *RS, CheckerContext &C) const {
       N);
 
   R->addRange(RS->getSourceRange());
-  bugreporter::trackExpressionValue(
-      N, RS->getRetValue(), *R,
-      {bugreporter::TrackingKind::Thorough, /*EnableNullFPSuppression=*/false});
+  bugreporter::trackExpressionValue(N, RS->getRetValue(), *R,
+                                    bugreporter::TrackingKind::Thorough, false);
   C.emitReport(std::move(R));
 }
 

@@ -27,13 +27,14 @@ class FileIndexRecord {
 private:
   FileID FID;
   bool IsSystem;
-  mutable bool IsSorted = false;
-  mutable std::vector<DeclOccurrence> Decls;
+  std::vector<DeclOccurrence> Decls;
 
 public:
   FileIndexRecord(FileID FID, bool IsSystem) : FID(FID), IsSystem(IsSystem) {}
 
-  ArrayRef<DeclOccurrence> getDeclOccurrencesSortedByOffset() const;
+  ArrayRef<DeclOccurrence> getDeclOccurrencesSortedByOffset() const {
+    return Decls;
+  }
 
   FileID getFileID() const { return FID; }
   bool isSystem() const { return IsSystem; }

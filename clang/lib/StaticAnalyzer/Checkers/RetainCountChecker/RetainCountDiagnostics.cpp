@@ -73,8 +73,11 @@ RefCountBug::RefCountBug(CheckerNameRef Checker, RefCountBugKind BT)
 
 static bool isNumericLiteralExpression(const Expr *E) {
   // FIXME: This set of cases was copied from SemaExprObjC.
-  return isa<IntegerLiteral, CharacterLiteral, FloatingLiteral,
-             ObjCBoolLiteralExpr, CXXBoolLiteralExpr>(E);
+  return isa<IntegerLiteral>(E) ||
+         isa<CharacterLiteral>(E) ||
+         isa<FloatingLiteral>(E) ||
+         isa<ObjCBoolLiteralExpr>(E) ||
+         isa<CXXBoolLiteralExpr>(E);
 }
 
 /// If type represents a pointer to CXXRecordDecl,
@@ -843,7 +846,7 @@ RefCountReport::RefCountReport(const RefCountBug &D, const LangOptions &LOpts,
     : PathSensitiveBugReport(D, D.getDescription(), n), Sym(sym),
       isLeak(isLeak) {
   if (!isLeak)
-    addVisitor<RefCountReportVisitor>(sym);
+    addVisitor(std::make_unique<RefCountReportVisitor>(sym));
 }
 
 RefCountReport::RefCountReport(const RefCountBug &D, const LangOptions &LOpts,
@@ -851,7 +854,7 @@ RefCountReport::RefCountReport(const RefCountBug &D, const LangOptions &LOpts,
                                StringRef endText)
     : PathSensitiveBugReport(D, D.getDescription(), endText, n) {
 
-  addVisitor<RefCountReportVisitor>(sym);
+  addVisitor(std::make_unique<RefCountReportVisitor>(sym));
 }
 
 void RefLeakReport::deriveParamLocation(CheckerContext &Ctx) {
@@ -977,12 +980,13 @@ void RefLeakReport::findBindingToReport(CheckerContext &Ctx,
     // got from one to another.
     //
     // NOTE: We use the actual SVal stored in AllocBindingToReport here because
-    //       trackStoredValue compares SVal's and it can get trickier for
+    //       FindLastStoreBRVisitor compares SVal's and it can get trickier for
     //       something like derived regions if we want to construct SVal from
     //       Sym. Instead, we take the value that is definitely stored in that
-    //       region, thus guaranteeing that trackStoredValue will work.
-    bugreporter::trackStoredValue(AllVarBindings[0].second.castAs<KnownSVal>(),
-                                  AllocBindingToReport, *this);
+    //       region, thus guaranteeing that FindLastStoreBRVisitor will work.
+    addVisitor(std::make_unique<FindLastStoreBRVisitor>(
+        AllVarBindings[0].second.castAs<KnownSVal>(), AllocBindingToReport,
+        false, bugreporter::TrackingKind::Thorough));
   } else {
     AllocBindingToReport = AllocFirstBinding;
   }
@@ -1001,5 +1005,5 @@ RefLeakReport::RefLeakReport(const RefCountBug &D, const LangOptions &LOpts,
 
   createDescription(Ctx);
 
-  addVisitor<RefLeakReportVisitor>(Sym, AllocBindingToReport);
+  addVisitor(std::make_unique<RefLeakReportVisitor>(Sym, AllocBindingToReport));
 }

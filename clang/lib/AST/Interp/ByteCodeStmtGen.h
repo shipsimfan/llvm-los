@@ -25,7 +25,11 @@
 #include "llvm/ADT/Optional.h"
 
 namespace clang {
+class QualType;
+
 namespace interp {
+class Function;
+class State;
 
 template <class Emitter> class LoopScope;
 template <class Emitter> class SwitchScope;

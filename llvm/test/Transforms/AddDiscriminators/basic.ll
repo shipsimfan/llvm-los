@@ -1,3 +1,4 @@
+; RUN: opt < %s -add-discriminators -S | FileCheck %s
 ; RUN: opt < %s -passes=add-discriminators -S | FileCheck %s
 
 ; Basic DWARF discriminator test. All the instructions in block
@@ -35,7 +36,7 @@ if.end:                                           ; preds = %if.then, %entry
 ; CHECK:   ret void, !dbg ![[END:[0-9]+]]
 }
 
-attributes #0 = { nounwind uwtable noinline optnone "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind uwtable "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!7, !8}

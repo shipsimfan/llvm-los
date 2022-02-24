@@ -4,7 +4,7 @@
 
 void receivePtrs(void **);
 
-int main(void) {
+int main() {
 L:
   receivePtrs((void *[]){ &&L, 0, 0 });
 }

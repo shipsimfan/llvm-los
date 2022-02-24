@@ -27,7 +27,6 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Target/UnixSignals.h"
 #include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/State.h"
 #include "llvm/BinaryFormat/Magic.h"
@@ -64,9 +63,8 @@ public:
   static ConstString GetStaticPluginName() {
     return ConstString("placeholder");
   }
-  llvm::StringRef GetPluginName() override {
-    return GetStaticPluginName().GetStringRef();
-  }
+  ConstString GetPluginName() override { return GetStaticPluginName(); }
+  uint32_t GetPluginVersion() override { return 1; }
   bool ParseHeader() override { return true; }
   Type CalculateType() override { return eTypeUnknown; }
   Strata CalculateStrata() override { return eStrataUnknown; }
@@ -74,7 +72,7 @@ public:
   bool IsExecutable() const override { return false; }
   ArchSpec GetArchitecture() override { return m_arch; }
   UUID GetUUID() override { return m_uuid; }
-  void ParseSymtab(lldb_private::Symtab &symtab) override {}
+  Symtab *GetSymtab() override { return m_symtab_up.get(); }
   bool IsStripped() override { return true; }
   ByteOrder GetByteOrder() const override { return m_arch.GetByteOrder(); }
 
@@ -191,7 +189,12 @@ void HashElfTextSection(ModuleSP module_sp, std::vector<uint8_t> &breakpad_uuid,
 
 } // namespace
 
-llvm::StringRef ProcessMinidump::GetPluginDescriptionStatic() {
+ConstString ProcessMinidump::GetPluginNameStatic() {
+  static ConstString g_name("minidump");
+  return g_name;
+}
+
+const char *ProcessMinidump::GetPluginDescriptionStatic() {
   return "Minidump plug-in.";
 }
 
@@ -301,6 +304,10 @@ Status ProcessMinidump::DoLoadCore() {
 
   return error;
 }
+
+ConstString ProcessMinidump::GetPluginName() { return GetPluginNameStatic(); }
+
+uint32_t ProcessMinidump::GetPluginVersion() { return 1; }
 
 Status ProcessMinidump::DoDestroy() { return Status(); }
 
@@ -440,8 +447,8 @@ void ProcessMinidump::BuildMemoryRegions() {
   llvm::sort(*m_memory_regions);
 }
 
-Status ProcessMinidump::DoGetMemoryRegionInfo(lldb::addr_t load_addr,
-                                              MemoryRegionInfo &region) {
+Status ProcessMinidump::GetMemoryRegionInfo(lldb::addr_t load_addr,
+                                            MemoryRegionInfo &region) {
   BuildMemoryRegions();
   region = MinidumpParser::GetMemoryRegionInfo(*m_memory_regions, load_addr);
   return Status();
@@ -481,7 +488,7 @@ bool ProcessMinidump::DoUpdateThreadList(ThreadList &old_thread_list,
 ModuleSP ProcessMinidump::GetOrCreateModule(UUID minidump_uuid,
                                             llvm::StringRef name,
                                             ModuleSpec module_spec) {
-  Log *log = GetLog(LLDBLog::DynamicLoader);
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
   Status error;
 
   ModuleSP module_sp =
@@ -529,7 +536,7 @@ void ProcessMinidump::ReadModuleList() {
   std::vector<const minidump::Module *> filtered_modules =
       m_minidump_parser->GetFilteredModuleList();
 
-  Log *log = GetLog(LLDBLog::DynamicLoader);
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
 
   for (auto module : filtered_modules) {
     std::string name = cantFail(m_minidump_parser->GetMinidumpFile().getString(
@@ -541,7 +548,7 @@ void ProcessMinidump::ReadModuleList() {
 
     // check if the process is wow64 - a 32 bit windows process running on a
     // 64 bit windows
-    if (llvm::StringRef(name).endswith_insensitive("wow64.dll")) {
+    if (llvm::StringRef(name).endswith_lower("wow64.dll")) {
       m_is_wow64 = true;
     }
 
@@ -577,9 +584,8 @@ void ProcessMinidump::ReadModuleList() {
       // we don't then we will end up setting the load address of a different
       // PlaceholderObjectFile and an assertion will fire.
       auto *objfile = module_sp->GetObjectFile();
-      if (objfile &&
-          objfile->GetPluginName() ==
-              PlaceholderObjectFile::GetStaticPluginName().GetStringRef()) {
+      if (objfile && objfile->GetPluginName() ==
+          PlaceholderObjectFile::GetStaticPluginName()) {
         if (((PlaceholderObjectFile *)objfile)->GetBaseImageAddress() !=
             load_addr)
           module_sp.reset();
@@ -865,7 +871,7 @@ public:
     m_option_group.Finalize();
   }
 
-  ~CommandObjectProcessMinidumpDump() override = default;
+  ~CommandObjectProcessMinidumpDump() override {}
 
   Options *GetOptions() override { return &m_option_group; }
 
@@ -874,6 +880,7 @@ public:
     if (argc > 0) {
       result.AppendErrorWithFormat("'%s' take no arguments, only options",
                                    m_cmd_name.c_str());
+      result.SetStatus(eReturnStatusFailed);
       return false;
     }
     SetDefaultOptionsIfNoneAreSet();
@@ -994,7 +1001,7 @@ public:
         CommandObjectSP(new CommandObjectProcessMinidumpDump(interpreter)));
   }
 
-  ~CommandObjectMultiwordProcessMinidump() override = default;
+  ~CommandObjectMultiwordProcessMinidump() override {}
 };
 
 CommandObject *ProcessMinidump::GetPluginCommandObject() {

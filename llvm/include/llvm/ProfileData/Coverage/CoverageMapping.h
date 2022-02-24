@@ -334,8 +334,6 @@ public:
   /// Return the number of times that a region of code associated with this
   /// counter was executed.
   Expected<int64_t> evaluate(const Counter &C) const;
-
-  unsigned getMaxCounterID(const Counter &C) const;
 };
 
 /// Code coverage information for a single function.
@@ -605,7 +603,7 @@ public:
   /// Ignores non-instrumented object files unless all are not instrumented.
   static Expected<std::unique_ptr<CoverageMapping>>
   load(ArrayRef<StringRef> ObjectFilenames, StringRef ProfileFilename,
-       ArrayRef<StringRef> Arches = None, StringRef CompilationDir = "");
+       ArrayRef<StringRef> Arches = None);
 
   /// The number of functions that couldn't have their profiles mapped.
   ///
@@ -693,16 +691,15 @@ public:
 /// An iterator over the \c LineCoverageStats objects for lines described by
 /// a \c CoverageData instance.
 class LineCoverageIterator
-    : public iterator_facade_base<LineCoverageIterator,
-                                  std::forward_iterator_tag,
-                                  const LineCoverageStats> {
+    : public iterator_facade_base<
+          LineCoverageIterator, std::forward_iterator_tag, LineCoverageStats> {
 public:
   LineCoverageIterator(const CoverageData &CD)
       : LineCoverageIterator(CD, CD.begin()->Line) {}
 
   LineCoverageIterator(const CoverageData &CD, unsigned Line)
       : CD(CD), WrappedSegment(nullptr), Next(CD.begin()), Ended(false),
-        Line(Line) {
+        Line(Line), Segments(), Stats() {
     this->operator++();
   }
 
@@ -711,6 +708,8 @@ public:
   }
 
   const LineCoverageStats &operator*() const { return Stats; }
+
+  LineCoverageStats &operator*() { return Stats; }
 
   LineCoverageIterator &operator++();
 

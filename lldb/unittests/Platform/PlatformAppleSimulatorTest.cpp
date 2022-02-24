@@ -30,7 +30,10 @@ static void testSimPlatformArchHasSimEnvironment(llvm::StringRef name) {
   ASSERT_TRUE(platform_sp);
   int num_arches = 0;
 
-  for (auto arch : platform_sp->GetSupportedArchitectures()) {
+  while (true) {
+    ArchSpec arch;
+    if (!platform_sp->GetSupportedArchitectureAtIndex(num_arches, arch))
+      break;
     EXPECT_EQ(arch.GetTriple().getEnvironment(), llvm::Triple::Simulator);
     num_arches++;
   }

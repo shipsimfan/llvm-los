@@ -149,8 +149,7 @@ class Quarantine {
   Cache cache_;
   char pad2_[kCacheLineSize];
 
-  void NOINLINE Recycle(uptr min_size, Callback cb)
-      SANITIZER_REQUIRES(recycle_mutex_) SANITIZER_RELEASE(recycle_mutex_) {
+  void NOINLINE Recycle(uptr min_size, Callback cb) {
     Cache tmp;
     {
       SpinMutexLock l(&cache_mutex_);

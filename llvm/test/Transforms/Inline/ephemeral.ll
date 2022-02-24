@@ -1,12 +1,11 @@
 ; RUN: opt -S -inline %s -debug-only=inline-cost 2>&1 | FileCheck %s
 ; REQUIRES: asserts
+; Only the load and ret should be included in the instruction count, not
+; the instructions feeding the assume.
+; CHECK: NumInstructions: 2
 
 @a = global i32 4
 
-; Only the load and ret should be included in the instruction count, not
-; the instructions feeding the assume.
-; CHECK: Analyzing call of inner...
-; CHECK: NumInstructions: 2
 define i32 @inner(i8* %y) {
   %a1 = load volatile i32, i32* @a
 
@@ -26,20 +25,8 @@ define i32 @inner(i8* %y) {
   ret i32 %a1
 }
 
-; Only the ret should be included in the instruction count, the load and icmp
-; are both ephemeral.
-; CHECK: Analyzing call of inner2...
-; CHECK: NumInstructions: 1
-define void @inner2(i8* %y) {
-  %v = load i8, i8* %y
-  %c = icmp eq i8 %v, 42
-  call void @llvm.assume(i1 %c)
-  ret void
-}
-
 define i32 @outer(i8* %y) optsize {
    %r = call i32 @inner(i8* %y)
-   call void @inner2(i8* %y)
    ret i32 %r
 }
 

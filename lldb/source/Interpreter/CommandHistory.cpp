@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cinttypes>
+#include <inttypes.h>
 
 #include "lldb/Interpreter/CommandHistory.h"
 

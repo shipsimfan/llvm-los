@@ -8,12 +8,12 @@ int a(int x)
 }
 
 // PR3247
-int b(void) {
+int b() {
   return sizeof(*(char(*)[puts("asdf")])0);
 }
 
 // PR3247
-int c(void) {
+int c() {
   static int (*y)[puts("asdf")];
   return sizeof(*y);
 }

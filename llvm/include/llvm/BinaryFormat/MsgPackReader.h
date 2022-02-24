@@ -34,7 +34,8 @@
 #define LLVM_BINARYFORMAT_MSGPACKREADER_H
 
 #include "llvm/Support/Error.h"
-#include "llvm/Support/MemoryBufferRef.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/raw_ostream.h"
 #include <cstdint>
 
 namespace llvm {

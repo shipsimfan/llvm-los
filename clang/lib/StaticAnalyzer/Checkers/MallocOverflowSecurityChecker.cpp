@@ -32,14 +32,12 @@ using llvm::APSInt;
 
 namespace {
 struct MallocOverflowCheck {
-  const CallExpr *call;
   const BinaryOperator *mulop;
   const Expr *variable;
   APSInt maxVal;
 
-  MallocOverflowCheck(const CallExpr *call, const BinaryOperator *m,
-                      const Expr *v, APSInt val)
-      : call(call), mulop(m), variable(v), maxVal(std::move(val)) {}
+  MallocOverflowCheck(const BinaryOperator *m, const Expr *v, APSInt val)
+      : mulop(m), variable(v), maxVal(std::move(val)) {}
 };
 
 class MallocOverflowSecurityChecker : public Checker<check::ASTCodeBody> {
@@ -48,8 +46,8 @@ public:
                         BugReporter &BR) const;
 
   void CheckMallocArgument(
-      SmallVectorImpl<MallocOverflowCheck> &PossibleMallocOverflows,
-      const CallExpr *TheCall, ASTContext &Context) const;
+    SmallVectorImpl<MallocOverflowCheck> &PossibleMallocOverflows,
+    const Expr *TheArgument, ASTContext &Context) const;
 
   void OutputPossibleOverflows(
     SmallVectorImpl<MallocOverflowCheck> &PossibleMallocOverflows,
@@ -64,15 +62,16 @@ static inline bool EvaluatesToZero(APSInt &Val, BinaryOperatorKind op) {
 }
 
 void MallocOverflowSecurityChecker::CheckMallocArgument(
-    SmallVectorImpl<MallocOverflowCheck> &PossibleMallocOverflows,
-    const CallExpr *TheCall, ASTContext &Context) const {
+  SmallVectorImpl<MallocOverflowCheck> &PossibleMallocOverflows,
+  const Expr *TheArgument,
+  ASTContext &Context) const {
 
   /* Look for a linear combination with a single variable, and at least
    one multiplication.
    Reject anything that applies to the variable: an explicit cast,
    conditional expression, an operation that could reduce the range
    of the result, or anything too complicated :-).  */
-  const Expr *e = TheCall->getArg(0);
+  const Expr *e = TheArgument;
   const BinaryOperator * mulop = nullptr;
   APSInt maxVal;
 
@@ -102,7 +101,8 @@ void MallocOverflowSecurityChecker::CheckMallocArgument(
         e = rhs;
       } else
         return;
-    } else if (isa<DeclRefExpr, MemberExpr>(e))
+    }
+    else if (isa<DeclRefExpr>(e) || isa<MemberExpr>(e))
       break;
     else
       return;
@@ -115,8 +115,9 @@ void MallocOverflowSecurityChecker::CheckMallocArgument(
   // the data so when the body of the function is completely available
   // we can check for comparisons.
 
-  PossibleMallocOverflows.push_back(
-      MallocOverflowCheck(TheCall, mulop, e, maxVal));
+  // TODO: Could push this into the innermost scope where 'e' is
+  // defined, rather than the whole function.
+  PossibleMallocOverflows.push_back(MallocOverflowCheck(mulop, e, maxVal));
 }
 
 namespace {
@@ -152,19 +153,17 @@ private:
           return getDecl(CheckDR) == getDecl(DR) && Pred(Check);
         return false;
       };
-      llvm::erase_if(toScanFor, P);
+      toScanFor.erase(std::remove_if(toScanFor.begin(), toScanFor.end(), P),
+                      toScanFor.end());
     }
 
     void CheckExpr(const Expr *E_p) {
+      auto PredTrue = [](const MallocOverflowCheck &) { return true; };
       const Expr *E = E_p->IgnoreParenImpCasts();
-      const auto PrecedesMalloc = [E, this](const MallocOverflowCheck &c) {
-        return Context.getSourceManager().isBeforeInTranslationUnit(
-            E->getExprLoc(), c.call->getExprLoc());
-      };
       if (const DeclRefExpr *DR = dyn_cast<DeclRefExpr>(E))
-        Erase<DeclRefExpr>(DR, PrecedesMalloc);
+        Erase<DeclRefExpr>(DR, PredTrue);
       else if (const auto *ME = dyn_cast<MemberExpr>(E)) {
-        Erase<MemberExpr>(ME, PrecedesMalloc);
+        Erase<MemberExpr>(ME, PredTrue);
       }
     }
 
@@ -323,7 +322,7 @@ void MallocOverflowSecurityChecker::checkASTCodeBody(const Decl *D,
 
           if (FnInfo->isStr ("malloc") || FnInfo->isStr ("_MALLOC")) {
             if (TheCall->getNumArgs() == 1)
-              CheckMallocArgument(PossibleMallocOverflows, TheCall,
+              CheckMallocArgument(PossibleMallocOverflows, TheCall->getArg(0),
                                   mgr.getASTContext());
           }
         }

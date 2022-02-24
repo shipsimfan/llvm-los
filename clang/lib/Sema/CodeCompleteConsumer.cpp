@@ -82,7 +82,6 @@ bool CodeCompletionContext::wantConstructorResults() const {
   case CCC_ObjCInterfaceName:
   case CCC_ObjCCategoryName:
   case CCC_IncludedFile:
-  case CCC_Attribute:
     return false;
   }
 
@@ -162,8 +161,6 @@ StringRef clang::getCompletionKindString(CodeCompletionContext::Kind Kind) {
     return "ObjCCategoryName";
   case CCKind::CCC_IncludedFile:
     return "IncludedFile";
-  case CCKind::CCC_Attribute:
-    return "Attribute";
   case CCKind::CCC_Recovery:
     return "Recovery";
   }
@@ -335,7 +332,7 @@ std::string CodeCompletionString::getAsString() const {
       break;
     }
   }
-  return Result;
+  return OS.str();
 }
 
 const char *CodeCompletionString::getTypedText() const {
@@ -387,13 +384,14 @@ StringRef CodeCompletionTUInfo::getParentName(const DeclContext *DC) {
     SmallString<128> S;
     llvm::raw_svector_ostream OS(S);
     bool First = true;
-    for (const DeclContext *CurDC : llvm::reverse(Contexts)) {
+    for (unsigned I = Contexts.size(); I != 0; --I) {
       if (First)
         First = false;
       else {
         OS << "::";
       }
 
+      const DeclContext *CurDC = Contexts[I - 1];
       if (const auto *CatImpl = dyn_cast<ObjCCategoryImplDecl>(CurDC))
         CurDC = CatImpl->getCategoryDecl();
 
@@ -506,90 +504,9 @@ CodeCompleteConsumer::OverloadCandidate::getFunctionType() const {
 
   case CK_FunctionType:
     return Type;
-
-  case CK_Template:
-  case CK_Aggregate:
-    return nullptr;
   }
 
   llvm_unreachable("Invalid CandidateKind!");
-}
-
-unsigned CodeCompleteConsumer::OverloadCandidate::getNumParams() const {
-  if (Kind == CK_Template)
-    return Template->getTemplateParameters()->size();
-
-  if (Kind == CK_Aggregate) {
-    unsigned Count =
-        std::distance(AggregateType->field_begin(), AggregateType->field_end());
-    if (const auto *CRD = dyn_cast<CXXRecordDecl>(AggregateType))
-      Count += CRD->getNumBases();
-    return Count;
-  }
-
-  if (const auto *FT = getFunctionType())
-    if (const auto *FPT = dyn_cast<FunctionProtoType>(FT))
-      return FPT->getNumParams();
-
-  return 0;
-}
-
-QualType
-CodeCompleteConsumer::OverloadCandidate::getParamType(unsigned N) const {
-  if (Kind == CK_Aggregate) {
-    if (const auto *CRD = dyn_cast<CXXRecordDecl>(AggregateType)) {
-      if (N < CRD->getNumBases())
-        return std::next(CRD->bases_begin(), N)->getType();
-      N -= CRD->getNumBases();
-    }
-    for (const auto *Field : AggregateType->fields())
-      if (N-- == 0)
-        return Field->getType();
-    return QualType();
-  }
-
-  if (Kind == CK_Template) {
-    TemplateParameterList *TPL = getTemplate()->getTemplateParameters();
-    if (N < TPL->size())
-      if (const auto *D = dyn_cast<NonTypeTemplateParmDecl>(TPL->getParam(N)))
-        return D->getType();
-    return QualType();
-  }
-
-  if (const auto *FT = getFunctionType())
-    if (const auto *FPT = dyn_cast<FunctionProtoType>(FT))
-      if (N < FPT->getNumParams())
-        return FPT->getParamType(N);
-  return QualType();
-}
-
-const NamedDecl *
-CodeCompleteConsumer::OverloadCandidate::getParamDecl(unsigned N) const {
-  if (Kind == CK_Aggregate) {
-    if (const auto *CRD = dyn_cast<CXXRecordDecl>(AggregateType)) {
-      if (N < CRD->getNumBases())
-        return std::next(CRD->bases_begin(), N)->getType()->getAsTagDecl();
-      N -= CRD->getNumBases();
-    }
-    for (const auto *Field : AggregateType->fields())
-      if (N-- == 0)
-        return Field;
-    return nullptr;
-  }
-
-  if (Kind == CK_Template) {
-    TemplateParameterList *TPL = getTemplate()->getTemplateParameters();
-    if (N < TPL->size())
-      return TPL->getParam(N);
-    return nullptr;
-  }
-
-  // Note that if we only have a FunctionProtoType, we don't have param decls.
-  if (const auto *FD = getFunction()) {
-    if (N < FD->param_size())
-      return FD->getParamDecl(N);
-  }
-  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -721,12 +638,12 @@ static std::string getOverloadAsString(const CodeCompletionString &CCS) {
       break;
     }
   }
-  return Result;
+  return OS.str();
 }
 
 void PrintingCodeCompleteConsumer::ProcessOverloadCandidates(
     Sema &SemaRef, unsigned CurrentArg, OverloadCandidate *Candidates,
-    unsigned NumCandidates, SourceLocation OpenParLoc, bool Braced) {
+    unsigned NumCandidates, SourceLocation OpenParLoc) {
   OS << "OPENING_PAREN_LOC: ";
   OpenParLoc.print(OS, SemaRef.getSourceManager());
   OS << "\n";
@@ -734,7 +651,7 @@ void PrintingCodeCompleteConsumer::ProcessOverloadCandidates(
   for (unsigned I = 0; I != NumCandidates; ++I) {
     if (CodeCompletionString *CCS = Candidates[I].CreateSignatureString(
             CurrentArg, SemaRef, getAllocator(), CCTUInfo,
-            includeBriefComments(), Braced)) {
+            includeBriefComments())) {
       OS << "OVERLOAD: " << getOverloadAsString(*CCS) << "\n";
     }
   }
@@ -838,7 +755,7 @@ bool clang::operator<(const CodeCompletionResult &X,
   std::string XSaved, YSaved;
   StringRef XStr = X.getOrderedName(XSaved);
   StringRef YStr = Y.getOrderedName(YSaved);
-  int cmp = XStr.compare_insensitive(YStr);
+  int cmp = XStr.compare_lower(YStr);
   if (cmp)
     return cmp < 0;
 

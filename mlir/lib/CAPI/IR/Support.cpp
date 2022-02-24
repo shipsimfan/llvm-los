@@ -7,15 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir-c/Support.h"
-#include "llvm/ADT/StringRef.h"
 
 #include <cstring>
 
 MlirStringRef mlirStringRefCreateFromCString(const char *str) {
   return mlirStringRefCreate(str, strlen(str));
-}
-
-bool mlirStringRefEqual(MlirStringRef string, MlirStringRef other) {
-  return llvm::StringRef(string.data, string.length) ==
-         llvm::StringRef(other.data, other.length);
 }

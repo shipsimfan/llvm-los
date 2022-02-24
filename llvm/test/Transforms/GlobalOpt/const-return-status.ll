@@ -1,4 +1,4 @@
-; RUN: opt -passes=globalopt < %s -S -o - | FileCheck %s
+; RUN: opt -globalopt < %s -S -o - | FileCheck %s
 
 ; When simplifying users of a global variable, the pass could incorrectly
 ; return false if there were still some uses left, and no further optimizations

@@ -15,6 +15,8 @@
 
 include "mlir/IR/OpBase.td"
 
+def LinalgOperand: AnyTypeOf<[AnyRankedTensor, AnyStridedMemRef]>;
+
 def Linalg_Dialect : Dialect {
   let name = "linalg";
   let description = [{
@@ -33,22 +35,10 @@ def Linalg_Dialect : Dialect {
   }];
   let cppNamespace = "::mlir::linalg";
   let dependentDialects = [
-    "arith::ArithmeticDialect",
-    "AffineDialect",
-    "math::MathDialect",
-    "memref::MemRefDialect",
-    "tensor::TensorDialect",
+    "AffineDialect", "StandardOpsDialect", "tensor::TensorDialect"
   ];
-  let hasCanonicalizer = 1;
-  let hasOperationAttrVerify = 1;
-  let hasConstantMaterializer = 1;
   let extraClassDeclaration = [{
-    /// Attribute name used to to memoize indexing maps for named ops.
-    constexpr const static ::llvm::StringLiteral
-        kMemoizedIndexingMapsAttrName = "linalg.memoized_indexing_maps";
-
-    using RegionBuilderFunType = llvm::function_ref<
-      void(ImplicitLocOpBuilder &b, Block &, ArrayRef<NamedAttribute>)>;
+    using RegionBuilderFunType = llvm::function_ref<void(Block &, ValueRange)>;
     RegionBuilderFunType getRegionBuilder(StringRef name) {
       return namedStructuredOpRegionBuilders.lookup(name);
     }
@@ -56,5 +46,9 @@ def Linalg_Dialect : Dialect {
       llvm::StringMap<RegionBuilderFunType> namedStructuredOpRegionBuilders;
   }];
 }
+
+// Whether a type is a RangeType.
+def LinalgIsRangeTypePred : CPred<"$_self.isa<RangeType>()">;
+def Range : DialectType<Linalg_Dialect, LinalgIsRangeTypePred, "range">;
 
 #endif // LINALG_BASE

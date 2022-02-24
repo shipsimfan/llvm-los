@@ -14,7 +14,11 @@ class InitializerListTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
-    @add_test_categories(["libc++"])
+    @skipIfWindows  # libc++ not ported to Windows yet
+    @skipIf(compiler="gcc")
+    @expectedFailureAll(
+        oslist=["linux"],
+        bugnumber="fails on clang 3.5 and tot")
     def test(self):
         """Test that that file and class static variables display correctly."""
         self.build()

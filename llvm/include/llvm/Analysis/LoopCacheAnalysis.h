@@ -15,6 +15,7 @@
 #define LLVM_ANALYSIS_LOOPCACHEANALYSIS_H
 
 #include "llvm/Analysis/LoopAnalysisManager.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -22,7 +23,6 @@ namespace llvm {
 
 class AAResults;
 class DependenceInfo;
-class Instruction;
 class LPMUpdater;
 class ScalarEvolution;
 class SCEV;

@@ -284,8 +284,7 @@ CodeCompleteResult codeComplete(PathRef FileName, Position Pos,
 /// Get signature help at a specified \p Pos in \p FileName.
 SignatureHelp signatureHelp(PathRef FileName, Position Pos,
                             const PreambleData &Preamble,
-                            const ParseInputs &ParseInput,
-                            MarkupKind DocumentationFormat);
+                            const ParseInputs &ParseInput);
 
 // For index-based completion, we only consider:
 //   * symbols in namespaces or translation unit scopes (e.g. no class

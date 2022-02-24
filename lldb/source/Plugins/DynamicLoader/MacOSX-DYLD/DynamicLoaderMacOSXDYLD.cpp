@@ -27,13 +27,12 @@
 #include "lldb/Target/ThreadPlanRunToAddress.h"
 #include "lldb/Utility/DataBuffer.h"
 #include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/State.h"
 
 //#define ENABLE_DEBUG_PRINTF // COMMENT THIS LINE OUT PRIOR TO CHECKIN
 #ifdef ENABLE_DEBUG_PRINTF
-#include <cstdio>
+#include <stdio.h>
 #define DEBUG_PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #else
 #define DEBUG_PRINTF(fmt, ...)
@@ -243,6 +242,7 @@ void DynamicLoaderMacOSXDYLD::DoInitialImageFetch() {
       ReadDYLDInfoFromMemoryAndSetNotificationCallback(0x8fe00000);
     }
   }
+  return;
 }
 
 // Assume that dyld is in memory at ADDR and try to parse it's load commands
@@ -251,7 +251,6 @@ bool DynamicLoaderMacOSXDYLD::ReadDYLDInfoFromMemoryAndSetNotificationCallback(
   std::lock_guard<std::recursive_mutex> baseclass_guard(GetMutex());
   DataExtractor data; // Load command data
   static ConstString g_dyld_all_image_infos("dyld_all_image_infos");
-  static ConstString g_new_dyld_all_image_infos("dyld4::dyld_all_image_infos");
   if (ReadMachHeader(addr, &m_dyld.header, &data)) {
     if (m_dyld.header.filetype == llvm::MachO::MH_DYLINKER) {
       m_dyld.address = addr;
@@ -269,10 +268,6 @@ bool DynamicLoaderMacOSXDYLD::ReadDYLDInfoFromMemoryAndSetNotificationCallback(
           dyld_module_sp.get()) {
         const Symbol *symbol = dyld_module_sp->FindFirstSymbolWithNameAndType(
             g_dyld_all_image_infos, eSymbolTypeData);
-        if (!symbol) {
-          symbol = dyld_module_sp->FindFirstSymbolWithNameAndType(
-              g_new_dyld_all_image_infos, eSymbolTypeData);
-        }
         if (symbol)
           m_dyld_all_image_infos_addr = symbol->GetLoadAddress(&target);
       }
@@ -534,7 +529,7 @@ bool DynamicLoaderMacOSXDYLD::ReadAllImageInfosStructure() {
 bool DynamicLoaderMacOSXDYLD::AddModulesUsingImageInfosAddress(
     lldb::addr_t image_infos_addr, uint32_t image_infos_count) {
   ImageInfo::collection image_infos;
-  Log *log = GetLog(LLDBLog::DynamicLoader);
+  Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
   LLDB_LOGF(log, "Adding %d modules.\n", image_infos_count);
 
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
@@ -575,7 +570,7 @@ bool DynamicLoaderMacOSXDYLD::AddModulesUsingImageInfosAddress(
 bool DynamicLoaderMacOSXDYLD::RemoveModulesUsingImageInfosAddress(
     lldb::addr_t image_infos_addr, uint32_t image_infos_count) {
   ImageInfo::collection image_infos;
-  Log *log = GetLog(LLDBLog::DynamicLoader);
+  Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
 
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
   std::lock_guard<std::recursive_mutex> baseclass_guard(GetMutex());
@@ -699,7 +694,7 @@ bool DynamicLoaderMacOSXDYLD::ReadImageInfos(
 // thereof).  Only do this if this is the first time we're reading the dyld
 // infos.  Return true if we actually read anything, and false otherwise.
 bool DynamicLoaderMacOSXDYLD::InitializeFromAllImageInfos() {
-  Log *log = GetLog(LLDBLog::DynamicLoader);
+  Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
 
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
   std::lock_guard<std::recursive_mutex> baseclass_guard(GetMutex());
@@ -1136,10 +1131,22 @@ void DynamicLoaderMacOSXDYLD::Terminate() {
   PluginManager::UnregisterPlugin(CreateInstance);
 }
 
-llvm::StringRef DynamicLoaderMacOSXDYLD::GetPluginDescriptionStatic() {
+lldb_private::ConstString DynamicLoaderMacOSXDYLD::GetPluginNameStatic() {
+  static ConstString g_name("macosx-dyld");
+  return g_name;
+}
+
+const char *DynamicLoaderMacOSXDYLD::GetPluginDescriptionStatic() {
   return "Dynamic loader plug-in that watches for shared library loads/unloads "
          "in MacOSX user processes.";
 }
+
+// PluginInterface protocol
+lldb_private::ConstString DynamicLoaderMacOSXDYLD::GetPluginName() {
+  return GetPluginNameStatic();
+}
+
+uint32_t DynamicLoaderMacOSXDYLD::GetPluginVersion() { return 1; }
 
 uint32_t DynamicLoaderMacOSXDYLD::AddrByteSize() {
   std::lock_guard<std::recursive_mutex> baseclass_guard(GetMutex());

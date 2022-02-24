@@ -10,7 +10,6 @@
 #include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/Symbol/Type.h"
 #include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-forward.h"
 
@@ -29,15 +28,13 @@ using namespace lldb_private::npdb;
 
 using Error = llvm::Error;
 
-UdtRecordCompleter::UdtRecordCompleter(
-    PdbTypeSymId id, CompilerType &derived_ct, clang::TagDecl &tag_decl,
-    PdbAstBuilder &ast_builder, PdbIndex &index,
-    llvm::DenseMap<lldb::opaque_compiler_type_t,
-                   llvm::SmallSet<std::pair<llvm::StringRef, CompilerType>, 8>>
-        &cxx_record_map)
+UdtRecordCompleter::UdtRecordCompleter(PdbTypeSymId id,
+                                       CompilerType &derived_ct,
+                                       clang::TagDecl &tag_decl,
+                                       PdbAstBuilder &ast_builder,
+                                       PdbIndex &index)
     : m_id(id), m_derived_ct(derived_ct), m_tag_decl(tag_decl),
-      m_ast_builder(ast_builder), m_index(index),
-      m_cxx_record_map(cxx_record_map) {
+      m_ast_builder(ast_builder), m_index(index) {
   CVType cvt = m_index.tpi().getType(m_id.index);
   switch (cvt.kind()) {
   case LF_ENUM:
@@ -81,24 +78,14 @@ void UdtRecordCompleter::AddMethod(llvm::StringRef name, TypeIndex type_idx,
   clang::QualType method_qt =
       m_ast_builder.GetOrCreateType(PdbTypeSymId(type_idx));
   m_ast_builder.CompleteType(method_qt);
-  CompilerType method_ct = m_ast_builder.ToCompilerType(method_qt);
-  lldb::opaque_compiler_type_t derived_opaque_ty = m_derived_ct.GetOpaqueQualType();
-  auto iter = m_cxx_record_map.find(derived_opaque_ty);
-  if (iter != m_cxx_record_map.end()) {
-    if (iter->getSecond().contains({name, method_ct})) {
-      return;
-    }
-  }
 
   lldb::AccessType access_type = TranslateMemberAccess(access);
   bool is_artificial = (options & MethodOptions::CompilerGenerated) ==
                        MethodOptions::CompilerGenerated;
   m_ast_builder.clang().AddMethodToCXXRecordType(
-      derived_opaque_ty, name.data(), nullptr, method_ct,
-      access_type, attrs.isVirtual(), attrs.isStatic(), false, false, false,
-      is_artificial);
-
-  m_cxx_record_map[derived_opaque_ty].insert({name, method_ct});
+      m_derived_ct.GetOpaqueQualType(), name.data(), nullptr,
+      m_ast_builder.ToCompilerType(method_qt), access_type, attrs.isVirtual(),
+      attrs.isStatic(), false, false, false, is_artificial);
 }
 
 Error UdtRecordCompleter::visitKnownMember(CVMemberRecord &cvr,
@@ -170,7 +157,7 @@ Error UdtRecordCompleter::visitKnownMember(
             TypeSystemClang::SetIntegerInitializerForVariable(
                 decl, constant.Value.extOrTrunc(type_width));
           } else {
-            LLDB_LOG(GetLog(LLDBLog::AST),
+            LLDB_LOG(GetLogIfAllCategoriesSet(LIBLLDB_LOG_AST),
                      "Class '{0}' has a member '{1}' of type '{2}' ({3} bits) "
                      "which resolves to a wider constant value ({4} bits). "
                      "Ignoring constant.",
@@ -191,7 +178,7 @@ Error UdtRecordCompleter::visitKnownMember(
               decl->setConstexpr(true);
             } else {
               LLDB_LOG(
-                  GetLog(LLDBLog::AST),
+                  GetLogIfAllCategoriesSet(LIBLLDB_LOG_AST),
                   "Class '{0}' has a member '{1}' of type '{2}' ({3} bits) "
                   "which resolves to a constant value of mismatched width "
                   "({4} bits). Ignoring constant.",

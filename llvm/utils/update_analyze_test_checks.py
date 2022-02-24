@@ -14,7 +14,7 @@ Workflow:
    in regression test files.
 2. Save the patch and revert it from your local work area.
 3. Update the RUN-lines in the affected regression tests to look canonical.
-   Example: "; RUN: opt < %s -passes='print<cost-model>' -disable-output 2>&1 | FileCheck %s"
+   Example: "; RUN: opt < %s -analyze -cost-model -S | FileCheck %s"
 4. Refresh the FileCheck lines for either the entire file or select functions by
    running this script.
 5. Commit the fresh baseline of checks.
@@ -112,12 +112,10 @@ def main():
       run_list = prefix_list,
       flags = type('', (object,), {
             'verbose': args.verbose,
-            'filters': args.filters,
             'function_signature': False,
             'check_attributes': False,
-            'replace_value_regex': []}),
-      scrubber_args = [],
-      path=test)
+            'replace_function_regex': []}),
+      scrubber_args = [])
 
     for prefixes, opt_args in prefix_list:
       common.debug('Extracted opt cmd:', opt_basename, opt_args, file=sys.stderr)
@@ -128,7 +126,7 @@ def main():
       # Split analysis outputs by "Printing analysis " declarations.
       for raw_tool_output in re.split(r'Printing analysis ', raw_tool_outputs):
         builder.process_run_line(common.ANALYZE_FUNCTION_RE, common.scrub_body,
-                                 raw_tool_output, prefixes, False)
+                                 raw_tool_output, prefixes)
 
     func_dict = builder.finish_and_get_func_dict()
     is_in_function = False

@@ -37,8 +37,6 @@ def Tosa_Dialect : Dialect {
     there will be tools to lower from the ML frameworks into TOSA.
   }];
 
-  let dependentDialects = ["tensor::TensorDialect"];
-
   let cppNamespace = "mlir::tosa";
   let hasConstantMaterializer = 1;
 }
@@ -174,8 +172,8 @@ def Tosa_UnaryOpQuantInfoBuilder : OpBuilder<
     buildUnaryOpWithQuantInfo($_builder, $_state, outputType, input);
   }]>;
 
-// These builders are called on the TOSA pad operator that needs to create its
-// own OptionalAttr quantization_attr parameter to scale the padding values
+// This builder is called on the TOSA pad operator that needs to create its own
+// OptionalAttr quantization_attr parameter to scale the padding values
 // correctly.
 def Tosa_PadOpQuantInfoBuilder : OpBuilder<
   (ins "Type":$outputType, "Value":$input, "Value":$paddings),
@@ -184,19 +182,11 @@ def Tosa_PadOpQuantInfoBuilder : OpBuilder<
                             input, paddings);
   }]>;
 
-def Tosa_ExplicitValuePadOpQuantInfoBuilder : OpBuilder<
-  (ins "Type":$outputType, "Value":$input, "Value":$paddings,
-       "Value":$pad_value),
-  [{
-    buildExplicitValuePadOpWithQuantInfo($_builder, $_state, outputType,
-                                         input, paddings, pad_value);
-  }]>;
-
 //===----------------------------------------------------------------------===//
 // TOSA Operator.
 //===----------------------------------------------------------------------===//
 
-class Tosa_Op<string mnemonic, list<Trait> traits = []> :
+class Tosa_Op<string mnemonic, list<OpTrait> traits = []> :
     Op<Tosa_Dialect, mnemonic, !listconcat(traits, [TosaOpInterface])> {
 }
 

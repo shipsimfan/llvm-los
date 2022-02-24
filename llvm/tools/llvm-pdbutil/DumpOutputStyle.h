@@ -21,6 +21,12 @@
 #include <string>
 
 namespace llvm {
+class BitVector;
+
+namespace codeview {
+class LazyRandomTypeCollection;
+}
+
 namespace object {
 class COFFObjectFile;
 }

@@ -20,7 +20,7 @@
 
 namespace llvm {
 class Record;
-} // namespace llvm
+} // end namespace llvm
 
 namespace mlir {
 namespace tblgen {
@@ -29,15 +29,8 @@ namespace tblgen {
 // TableGen.
 class Constraint {
 public:
-  // Constraint kind
-  enum Kind { CK_Attr, CK_Region, CK_Successor, CK_Type, CK_Uncategorized };
-
-  // Create a constraint with a TableGen definition and a kind.
-  Constraint(const llvm::Record *record, Kind kind) : def(record), kind(kind) {}
-  // Create a constraint with a TableGen definition, and infer the kind.
   Constraint(const llvm::Record *record);
 
-  /// Constraints are pointer-comparable.
   bool operator==(const Constraint &that) { return def == that.def; }
   bool operator!=(const Constraint &that) { return def != that.def; }
 
@@ -54,9 +47,21 @@ public:
   // description is not provided, returns the TableGen def name.
   StringRef getSummary() const;
 
+  // Constraint kind
+  enum Kind { CK_Attr, CK_Region, CK_Successor, CK_Type, CK_Uncategorized };
+
   Kind getKind() const { return kind; }
 
+  /// Get an opaque pointer to the constraint.
+  const void *getAsOpaquePointer() const { return def; }
+  /// Construct a constraint from the opaque pointer representation.
+  static Constraint getFromOpaquePointer(const void *ptr) {
+    return Constraint(reinterpret_cast<const llvm::Record *>(ptr));
+  }
+
 protected:
+  Constraint(Kind kind, const llvm::Record *record);
+
   // The TableGen definition of this constraint.
   const llvm::Record *def;
 
@@ -77,7 +82,7 @@ struct AppliedConstraint {
   std::vector<std::string> entities;
 };
 
-} // namespace tblgen
-} // namespace mlir
+} // end namespace tblgen
+} // end namespace mlir
 
 #endif // MLIR_TABLEGEN_CONSTRAINT_H_

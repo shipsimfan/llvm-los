@@ -1,4 +1,5 @@
 add_mlir_conversion_library(MLIRVectorToSCF
+  ProgressiveVectorToSCF.cpp
   VectorToSCF.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -8,10 +9,9 @@ add_mlir_conversion_library(MLIRVectorToSCF
   Core
 
   LINK_LIBS PUBLIC
-  MLIRArithmetic
+  MLIREDSC
+  MLIRAffineEDSC
   MLIRLLVMIR
   MLIRMemRef
   MLIRTransforms
-  MLIRVector
-  MLIRVectorTransforms
   )

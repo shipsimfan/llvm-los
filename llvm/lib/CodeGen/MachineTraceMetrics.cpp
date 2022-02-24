@@ -80,9 +80,9 @@ bool MachineTraceMetrics::runOnMachineFunction(MachineFunction &Func) {
 void MachineTraceMetrics::releaseMemory() {
   MF = nullptr;
   BlockInfo.clear();
-  for (Ensemble *&E : Ensembles) {
-    delete E;
-    E = nullptr;
+  for (unsigned i = 0; i != TS_NumStrategies; ++i) {
+    delete Ensembles[i];
+    Ensembles[i] = nullptr;
   }
 }
 
@@ -398,9 +398,9 @@ void MachineTraceMetrics::invalidate(const MachineBasicBlock *MBB) {
   LLVM_DEBUG(dbgs() << "Invalidate traces through " << printMBBReference(*MBB)
                     << '\n');
   BlockInfo[MBB->getNumber()].invalidate();
-  for (Ensemble *E : Ensembles)
-    if (E)
-      E->invalidate(MBB);
+  for (unsigned i = 0; i != TS_NumStrategies; ++i)
+    if (Ensembles[i])
+      Ensembles[i]->invalidate(MBB);
 }
 
 void MachineTraceMetrics::verifyAnalysis() const {
@@ -408,9 +408,9 @@ void MachineTraceMetrics::verifyAnalysis() const {
     return;
 #ifndef NDEBUG
   assert(BlockInfo.size() == MF->getNumBlockIDs() && "Outdated BlockInfo size");
-  for (Ensemble *E : Ensembles)
-    if (E)
-      E->verify();
+  for (unsigned i = 0; i != TS_NumStrategies; ++i)
+    if (Ensembles[i])
+      Ensembles[i]->verify();
 #endif
 }
 
@@ -984,7 +984,8 @@ addLiveIns(const MachineInstr *DefMI, unsigned DefOp,
   const MachineBasicBlock *DefMBB = DefMI->getParent();
 
   // Reg is live-in to all blocks in Trace that follow DefMBB.
-  for (const MachineBasicBlock *MBB : llvm::reverse(Trace)) {
+  for (unsigned i = Trace.size(); i; --i) {
+    const MachineBasicBlock *MBB = Trace[i-1];
     if (MBB == DefMBB)
       return;
     TraceBlockInfo &TBI = BlockInfo[MBB->getNumber()];
@@ -1203,8 +1204,8 @@ unsigned MachineTraceMetrics::Trace::getResourceDepth(bool Bottom) const {
     for (unsigned K = 0; K != PRDepths.size(); ++K)
       PRMax = std::max(PRMax, PRDepths[K] + PRCycles[K]);
   } else {
-    for (unsigned PRD : PRDepths)
-      PRMax = std::max(PRMax, PRD);
+    for (unsigned K = 0; K != PRDepths.size(); ++K)
+      PRMax = std::max(PRMax, PRDepths[K]);
   }
   // Convert to cycle count.
   PRMax = TE.MTM.getCycles(PRMax);

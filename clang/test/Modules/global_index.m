@@ -14,6 +14,6 @@
 
 // CHECK: *** Global Module Index Statistics:
 
-int *get_sub(void) {
+int *get_sub() {
   return Module_Sub;
 }

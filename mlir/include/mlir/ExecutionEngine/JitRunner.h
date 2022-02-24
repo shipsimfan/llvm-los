@@ -15,8 +15,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MLIR_EXECUTIONENGINE_JITRUNNER_H
-#define MLIR_EXECUTIONENGINE_JITRUNNER_H
+#ifndef MLIR_SUPPORT_JITRUNNER_H_
+#define MLIR_SUPPORT_JITRUNNER_H_
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ExecutionEngine/Orc/Core.h"
@@ -61,4 +61,4 @@ int JitRunnerMain(int argc, char **argv, const DialectRegistry &registry,
 
 } // namespace mlir
 
-#endif // MLIR_EXECUTIONENGINE_JITRUNNER_H
+#endif // MLIR_SUPPORT_JITRUNNER_H_

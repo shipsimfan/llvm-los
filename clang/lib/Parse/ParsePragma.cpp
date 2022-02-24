@@ -261,68 +261,6 @@ struct PragmaMSOptimizeHandler : public PragmaHandler {
                     Token &FirstToken) override;
 };
 
-// "\#pragma fenv_access (on)".
-struct PragmaMSFenvAccessHandler : public PragmaHandler {
-  PragmaMSFenvAccessHandler() : PragmaHandler("fenv_access") {}
-  void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
-                    Token &FirstToken) override {
-    StringRef PragmaName = FirstToken.getIdentifierInfo()->getName();
-    if (!PP.getTargetInfo().hasStrictFP() && !PP.getLangOpts().ExpStrictFP) {
-      PP.Diag(FirstToken.getLocation(), diag::warn_pragma_fp_ignored)
-          << PragmaName;
-      return;
-    }
-
-    Token Tok;
-    PP.Lex(Tok);
-    if (Tok.isNot(tok::l_paren)) {
-      PP.Diag(Tok.getLocation(), diag::warn_pragma_expected_lparen)
-          << PragmaName;
-      return;
-    }
-    PP.Lex(Tok); // Consume the l_paren.
-    if (Tok.isNot(tok::identifier)) {
-      PP.Diag(Tok.getLocation(), diag::warn_pragma_ms_fenv_access);
-      return;
-    }
-    const IdentifierInfo *II = Tok.getIdentifierInfo();
-    tok::OnOffSwitch OOS;
-    if (II->isStr("on")) {
-      OOS = tok::OOS_ON;
-      PP.Lex(Tok);
-    } else if (II->isStr("off")) {
-      OOS = tok::OOS_OFF;
-      PP.Lex(Tok);
-    } else {
-      PP.Diag(Tok.getLocation(), diag::warn_pragma_ms_fenv_access);
-      return;
-    }
-    if (Tok.isNot(tok::r_paren)) {
-      PP.Diag(Tok.getLocation(), diag::warn_pragma_expected_rparen)
-          << PragmaName;
-      return;
-    }
-    PP.Lex(Tok); // Consume the r_paren.
-
-    if (Tok.isNot(tok::eod)) {
-      PP.Diag(Tok.getLocation(), diag::warn_pragma_extra_tokens_at_eol)
-          << PragmaName;
-      return;
-    }
-
-    MutableArrayRef<Token> Toks(
-        PP.getPreprocessorAllocator().Allocate<Token>(1), 1);
-    Toks[0].startToken();
-    Toks[0].setKind(tok::annot_pragma_fenv_access_ms);
-    Toks[0].setLocation(FirstToken.getLocation());
-    Toks[0].setAnnotationEndLoc(Tok.getLocation());
-    Toks[0].setAnnotationValue(
-        reinterpret_cast<void*>(static_cast<uintptr_t>(OOS)));
-    PP.EnterTokenStream(Toks, /*DisableMacroExpansion=*/true,
-                        /*IsReinject=*/false);
-  }
-};
-
 struct PragmaForceCUDAHostDeviceHandler : public PragmaHandler {
   PragmaForceCUDAHostDeviceHandler(Sema &Actions)
       : PragmaHandler("force_cuda_host_device"), Actions(Actions) {}
@@ -451,8 +389,6 @@ void Parser::initializePragmaHandlers() {
     PP.AddPragmaHandler(MSIntrinsic.get());
     MSOptimize = std::make_unique<PragmaMSOptimizeHandler>();
     PP.AddPragmaHandler(MSOptimize.get());
-    MSFenvAccess = std::make_unique<PragmaMSFenvAccessHandler>();
-    PP.AddPragmaHandler(MSFenvAccess.get());
   }
 
   if (getLangOpts().CUDA) {
@@ -560,8 +496,6 @@ void Parser::resetPragmaHandlers() {
     MSIntrinsic.reset();
     PP.RemovePragmaHandler(MSOptimize.get());
     MSOptimize.reset();
-    PP.RemovePragmaHandler(MSFenvAccess.get());
-    MSFenvAccess.reset();
   }
 
   if (getLangOpts().CUDA) {
@@ -767,8 +701,7 @@ void Parser::HandlePragmaFloatControl() {
 }
 
 void Parser::HandlePragmaFEnvAccess() {
-  assert(Tok.is(tok::annot_pragma_fenv_access) ||
-         Tok.is(tok::annot_pragma_fenv_access_ms));
+  assert(Tok.is(tok::annot_pragma_fenv_access));
   tok::OnOffSwitch OOS =
     static_cast<tok::OnOffSwitch>(
     reinterpret_cast<uintptr_t>(Tok.getAnnotationValue()));
@@ -859,9 +792,11 @@ void Parser::HandlePragmaOpenCLExtension() {
       // Therefore, it should never be added by default.
       Opt.acceptsPragma(Name);
     }
+    Actions.setCurrentOpenCLExtension(Name);
   } else if (State == End) {
-    // There is no behavior for this directive. We only accept this for
-    // backward compatibility.
+    if (Name != Actions.getCurrentOpenCLExtension())
+      PP.Diag(NameLoc, diag::warn_pragma_begin_end_mismatch);
+    Actions.setCurrentOpenCLExtension("");
   } else if (!Opt.isKnown(Name) || !Opt.isWithPragma(Name))
     PP.Diag(NameLoc, diag::warn_pragma_unknown_extension) << Ident;
   else if (Opt.isSupportedExtension(Name, getLangOpts()))
@@ -1658,15 +1593,6 @@ void Parser::HandlePragmaAttribute() {
       return SkipToEnd();
     if (ExpectAndConsume(tok::l_paren, diag::err_expected_lparen_after, "("))
       return SkipToEnd();
-
-    // FIXME: The practical usefulness of completion here is limited because
-    // we only get here if the line has balanced parens.
-    if (Tok.is(tok::code_completion)) {
-      cutOffParsing();
-      // FIXME: suppress completion of unsupported attributes?
-      Actions.CodeCompleteAttribute(AttributeCommonInfo::Syntax::AS_GNU);
-      return SkipToEnd();
-    }
 
     if (Tok.isNot(tok::identifier)) {
       Diag(Tok, diag::err_pragma_attribute_expected_attribute_name);
@@ -3028,13 +2954,12 @@ void PragmaOptimizeHandler::HandlePragma(Preprocessor &PP,
 namespace {
 /// Used as the annotation value for tok::annot_pragma_fp.
 struct TokFPAnnotValue {
-  enum FlagKinds { Contract, Reassociate, Exceptions, EvalMethod };
+  enum FlagKinds { Contract, Reassociate, Exceptions };
   enum FlagValues { On, Off, Fast };
 
   llvm::Optional<LangOptions::FPModeKind> ContractValue;
   llvm::Optional<LangOptions::FPModeKind> ReassociateValue;
   llvm::Optional<LangOptions::FPExceptionModeKind> ExceptionsValue;
-  llvm::Optional<LangOptions::FPEvalMethodKind> EvalMethodValue;
 };
 } // end anonymous namespace
 
@@ -3061,7 +2986,6 @@ void PragmaFPHandler::HandlePragma(Preprocessor &PP,
             .Case("contract", TokFPAnnotValue::Contract)
             .Case("reassociate", TokFPAnnotValue::Reassociate)
             .Case("exceptions", TokFPAnnotValue::Exceptions)
-            .Case("eval_method", TokFPAnnotValue::EvalMethod)
             .Default(None);
     if (!FlagKind) {
       PP.Diag(Tok.getLocation(), diag::err_pragma_fp_invalid_option)
@@ -3076,11 +3000,8 @@ void PragmaFPHandler::HandlePragma(Preprocessor &PP,
       return;
     }
     PP.Lex(Tok);
-    bool isEvalMethodDouble =
-        Tok.is(tok::kw_double) && FlagKind == TokFPAnnotValue::EvalMethod;
 
-    // Don't diagnose if we have an eval_metod pragma with "double" kind.
-    if (Tok.isNot(tok::identifier) && !isEvalMethodDouble) {
+    if (Tok.isNot(tok::identifier)) {
       PP.Diag(Tok.getLocation(), diag::err_pragma_fp_invalid_argument)
           << PP.getSpelling(Tok) << OptionInfo->getName()
           << static_cast<int>(*FlagKind);
@@ -3122,19 +3043,6 @@ void PragmaFPHandler::HandlePragma(Preprocessor &PP,
               .Case("strict", LangOptions::FPE_Strict)
               .Default(llvm::None);
       if (!AnnotValue->ExceptionsValue) {
-        PP.Diag(Tok.getLocation(), diag::err_pragma_fp_invalid_argument)
-            << PP.getSpelling(Tok) << OptionInfo->getName() << *FlagKind;
-        return;
-      }
-    } else if (FlagKind == TokFPAnnotValue::EvalMethod) {
-      AnnotValue->EvalMethodValue =
-          llvm::StringSwitch<llvm::Optional<LangOptions::FPEvalMethodKind>>(
-              II->getName())
-              .Case("source", LangOptions::FPEvalMethodKind::FEM_Source)
-              .Case("double", LangOptions::FPEvalMethodKind::FEM_Double)
-              .Case("extended", LangOptions::FPEvalMethodKind::FEM_Extended)
-              .Default(llvm::None);
-      if (!AnnotValue->EvalMethodValue) {
         PP.Diag(Tok.getLocation(), diag::err_pragma_fp_invalid_argument)
             << PP.getSpelling(Tok) << OptionInfo->getName() << *FlagKind;
         return;
@@ -3241,9 +3149,6 @@ void Parser::HandlePragmaFP() {
   if (AnnotValue->ExceptionsValue)
     Actions.ActOnPragmaFPExceptions(Tok.getLocation(),
                                     *AnnotValue->ExceptionsValue);
-  if (AnnotValue->EvalMethodValue)
-    Actions.ActOnPragmaFPEvalMethod(Tok.getLocation(),
-                                    *AnnotValue->EvalMethodValue);
   ConsumeAnnotationToken();
 }
 

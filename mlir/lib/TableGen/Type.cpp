@@ -19,6 +19,12 @@
 using namespace mlir;
 using namespace mlir::tblgen;
 
+TypeConstraint::TypeConstraint(const llvm::Record *record)
+    : Constraint(Constraint::CK_Type, record) {
+  assert(def->isSubClassOf("TypeConstraint") &&
+         "must be subclass of TableGen 'TypeConstraint' class");
+}
+
 TypeConstraint::TypeConstraint(const llvm::DefInit *init)
     : TypeConstraint(init->getDef()) {}
 
@@ -28,15 +34,6 @@ bool TypeConstraint::isOptional() const {
 
 bool TypeConstraint::isVariadic() const {
   return def->isSubClassOf("Variadic");
-}
-
-bool TypeConstraint::isVariadicOfVariadic() const {
-  return def->isSubClassOf("VariadicOfVariadic");
-}
-
-StringRef TypeConstraint::getVariadicOfVariadicSegmentSizeAttr() const {
-  assert(isVariadicOfVariadic());
-  return def->getValueAsString("segmentAttrName");
 }
 
 // Returns the builder call for this constraint if this is a buildable type,

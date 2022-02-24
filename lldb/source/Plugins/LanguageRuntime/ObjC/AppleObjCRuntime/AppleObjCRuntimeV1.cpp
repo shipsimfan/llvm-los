@@ -25,7 +25,6 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Scalar.h"
 #include "lldb/Utility/Status.h"
@@ -92,6 +91,18 @@ void AppleObjCRuntimeV1::Initialize() {
 void AppleObjCRuntimeV1::Terminate() {
   PluginManager::UnregisterPlugin(CreateInstance);
 }
+
+lldb_private::ConstString AppleObjCRuntimeV1::GetPluginNameStatic() {
+  static ConstString g_name("apple-objc-v1");
+  return g_name;
+}
+
+// PluginInterface protocol
+ConstString AppleObjCRuntimeV1::GetPluginName() {
+  return GetPluginNameStatic();
+}
+
+uint32_t AppleObjCRuntimeV1::GetPluginVersion() { return 1; }
 
 BreakpointResolverSP
 AppleObjCRuntimeV1::CreateExceptionResolver(const BreakpointSP &bkpt,
@@ -319,7 +330,7 @@ void AppleObjCRuntimeV1::UpdateISAToDescriptorMapIfNeeded() {
     // map, whether it was successful or not.
     m_isa_to_descriptor_stop_id = process->GetStopID();
 
-    Log *log = GetLog(LLDBLog::Process);
+    Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
     ProcessSP process_sp = process->shared_from_this();
 
@@ -327,6 +338,8 @@ void AppleObjCRuntimeV1::UpdateISAToDescriptorMapIfNeeded() {
 
     if (!objc_module_sp)
       return;
+
+    uint32_t isa_count = 0;
 
     lldb::addr_t hash_table_ptr = GetISAHashTablePointer();
     if (hash_table_ptr != LLDB_INVALID_ADDRESS) {
@@ -369,6 +382,8 @@ void AppleObjCRuntimeV1::UpdateISAToDescriptorMapIfNeeded() {
 
               if (bucket_isa_count == 0)
                 continue;
+
+              isa_count += bucket_isa_count;
 
               ObjCISA isa;
               if (bucket_isa_count == 1) {

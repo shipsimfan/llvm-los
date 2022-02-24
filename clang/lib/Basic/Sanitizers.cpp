@@ -14,7 +14,6 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/Support/MathExtras.h"
 
 using namespace clang;
 
@@ -58,13 +57,6 @@ llvm::hash_code SanitizerMask::hash_value() const {
 }
 
 namespace clang {
-unsigned SanitizerMask::countPopulation() const {
-  unsigned total = 0;
-  for (const auto &Val : maskLoToHigh)
-    total += llvm::countPopulation(Val);
-  return total;
-}
-
 llvm::hash_code hash_value(const clang::SanitizerMask &Arg) {
   return Arg.hash_value();
 }
@@ -86,30 +78,6 @@ llvm::AsanDtorKind AsanDtorKindFromString(StringRef kindStr) {
       .Case("none", llvm::AsanDtorKind::None)
       .Case("global", llvm::AsanDtorKind::Global)
       .Default(llvm::AsanDtorKind::Invalid);
-}
-
-StringRef AsanDetectStackUseAfterReturnModeToString(
-    llvm::AsanDetectStackUseAfterReturnMode mode) {
-  switch (mode) {
-  case llvm::AsanDetectStackUseAfterReturnMode::Always:
-    return "always";
-  case llvm::AsanDetectStackUseAfterReturnMode::Runtime:
-    return "runtime";
-  case llvm::AsanDetectStackUseAfterReturnMode::Never:
-    return "never";
-  case llvm::AsanDetectStackUseAfterReturnMode::Invalid:
-    return "invalid";
-  }
-  return "invalid";
-}
-
-llvm::AsanDetectStackUseAfterReturnMode
-AsanDetectStackUseAfterReturnModeFromString(StringRef modeStr) {
-  return llvm::StringSwitch<llvm::AsanDetectStackUseAfterReturnMode>(modeStr)
-      .Case("always", llvm::AsanDetectStackUseAfterReturnMode::Always)
-      .Case("runtime", llvm::AsanDetectStackUseAfterReturnMode::Runtime)
-      .Case("never", llvm::AsanDetectStackUseAfterReturnMode::Never)
-      .Default(llvm::AsanDetectStackUseAfterReturnMode::Invalid);
 }
 
 } // namespace clang

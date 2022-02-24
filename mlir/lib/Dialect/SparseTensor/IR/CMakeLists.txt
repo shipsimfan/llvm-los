@@ -5,11 +5,9 @@ add_mlir_dialect_library(MLIRSparseTensor
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Dialect/SparseTensor
 
   DEPENDS
-  MLIRSparseTensorAttrDefsIncGen
   MLIRSparseTensorOpsIncGen
 
   LINK_LIBS PUBLIC
   MLIRDialect
   MLIRIR
-  MLIRSupport
   )

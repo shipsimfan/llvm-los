@@ -56,8 +56,8 @@ private:
   bool isInsnFrom32Def(MachineInstr *DefInsn);
   bool isPhiFrom32Def(MachineInstr *MovMI);
   bool isMovFrom32Def(MachineInstr *MovMI);
-  bool eliminateZExtSeq();
-  bool eliminateZExt();
+  bool eliminateZExtSeq(void);
+  bool eliminateZExt(void);
 
   std::set<MachineInstr *> PhiInsns;
 
@@ -172,7 +172,7 @@ bool BPFMIPeephole::isMovFrom32Def(MachineInstr *MovMI)
   return true;
 }
 
-bool BPFMIPeephole::eliminateZExtSeq() {
+bool BPFMIPeephole::eliminateZExtSeq(void) {
   MachineInstr* ToErase = nullptr;
   bool Eliminated = false;
 
@@ -240,7 +240,7 @@ bool BPFMIPeephole::eliminateZExtSeq() {
   return Eliminated;
 }
 
-bool BPFMIPeephole::eliminateZExt() {
+bool BPFMIPeephole::eliminateZExt(void) {
   MachineInstr* ToErase = nullptr;
   bool Eliminated = false;
 
@@ -312,7 +312,7 @@ private:
   // Initialize class variables.
   void initialize(MachineFunction &MFParm);
 
-  bool eliminateRedundantMov();
+  bool eliminateRedundantMov(void);
 
 public:
 
@@ -334,7 +334,7 @@ void BPFMIPreEmitPeephole::initialize(MachineFunction &MFParm) {
   LLVM_DEBUG(dbgs() << "*** BPF PreEmit peephole pass ***\n\n");
 }
 
-bool BPFMIPreEmitPeephole::eliminateRedundantMov() {
+bool BPFMIPreEmitPeephole::eliminateRedundantMov(void) {
   MachineInstr* ToErase = nullptr;
   bool Eliminated = false;
 
@@ -405,7 +405,7 @@ private:
   // Initialize class variables.
   void initialize(MachineFunction &MFParm);
 
-  bool eliminateTruncSeq();
+  bool eliminateTruncSeq(void);
 
 public:
 
@@ -452,7 +452,7 @@ void BPFMIPeepholeTruncElim::initialize(MachineFunction &MFParm) {
 // are 32-bit registers, but later on, kernel verifier will rewrite
 // it with 64-bit value. Therefore, truncating the value after the
 // load will result in incorrect code.
-bool BPFMIPeepholeTruncElim::eliminateTruncSeq() {
+bool BPFMIPeepholeTruncElim::eliminateTruncSeq(void) {
   MachineInstr* ToErase = nullptr;
   bool Eliminated = false;
 

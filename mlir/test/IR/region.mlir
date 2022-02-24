@@ -46,13 +46,13 @@ func @unnamed_region_has_wrong_number_of_blocks() {
     "test.sized_region_op"() (
     {
         "work"() : () -> ()
-        cf.br ^next1
+        br ^next1
       ^next1:
         "work"() : () -> ()
     },
     {
         "work"() : () -> ()
-        cf.br ^next2
+        br ^next2
       ^next2:
         "work"() : () -> ()
     }) : () -> ()
@@ -78,8 +78,8 @@ func @named_region_has_wrong_number_of_blocks() {
 
 // Region with single block and not terminator.
 // CHECK: unregistered_without_terminator
-"test.unregistered_without_terminator"() ({
-  ^bb0:
+"test.unregistered_without_terminator"() ( {
+  ^bb0:  // no predecessors
 }) : () -> ()
 
 // -----
@@ -101,9 +101,3 @@ func @named_region_has_wrong_number_of_blocks() {
     func @foo2() { return }
   }
 ) : () -> ()
-
-// CHECK: test.single_no_terminator_custom_asm_op
-// CHECK-NEXT: important_dont_drop
-test.single_no_terminator_custom_asm_op {
-  "important_dont_drop"() : () -> ()
-}

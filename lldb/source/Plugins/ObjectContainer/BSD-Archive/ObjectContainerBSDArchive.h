@@ -36,11 +36,9 @@ public:
 
   static void Terminate();
 
-  static llvm::StringRef GetPluginNameStatic() { return "bsd-archive"; }
+  static lldb_private::ConstString GetPluginNameStatic();
 
-  static llvm::StringRef GetPluginDescriptionStatic() {
-    return "BSD Archive object container reader.";
-  }
+  static const char *GetPluginDescriptionStatic();
 
   static lldb_private::ObjectContainer *
   CreateInstance(const lldb::ModuleSP &module_sp, lldb::DataBufferSP &data_sp,
@@ -70,7 +68,9 @@ public:
   lldb::ObjectFileSP GetObjectFile(const lldb_private::FileSpec *file) override;
 
   // PluginInterface protocol
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  lldb_private::ConstString GetPluginName() override;
+
+  uint32_t GetPluginVersion() override;
 
 protected:
   struct Object {
@@ -84,25 +84,25 @@ protected:
     lldb_private::ConstString ar_name;
 
     /// Object modification time in the archive.
-    uint32_t modification_time = 0;
+    uint32_t modification_time;
 
     /// Object user id in the archive.
-    uint16_t uid = 0;
+    uint16_t uid;
 
     /// Object group id in the archive.
-    uint16_t gid = 0;
+    uint16_t gid;
 
     /// Object octal file permissions in the archive.
-    uint16_t mode = 0;
+    uint16_t mode;
 
     /// Object size in bytes in the archive.
-    uint32_t size = 0;
+    uint32_t size;
 
     /// File offset in bytes from the beginning of the file of the object data.
-    lldb::offset_t file_offset = 0;
+    lldb::offset_t file_offset;
 
     /// Length of the object data.
-    lldb::offset_t file_size = 0;
+    lldb::offset_t file_size;
   };
 
   class Archive {

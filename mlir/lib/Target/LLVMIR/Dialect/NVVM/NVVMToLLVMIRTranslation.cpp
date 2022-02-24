@@ -23,45 +23,15 @@ using namespace mlir;
 using namespace mlir::LLVM;
 using mlir::LLVM::detail::createIntrinsicCall;
 
-static llvm::Intrinsic::ID getShflIntrinsicId(llvm::Type *resultType,
-                                              NVVM::ShflKind kind,
-                                              bool withPredicate) {
-
+static llvm::Intrinsic::ID getShflBflyIntrinsicId(llvm::Type *resultType,
+                                                  bool withPredicate) {
   if (withPredicate) {
     resultType = cast<llvm::StructType>(resultType)->getElementType(0);
-    switch (kind) {
-    case NVVM::ShflKind::bfly:
-      return resultType->isFloatTy()
-                 ? llvm::Intrinsic::nvvm_shfl_sync_bfly_f32p
-                 : llvm::Intrinsic::nvvm_shfl_sync_bfly_i32p;
-    case NVVM::ShflKind::up:
-      return resultType->isFloatTy() ? llvm::Intrinsic::nvvm_shfl_sync_up_f32p
-                                     : llvm::Intrinsic::nvvm_shfl_sync_up_i32p;
-    case NVVM::ShflKind::down:
-      return resultType->isFloatTy()
-                 ? llvm::Intrinsic::nvvm_shfl_sync_down_f32p
-                 : llvm::Intrinsic::nvvm_shfl_sync_down_i32p;
-    case NVVM::ShflKind::idx:
-      return resultType->isFloatTy() ? llvm::Intrinsic::nvvm_shfl_sync_idx_f32p
-                                     : llvm::Intrinsic::nvvm_shfl_sync_idx_i32p;
-    }
-  } else {
-    switch (kind) {
-    case NVVM::ShflKind::bfly:
-      return resultType->isFloatTy() ? llvm::Intrinsic::nvvm_shfl_sync_bfly_f32
-                                     : llvm::Intrinsic::nvvm_shfl_sync_bfly_i32;
-    case NVVM::ShflKind::up:
-      return resultType->isFloatTy() ? llvm::Intrinsic::nvvm_shfl_sync_up_f32
-                                     : llvm::Intrinsic::nvvm_shfl_sync_up_i32;
-    case NVVM::ShflKind::down:
-      return resultType->isFloatTy() ? llvm::Intrinsic::nvvm_shfl_sync_down_f32
-                                     : llvm::Intrinsic::nvvm_shfl_sync_down_i32;
-    case NVVM::ShflKind::idx:
-      return resultType->isFloatTy() ? llvm::Intrinsic::nvvm_shfl_sync_idx_f32
-                                     : llvm::Intrinsic::nvvm_shfl_sync_idx_i32;
-    }
+    return resultType->isFloatTy() ? llvm::Intrinsic::nvvm_shfl_sync_bfly_f32p
+                                   : llvm::Intrinsic::nvvm_shfl_sync_bfly_i32p;
   }
-  llvm_unreachable("unknown shuffle kind");
+  return resultType->isFloatTy() ? llvm::Intrinsic::nvvm_shfl_sync_bfly_f32
+                                 : llvm::Intrinsic::nvvm_shfl_sync_bfly_i32;
 }
 
 namespace {
@@ -87,7 +57,7 @@ public:
   LogicalResult
   amendOperation(Operation *op, NamedAttribute attribute,
                  LLVM::ModuleTranslation &moduleTranslation) const final {
-    if (attribute.getName() == NVVM::NVVMDialect::getKernelFuncAttrName()) {
+    if (attribute.first == NVVM::NVVMDialect::getKernelFuncAttrName()) {
       auto func = dyn_cast<LLVM::LLVMFuncOp>(op);
       if (!func)
         return failure();
@@ -108,7 +78,7 @@ public:
     return success();
   }
 };
-} // namespace
+} // end namespace
 
 void mlir::registerNVVMDialectTranslation(DialectRegistry &registry) {
   registry.insert<NVVM::NVVMDialect>();

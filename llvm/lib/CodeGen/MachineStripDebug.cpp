@@ -50,26 +50,29 @@ struct StripDebugMachineModule : public ModulePass {
         continue;
       MachineFunction &MF = *MaybeMF;
       for (MachineBasicBlock &MBB : MF) {
-        for (MachineInstr &MI : llvm::make_early_inc_range(MBB)) {
-          if (MI.isDebugInstr()) {
+        for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
+             I != E;) {
+          if (I->isDebugInstr()) {
             // FIXME: We should remove all of them. However, AArch64 emits an
             //        invalid `DBG_VALUE $lr` with only one operand instead of
             //        the usual three and has a test that depends on it's
             //        preservation. Preserve it for now.
-            if (MI.getNumOperands() > 1) {
-              LLVM_DEBUG(dbgs() << "Removing debug instruction " << MI);
-              MBB.erase(&MI);
+            if (I->getNumOperands() > 1) {
+              LLVM_DEBUG(dbgs() << "Removing debug instruction " << *I);
+              I = MBB.erase(I);
               Changed |= true;
               continue;
             }
           }
-          if (MI.getDebugLoc()) {
-            LLVM_DEBUG(dbgs() << "Removing location " << MI);
-            MI.setDebugLoc(DebugLoc());
+          if (I->getDebugLoc()) {
+            LLVM_DEBUG(dbgs() << "Removing location " << *I);
+            I->setDebugLoc(DebugLoc());
             Changed |= true;
+            ++I;
             continue;
           }
-          LLVM_DEBUG(dbgs() << "Keeping " << MI);
+          LLVM_DEBUG(dbgs() << "Keeping " << *I);
+          ++I;
         }
       }
     }

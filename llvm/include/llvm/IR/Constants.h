@@ -58,11 +58,9 @@ class ConstantData : public Constant {
 protected:
   explicit ConstantData(Type *Ty, ValueTy VT) : Constant(Ty, VT, nullptr, 0) {}
 
-  void *operator new(size_t S) { return User::operator new(S, 0); }
+  void *operator new(size_t s) { return User::operator new(s, 0); }
 
 public:
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
-
   ConstantData(const ConstantData &) = delete;
 
   /// Methods to support type inquiry through isa, cast, and dyn_cast.
@@ -191,19 +189,19 @@ public:
   /// This is just a convenience method to make client code smaller for a
   /// common code. It also correctly performs the comparison without the
   /// potential for an assertion from getZExtValue().
-  bool isZero() const { return Val.isZero(); }
+  bool isZero() const { return Val.isNullValue(); }
 
   /// This is just a convenience method to make client code smaller for a
   /// common case. It also correctly performs the comparison without the
   /// potential for an assertion from getZExtValue().
   /// Determine if the value is one.
-  bool isOne() const { return Val.isOne(); }
+  bool isOne() const { return Val.isOneValue(); }
 
   /// This function will return true iff every bit in this constant is set
   /// to true.
   /// @returns true iff this constant's bits are all set to true.
   /// Determine if the value is all ones.
-  bool isMinusOne() const { return Val.isAllOnes(); }
+  bool isMinusOne() const { return Val.isAllOnesValue(); }
 
   /// This function will return true iff this constant represents the largest
   /// value that may be represented by the constant's type.
@@ -362,7 +360,7 @@ public:
   Constant *getElementValue(unsigned Idx) const;
 
   /// Return the number of elements in the array, vector, or struct.
-  ElementCount getElementCount() const;
+  unsigned getNumElements() const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   ///
@@ -454,7 +452,8 @@ public:
   template <typename... Csts>
   static std::enable_if_t<are_base_of<Constant, Csts...>::value, Constant *>
   get(StructType *T, Csts *...Vs) {
-    return get(T, ArrayRef<Constant *>({Vs...}));
+    SmallVector<Constant *, 8> Values({Vs...});
+    return get(T, Values);
   }
 
   /// Return an anonymous struct that has the specified elements.
@@ -850,14 +849,12 @@ class BlockAddress final : public Constant {
 
   BlockAddress(Function *F, BasicBlock *BB);
 
-  void *operator new(size_t S) { return User::operator new(S, 2); }
+  void *operator new(size_t s) { return User::operator new(s, 2); }
 
   void destroyConstantImpl();
   Value *handleOperandChangeImpl(Value *From, Value *To);
 
 public:
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
-
   /// Return a BlockAddress for the specified function and basic block.
   static BlockAddress *get(Function *F, BasicBlock *BB);
 
@@ -896,14 +893,12 @@ class DSOLocalEquivalent final : public Constant {
 
   DSOLocalEquivalent(GlobalValue *GV);
 
-  void *operator new(size_t S) { return User::operator new(S, 1); }
+  void *operator new(size_t s) { return User::operator new(s, 1); }
 
   void destroyConstantImpl();
   Value *handleOperandChangeImpl(Value *From, Value *To);
 
 public:
-  void operator delete(void *Ptr) { User::operator delete(Ptr); }
-
   /// Return a DSOLocalEquivalent for the specified global value.
   static DSOLocalEquivalent *get(GlobalValue *GV);
 
@@ -925,41 +920,6 @@ struct OperandTraits<DSOLocalEquivalent>
     : public FixedNumOperandTraits<DSOLocalEquivalent, 1> {};
 
 DEFINE_TRANSPARENT_OPERAND_ACCESSORS(DSOLocalEquivalent, Value)
-
-/// Wrapper for a value that won't be replaced with a CFI jump table
-/// pointer in LowerTypeTestsModule.
-class NoCFIValue final : public Constant {
-  friend class Constant;
-
-  NoCFIValue(GlobalValue *GV);
-
-  void *operator new(size_t S) { return User::operator new(S, 1); }
-
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To);
-
-public:
-  /// Return a NoCFIValue for the specified function.
-  static NoCFIValue *get(GlobalValue *GV);
-
-  /// Transparently provide more efficient getOperand methods.
-  DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
-
-  GlobalValue *getGlobalValue() const {
-    return cast<GlobalValue>(Op<0>().get());
-  }
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static bool classof(const Value *V) {
-    return V->getValueID() == NoCFIValueVal;
-  }
-};
-
-template <>
-struct OperandTraits<NoCFIValue> : public FixedNumOperandTraits<NoCFIValue, 1> {
-};
-
-DEFINE_TRANSPARENT_OPERAND_ACCESSORS(NoCFIValue, Value)
 
 //===----------------------------------------------------------------------===//
 /// A constant value that is initialized with an expression using
@@ -1196,6 +1156,13 @@ public:
   /// and the getIndices() method may be used.
   bool hasIndices() const;
 
+  /// Return true if this is a getelementptr expression and all
+  /// the index operands are compile-time known integers within the
+  /// corresponding notional static array extents. Note that this is
+  /// not equivalant to, a subset of, or a superset of the "inbounds"
+  /// property.
+  bool isGEPWithNoNotionalOverIndexing() const;
+
   /// Select constant expr
   ///
   /// \param OnlyIfReducedTy see \a getWithOperands() docs.
@@ -1315,6 +1282,10 @@ public:
   /// Return a string representation for an opcode.
   const char *getOpcodeName() const;
 
+  /// Return a constant expression identical to this one, but with the specified
+  /// operand set to the specified value.
+  Constant *getWithOperandReplaced(unsigned OpNo, Constant *Op) const;
+
   /// This returns the current constant expression with the operands replaced
   /// with the specified values. The specified array must have the same number
   /// of operands as our current one.
@@ -1336,14 +1307,13 @@ public:
                             Type *SrcTy = nullptr) const;
 
   /// Returns an Instruction which implements the same operation as this
-  /// ConstantExpr. If \p InsertBefore is not null, the new instruction is
-  /// inserted before it, otherwise it is not inserted into any basic block.
+  /// ConstantExpr. The instruction is not linked to any basic block.
   ///
   /// A better approach to this could be to have a constructor for Instruction
   /// which would take a ConstantExpr parameter, but that would have spread
   /// implementation details of ConstantExpr outside of Constants.cpp, which
   /// would make it harder to remove ConstantExprs altogether.
-  Instruction *getAsInstruction(Instruction *InsertBefore = nullptr) const;
+  Instruction *getAsInstruction() const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Value *V) {

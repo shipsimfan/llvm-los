@@ -18,7 +18,7 @@
 #include "min_allocator.h"
 
 template <class S>
-TEST_CONSTEXPR_CXX20 void
+void
 test(S s, typename S::size_type n, S expected)
 {
     if (n <= s.max_size())
@@ -43,8 +43,9 @@ test(S s, typename S::size_type n, S expected)
 #endif
 }
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     typedef std::string S;
     test(S(), 0, S());
     test(S(), 1, S(1, '\0'));
@@ -62,9 +63,9 @@ bool test() {
     test(S("12345678901234567890123456789012345678901234567890"), 60,
          S("12345678901234567890123456789012345678901234567890\0\0\0\0\0\0\0\0\0\0", 60));
     test(S(), S::npos, S("not going to happen"));
-  }
+    }
 #if TEST_STD_VER >= 11
-  {
+    {
     typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
     test(S(), 0, S());
     test(S(), 1, S(1, '\0'));
@@ -82,17 +83,7 @@ bool test() {
     test(S("12345678901234567890123456789012345678901234567890"), 60,
          S("12345678901234567890123456789012345678901234567890\0\0\0\0\0\0\0\0\0\0", 60));
     test(S(), S::npos, S("not going to happen"));
-  }
-#endif
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
+    }
 #endif
 
   return 0;

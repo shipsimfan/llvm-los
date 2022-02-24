@@ -21,7 +21,7 @@ public:
   static void Initialize();
   static void Terminate();
 
-  static llvm::StringRef GetPluginNameStatic() { return "breakpad"; }
+  static ConstString GetPluginNameStatic();
   static const char *GetPluginDescriptionStatic() {
     return "Breakpad object file reader.";
   }
@@ -44,7 +44,9 @@ public:
                                         ModuleSpecList &specs);
 
   // PluginInterface protocol
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  ConstString GetPluginName() override { return GetPluginNameStatic(); }
+
+  uint32_t GetPluginVersion() override { return 1; }
 
   // LLVM RTTI support
   static char ID;
@@ -71,7 +73,7 @@ public:
     return AddressClass::eInvalid;
   }
 
-  void ParseSymtab(lldb_private::Symtab &symtab) override;
+  Symtab *GetSymtab() override;
 
   bool IsStripped() override { return false; }
 

@@ -10,7 +10,7 @@
 @end
 
 // CHECK-LABEL: define {{.*}}void @test1()
-void test1(void) {
+void test1() {
   // CHECK: {{call.*@objc_msgSend}}
   // CHECK: {{call.*@objc_msgSend}}
   // CHECK: {{call.*@objc_msgSend}}
@@ -19,7 +19,7 @@ void test1(void) {
 }
 
 // CHECK-LABEL: define {{.*}}void @test2()
-void test2(void) {
+void test2() {
   // CHECK: {{call.*@objc_msgSend}}
   // CHECK: {{call.*@objc_msgSend}}
   // CHECK: {{call.*@objc_msgSend}}

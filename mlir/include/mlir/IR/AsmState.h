@@ -13,7 +13,6 @@
 #ifndef MLIR_IR_ASMSTATE_H_
 #define MLIR_IR_ASMSTATE_H_
 
-#include "mlir/IR/OperationSupport.h"
 #include "mlir/Support/LLVM.h"
 
 #include <memory>
@@ -23,7 +22,7 @@ class Operation;
 
 namespace detail {
 class AsmStateImpl;
-} // namespace detail
+} // end namespace detail
 
 /// This class provides management for the lifetime of the state used when
 /// printing the IR. It allows for alleviating the cost of recomputing the
@@ -42,13 +41,8 @@ public:
 
   /// Initialize the asm state at the level of the given operation. A location
   /// map may optionally be provided to be populated when printing.
-  AsmState(Operation *op,
-           const OpPrintingFlags &printerFlags = OpPrintingFlags(),
-           LocationMap *locationMap = nullptr);
+  AsmState(Operation *op, LocationMap *locationMap = nullptr);
   ~AsmState();
-
-  /// Get the printer flags.
-  const OpPrintingFlags &getPrinterFlags() const;
 
   /// Return an instance of the internal implementation. Returns nullptr if the
   /// state has not been initialized.
@@ -69,6 +63,6 @@ private:
 /// various flags within the AsmPrinter.
 void registerAsmPrinterCLOptions();
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // MLIR_IR_ASMSTATE_H_

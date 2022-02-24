@@ -53,8 +53,6 @@ static bool runCGProfilePass(
   InstrProfSymtab Symtab;
   auto UpdateCounts = [&](TargetTransformInfo &TTI, Function *F,
                           Function *CalledF, uint64_t NewCount) {
-    if (NewCount == 0)
-      return;
     if (!CalledF || !TTI.isLoweredToCall(CalledF) ||
         CalledF->hasDLLImportStorageClass())
       return;

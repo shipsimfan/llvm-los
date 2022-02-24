@@ -234,18 +234,6 @@ static bool isNonVolatileStore(const Instruction *I) {
   return false;
 }
 
-// Returns true if the function definition must be unreachable.
-//
-// Note if this helper function returns true, `F` is guaranteed
-// to be unreachable; if it returns false, `F` might still
-// be unreachable but not covered by this helper function.
-static bool mustBeUnreachableFunction(const Function &F) {
-  // A function must be unreachable if its entry block ends with an
-  // 'unreachable'.
-  assert(!F.isDeclaration());
-  return isa<UnreachableInst>(F.getEntryBlock().getTerminator());
-}
-
 static void computeFunctionSummary(
     ModuleSummaryIndex &Index, const Module &M, const Function &F,
     BlockFrequencyInfo *BFI, ProfileSummaryInfo *PSI, DominatorTree &DT,
@@ -276,27 +264,11 @@ static void computeFunctionSummary(
   std::vector<const Instruction *> NonVolatileStores;
 
   bool HasInlineAsmMaybeReferencingInternal = false;
-  bool HasIndirBranchToBlockAddress = false;
-  bool HasUnknownCall = false;
-  bool MayThrow = false;
-  for (const BasicBlock &BB : F) {
-    // We don't allow inlining of function with indirect branch to blockaddress.
-    // If the blockaddress escapes the function, e.g., via a global variable,
-    // inlining may lead to an invalid cross-function reference. So we shouldn't
-    // import such function either.
-    if (BB.hasAddressTaken()) {
-      for (User *U : BlockAddress::get(const_cast<BasicBlock *>(&BB))->users())
-        if (!isa<CallBrInst>(*U)) {
-          HasIndirBranchToBlockAddress = true;
-          break;
-        }
-    }
-
+  for (const BasicBlock &BB : F)
     for (const Instruction &I : BB) {
-      if (I.isDebugOrPseudoInst())
+      if (isa<DbgInfoIntrinsic>(I))
         continue;
       ++NumInsts;
-
       // Regular LTO module doesn't participate in ThinLTO import,
       // so no reference from it can be read/writeonly, since this
       // would require importing variable as local copy
@@ -328,11 +300,8 @@ static void computeFunctionSummary(
       }
       findRefEdges(Index, &I, RefEdges, Visited);
       const auto *CB = dyn_cast<CallBase>(&I);
-      if (!CB) {
-        if (I.mayThrow())
-          MayThrow = true;
+      if (!CB)
         continue;
-      }
 
       const auto *CI = dyn_cast<CallInst>(&I);
       // Since we don't know exactly which local values are referenced in inline
@@ -354,7 +323,7 @@ static void computeFunctionSummary(
       // called aliasee for the checks below.
       if (auto *GA = dyn_cast<GlobalAlias>(CalledValue)) {
         assert(!CalledFunction && "Expected null called function in callsite for alias");
-        CalledFunction = dyn_cast<Function>(GA->getAliaseeObject());
+        CalledFunction = dyn_cast<Function>(GA->getBaseObject());
       }
       // Check if this is a direct call to a known function or a known
       // intrinsic, or an indirect call with profile data.
@@ -388,7 +357,6 @@ static void computeFunctionSummary(
           ValueInfo.updateRelBlockFreq(BBFreq, EntryFreq);
         }
       } else {
-        HasUnknownCall = true;
         // Skip inline assembly calls.
         if (CI && CI->isInlineAsm())
           continue;
@@ -418,7 +386,6 @@ static void computeFunctionSummary(
               .updateHotness(getHotness(Candidate.Count, PSI));
       }
     }
-  }
   Index.addBlockCount(F.size());
 
   std::vector<ValueInfo> Refs;
@@ -485,9 +452,8 @@ static void computeFunctionSummary(
             : CalleeInfo::HotnessType::Critical);
 
   bool NonRenamableLocal = isNonRenamableLocal(F);
-  bool NotEligibleForImport = NonRenamableLocal ||
-                              HasInlineAsmMaybeReferencingInternal ||
-                              HasIndirBranchToBlockAddress;
+  bool NotEligibleForImport =
+      NonRenamableLocal || HasInlineAsmMaybeReferencingInternal;
   GlobalValueSummary::GVFlags Flags(
       F.getLinkage(), F.getVisibility(), NotEligibleForImport,
       /* Live = */ false, F.isDSOLocal(),
@@ -498,10 +464,8 @@ static void computeFunctionSummary(
       F.hasFnAttribute(Attribute::NoRecurse), F.returnDoesNotAlias(),
       // FIXME: refactor this to use the same code that inliner is using.
       // Don't try to import functions with noinline attribute.
-      F.getAttributes().hasFnAttr(Attribute::NoInline),
-      F.hasFnAttribute(Attribute::AlwaysInline),
-      F.hasFnAttribute(Attribute::NoUnwind), MayThrow, HasUnknownCall,
-      mustBeUnreachableFunction(F)};
+      F.getAttributes().hasFnAttribute(Attribute::NoInline),
+      F.hasFnAttribute(Attribute::AlwaysInline)};
   std::vector<FunctionSummary::ParamAccess> ParamAccesses;
   if (auto *SSI = GetSSICallback(F))
     ParamAccesses = SSI->getParamAccesses(Index);
@@ -658,7 +622,7 @@ computeAliasSummary(ModuleSummaryIndex &Index, const GlobalAlias &A,
       /* Live = */ false, A.isDSOLocal(),
       A.hasLinkOnceODRLinkage() && A.hasGlobalUnnamedAddr());
   auto AS = std::make_unique<AliasSummary>(Flags);
-  auto *Aliasee = A.getAliaseeObject();
+  auto *Aliasee = A.getBaseObject();
   auto AliaseeVI = Index.getValueInfo(Aliasee->getGUID());
   assert(AliaseeVI && "Alias expects aliasee summary to be available");
   assert(AliaseeVI.getSummaryList().size() == 1 &&
@@ -747,11 +711,7 @@ ModuleSummaryIndex llvm::buildModuleSummaryIndex(
                         F->hasFnAttribute(Attribute::NoRecurse),
                         F->returnDoesNotAlias(),
                         /* NoInline = */ false,
-                        F->hasFnAttribute(Attribute::AlwaysInline),
-                        F->hasFnAttribute(Attribute::NoUnwind),
-                        /* MayThrow */ true,
-                        /* HasUnknownCall */ true,
-                        /* MustBeUnreachable */ false},
+                        F->hasFnAttribute(Attribute::AlwaysInline)},
                     /*EntryCount=*/0, ArrayRef<ValueInfo>{},
                     ArrayRef<FunctionSummary::EdgeTy>{},
                     ArrayRef<GlobalValue::GUID>{},

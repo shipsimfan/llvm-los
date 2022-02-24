@@ -120,7 +120,8 @@ bool AggressiveAntiDepState::IsLive(unsigned Reg) {
 AggressiveAntiDepBreaker::AggressiveAntiDepBreaker(
     MachineFunction &MFi, const RegisterClassInfo &RCI,
     TargetSubtargetInfo::RegClassVector &CriticalPathRCs)
-    : MF(MFi), MRI(MF.getRegInfo()), TII(MF.getSubtarget().getInstrInfo()),
+    : AntiDepBreaker(), MF(MFi), MRI(MF.getRegInfo()),
+      TII(MF.getSubtarget().getInstrInfo()),
       TRI(MF.getSubtarget().getRegisterInfo()), RegClassInfo(RCI) {
   /* Collect a bitset of all registers that are only broken if they
      are on the critical path. */
@@ -353,7 +354,8 @@ void AggressiveAntiDepBreaker::PrescanInstruction(
   // dead, or because only a subregister is live at the def. If we
   // don't do this the dead def will be incorrectly merged into the
   // previous def.
-  for (const MachineOperand &MO : MI.operands()) {
+  for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
+    MachineOperand &MO = MI.getOperand(i);
     if (!MO.isReg() || !MO.isDef()) continue;
     Register Reg = MO.getReg();
     if (Reg == 0) continue;
@@ -405,7 +407,8 @@ void AggressiveAntiDepBreaker::PrescanInstruction(
 
   // Scan the register defs for this instruction and update
   // live-ranges.
-  for (const MachineOperand &MO : MI.operands()) {
+  for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
+    MachineOperand &MO = MI.getOperand(i);
     if (!MO.isReg() || !MO.isDef()) continue;
     Register Reg = MO.getReg();
     if (Reg == 0) continue;
@@ -492,7 +495,8 @@ void AggressiveAntiDepBreaker::ScanInstruction(MachineInstr &MI,
     LLVM_DEBUG(dbgs() << "\tKill Group:");
 
     unsigned FirstReg = 0;
-    for (const MachineOperand &MO : MI.operands()) {
+    for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
+      MachineOperand &MO = MI.getOperand(i);
       if (!MO.isReg()) continue;
       Register Reg = MO.getReg();
       if (Reg == 0) continue;
@@ -560,7 +564,8 @@ bool AggressiveAntiDepBreaker::FindSuitableFreeRegisters(
                     << ":\n");
   std::map<unsigned, BitVector> RenameRegisterMap;
   unsigned SuperReg = 0;
-  for (unsigned Reg : Regs) {
+  for (unsigned i = 0, e = Regs.size(); i != e; ++i) {
+    unsigned Reg = Regs[i];
     if ((SuperReg == 0) || TRI->isSuperRegister(SuperReg, Reg))
       SuperReg = Reg;
 
@@ -582,7 +587,8 @@ bool AggressiveAntiDepBreaker::FindSuitableFreeRegisters(
   }
 
   // All group registers should be a subreg of SuperReg.
-  for (unsigned Reg : Regs) {
+  for (unsigned i = 0, e = Regs.size(); i != e; ++i) {
+    unsigned Reg = Regs[i];
     if (Reg == SuperReg) continue;
     bool IsSub = TRI->isSubRegister(SuperReg, Reg);
     // FIXME: remove this once PR18663 has been properly fixed. For now,
@@ -643,7 +649,8 @@ bool AggressiveAntiDepBreaker::FindSuitableFreeRegisters(
     // For each referenced group register (which must be a SuperReg or
     // a subregister of SuperReg), find the corresponding subregister
     // of NewSuperReg and make sure it is free to be renamed.
-    for (unsigned Reg : Regs) {
+    for (unsigned i = 0, e = Regs.size(); i != e; ++i) {
+      unsigned Reg = Regs[i];
       unsigned NewReg = 0;
       if (Reg == SuperReg) {
         NewReg = NewSuperReg;
@@ -755,8 +762,11 @@ unsigned AggressiveAntiDepBreaker::BreakAntiDependencies(
 
   // ...need a map from MI to SUnit.
   std::map<MachineInstr *, const SUnit *> MISUnitMap;
-  for (const SUnit &SU : SUnits)
-    MISUnitMap.insert(std::make_pair(SU.getInstr(), &SU));
+  for (unsigned i = 0, e = SUnits.size(); i != e; ++i) {
+    const SUnit *SU = &SUnits[i];
+    MISUnitMap.insert(std::pair<MachineInstr *, const SUnit *>(SU->getInstr(),
+                                                               SU));
+  }
 
   // Track progress along the critical path through the SUnit graph as
   // we walk the instructions. This is needed for regclasses that only
@@ -764,11 +774,12 @@ unsigned AggressiveAntiDepBreaker::BreakAntiDependencies(
   const SUnit *CriticalPathSU = nullptr;
   MachineInstr *CriticalPathMI = nullptr;
   if (CriticalPathSet.any()) {
-    for (const SUnit &SU : SUnits) {
+    for (unsigned i = 0, e = SUnits.size(); i != e; ++i) {
+      const SUnit *SU = &SUnits[i];
       if (!CriticalPathSU ||
-          ((SU.getDepth() + SU.Latency) >
+          ((SU->getDepth() + SU->Latency) >
            (CriticalPathSU->getDepth() + CriticalPathSU->Latency))) {
-        CriticalPathSU = &SU;
+        CriticalPathSU = SU;
       }
     }
     assert(CriticalPathSU && "Failed to find SUnit critical path");
@@ -828,7 +839,8 @@ unsigned AggressiveAntiDepBreaker::BreakAntiDependencies(
     // but don't cause any anti-dependence breaking themselves)
     if (!MI.isKill()) {
       // Attempt to break each anti-dependency...
-      for (const SDep *Edge : Edges) {
+      for (unsigned i = 0, e = Edges.size(); i != e; ++i) {
+        const SDep *Edge = Edges[i];
         SUnit *NextSU = Edge->getSUnit();
 
         if ((Edge->getKind() != SDep::Anti) &&

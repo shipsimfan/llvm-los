@@ -33,11 +33,13 @@ class AAResults;
 class AllocaInst;
 class BasicBlock;
 class BlockFrequencyInfo;
+class CallInst;
 class CallGraph;
 class DebugInfoFinder;
 class DominatorTree;
 class Function;
 class Instruction;
+class InvokeInst;
 class Loop;
 class LoopInfo;
 class Module;
@@ -73,16 +75,7 @@ struct ClonedCodeInfo {
   /// originally inserted callsites were DCE'ed after they were cloned.
   std::vector<WeakTrackingVH> OperandBundleCallSites;
 
-  /// Like VMap, but maps only unsimplified instructions. Values in the map
-  /// may be dangling, it is only intended to be used via isSimplified(), to
-  /// check whether the main VMap mapping involves simplification or not.
-  DenseMap<const Value *, const Value *> OrigVMap;
-
   ClonedCodeInfo() = default;
-
-  bool isSimplified(const Value *From, const Value *To) const {
-    return OrigVMap.lookup(From) != To;
-  }
 };
 
 /// Return a copy of the specified basic block, but without
@@ -192,7 +185,8 @@ void CloneAndPruneFunctionInto(Function *NewFunc, const Function *OldFunc,
                                ValueToValueMapTy &VMap, bool ModuleLevelChanges,
                                SmallVectorImpl<ReturnInst*> &Returns,
                                const char *NameSuffix = "",
-                               ClonedCodeInfo *CodeInfo = nullptr);
+                               ClonedCodeInfo *CodeInfo = nullptr,
+                               Instruction *TheCall = nullptr);
 
 /// This class captures the data input to the InlineFunction call, and records
 /// the auxiliary results produced by it.
@@ -294,10 +288,10 @@ BasicBlock *DuplicateInstructionsInSplitBetween(BasicBlock *BB,
                                                 DomTreeUpdater &DTU);
 
 /// Updates profile information by adjusting the entry count by adding
-/// EntryDelta then scaling callsite information by the new count divided by the
+/// entryDelta then scaling callsite information by the new count divided by the
 /// old count. VMap is used during inlinng to also update the new clone
 void updateProfileCallee(
-    Function *Callee, int64_t EntryDelta,
+    Function *Callee, int64_t entryDelta,
     const ValueMap<const Value *, WeakTrackingVH> *VMap = nullptr);
 
 /// Find the 'llvm.experimental.noalias.scope.decl' intrinsics in the specified

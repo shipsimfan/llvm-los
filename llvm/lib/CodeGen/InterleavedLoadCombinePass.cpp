@@ -32,7 +32,6 @@
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/InitializePasses.h"
@@ -185,7 +184,7 @@ class Polynomial {
   APInt A;
 
 public:
-  Polynomial(Value *V) : ErrorMSBs((unsigned)-1), V(V) {
+  Polynomial(Value *V) : ErrorMSBs((unsigned)-1), V(V), B(), A() {
     IntegerType *Ty = dyn_cast<IntegerType>(V->getType());
     if (Ty) {
       ErrorMSBs = 0;
@@ -195,12 +194,12 @@ public:
   }
 
   Polynomial(const APInt &A, unsigned ErrorMSBs = 0)
-      : ErrorMSBs(ErrorMSBs), V(nullptr), A(A) {}
+      : ErrorMSBs(ErrorMSBs), V(NULL), B(), A(A) {}
 
   Polynomial(unsigned BitWidth, uint64_t A, unsigned ErrorMSBs = 0)
-      : ErrorMSBs(ErrorMSBs), V(nullptr), A(BitWidth, A) {}
+      : ErrorMSBs(ErrorMSBs), V(NULL), B(), A(BitWidth, A) {}
 
-  Polynomial() : ErrorMSBs((unsigned)-1), V(nullptr) {}
+  Polynomial() : ErrorMSBs((unsigned)-1), V(NULL), B(), A() {}
 
   /// Increment and clamp the number of undefined bits.
   void incErrorMSBs(unsigned amt) {
@@ -308,12 +307,12 @@ public:
     }
 
     // Multiplying by one is a no-op.
-    if (C.isOne()) {
+    if (C.isOneValue()) {
       return *this;
     }
 
     // Multiplying by zero removes the coefficient B and defines all bits.
-    if (C.isZero()) {
+    if (C.isNullValue()) {
       ErrorMSBs = 0;
       deleteB();
     }
@@ -464,7 +463,7 @@ public:
       return *this;
     }
 
-    if (C.isZero())
+    if (C.isNullValue())
       return *this;
 
     // Test if the result will be zero
@@ -571,7 +570,7 @@ public:
   bool isProvenEqualTo(const Polynomial &o) {
     // Subtract both polynomials and test if it is fully defined and zero.
     Polynomial r = *this - o;
-    return (r.ErrorMSBs == 0) && (!r.isFirstOrder()) && (r.A.isZero());
+    return (r.ErrorMSBs == 0) && (!r.isFirstOrder()) && (r.A.isNullValue());
   }
 
   /// Print the polynomial into a stream.
@@ -656,10 +655,10 @@ public:
   };
 
   /// Basic-block the load instructions are within
-  BasicBlock *BB = nullptr;
+  BasicBlock *BB;
 
   /// Pointer value of all participation load instructions
-  Value *PV = nullptr;
+  Value *PV;
 
   /// Participating load instructions
   std::set<LoadInst *> LIs;
@@ -668,7 +667,7 @@ public:
   std::set<Instruction *> Is;
 
   /// Final shuffle-vector instruction
-  ShuffleVectorInst *SVI = nullptr;
+  ShuffleVectorInst *SVI;
 
   /// Information of the offset for each vector element
   ElementInfo *EI;
@@ -676,7 +675,8 @@ public:
   /// Vector Type
   FixedVectorType *const VTy;
 
-  VectorInfo(FixedVectorType *VTy) : VTy(VTy) {
+  VectorInfo(FixedVectorType *VTy)
+      : BB(nullptr), PV(nullptr), LIs(), Is(), SVI(nullptr), VTy(VTy) {
     EI = new ElementInfo[VTy->getNumElements()];
   }
 
@@ -1130,7 +1130,6 @@ bool InterleavedLoadCombineImpl::combine(std::list<VectorInfo> &InterleavedLoad,
 
   InstructionCost InterleavedCost;
   InstructionCost InstructionCost = 0;
-  const TTI::TargetCostKind CostKind = TTI::TCK_SizeAndLatency;
 
   // Get the interleave factor
   unsigned Factor = InterleavedLoad.size();
@@ -1158,7 +1157,8 @@ bool InterleavedLoadCombineImpl::combine(std::list<VectorInfo> &InterleavedLoad,
   // be expected. Also sum the cost of the Instructions beeing left dead.
   for (auto &I : Is) {
     // Compute the old cost
-    InstructionCost += TTI.getInstructionCost(I, CostKind);
+    InstructionCost +=
+        TTI.getInstructionCost(I, TargetTransformInfo::TCK_Latency);
 
     // The final SVIs are allowed not to be dead, all uses will be replaced
     if (SVIs.find(I) != SVIs.end())
@@ -1206,10 +1206,12 @@ bool InterleavedLoadCombineImpl::combine(std::list<VectorInfo> &InterleavedLoad,
           ->getNumElements();
   FixedVectorType *ILTy = FixedVectorType::get(ETy, Factor * ElementsPerSVI);
 
-  auto Indices = llvm::to_vector<4>(llvm::seq<unsigned>(0, Factor));
+  SmallVector<unsigned, 4> Indices;
+  for (unsigned i = 0; i < Factor; i++)
+    Indices.push_back(i);
   InterleavedCost = TTI.getInterleavedMemoryOpCost(
       Instruction::Load, ILTy, Factor, Indices, InsertionPoint->getAlign(),
-      InsertionPoint->getPointerAddressSpace(), CostKind);
+      InsertionPoint->getPointerAddressSpace());
 
   if (InterleavedCost >= InstructionCost) {
     return false;

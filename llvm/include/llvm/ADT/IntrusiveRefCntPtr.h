@@ -5,56 +5,51 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// This file defines the RefCountedBase, ThreadSafeRefCountedBase, and
-/// IntrusiveRefCntPtr classes.
-///
-/// IntrusiveRefCntPtr is a smart pointer to an object which maintains a
-/// reference count.  (ThreadSafe)RefCountedBase is a mixin class that adds a
-/// refcount member variable and methods for updating the refcount.  An object
-/// that inherits from (ThreadSafe)RefCountedBase deletes itself when its
-/// refcount hits zero.
-///
-/// For example:
-///
-/// ```
-///   class MyClass : public RefCountedBase<MyClass> {};
-///
-///   void foo() {
-///     // Constructing an IntrusiveRefCntPtr increases the pointee's refcount
-///     // by 1 (from 0 in this case).
-///     IntrusiveRefCntPtr<MyClass> Ptr1(new MyClass());
-///
-///     // Copying an IntrusiveRefCntPtr increases the pointee's refcount by 1.
-///     IntrusiveRefCntPtr<MyClass> Ptr2(Ptr1);
-///
-///     // Constructing an IntrusiveRefCntPtr has no effect on the object's
-///     // refcount.  After a move, the moved-from pointer is null.
-///     IntrusiveRefCntPtr<MyClass> Ptr3(std::move(Ptr1));
-///     assert(Ptr1 == nullptr);
-///
-///     // Clearing an IntrusiveRefCntPtr decreases the pointee's refcount by 1.
-///     Ptr2.reset();
-///
-///     // The object deletes itself when we return from the function, because
-///     // Ptr3's destructor decrements its refcount to 0.
-///   }
-/// ```
-///
-/// You can use IntrusiveRefCntPtr with isa<T>(), dyn_cast<T>(), etc.:
-///
-/// ```
-///   IntrusiveRefCntPtr<MyClass> Ptr(new MyClass());
-///   OtherClass *Other = dyn_cast<OtherClass>(Ptr);  // Ptr.get() not required
-/// ```
-///
-/// IntrusiveRefCntPtr works with any class that
-///
-///  - inherits from (ThreadSafe)RefCountedBase,
-///  - has Retain() and Release() methods, or
-///  - specializes IntrusiveRefCntPtrInfo.
-///
+//
+// This file defines the RefCountedBase, ThreadSafeRefCountedBase, and
+// IntrusiveRefCntPtr classes.
+//
+// IntrusiveRefCntPtr is a smart pointer to an object which maintains a
+// reference count.  (ThreadSafe)RefCountedBase is a mixin class that adds a
+// refcount member variable and methods for updating the refcount.  An object
+// that inherits from (ThreadSafe)RefCountedBase deletes itself when its
+// refcount hits zero.
+//
+// For example:
+//
+//   class MyClass : public RefCountedBase<MyClass> {};
+//
+//   void foo() {
+//     // Constructing an IntrusiveRefCntPtr increases the pointee's refcount by
+//     // 1 (from 0 in this case).
+//     IntrusiveRefCntPtr<MyClass> Ptr1(new MyClass());
+//
+//     // Copying an IntrusiveRefCntPtr increases the pointee's refcount by 1.
+//     IntrusiveRefCntPtr<MyClass> Ptr2(Ptr1);
+//
+//     // Constructing an IntrusiveRefCntPtr has no effect on the object's
+//     // refcount.  After a move, the moved-from pointer is null.
+//     IntrusiveRefCntPtr<MyClass> Ptr3(std::move(Ptr1));
+//     assert(Ptr1 == nullptr);
+//
+//     // Clearing an IntrusiveRefCntPtr decreases the pointee's refcount by 1.
+//     Ptr2.reset();
+//
+//     // The object deletes itself when we return from the function, because
+//     // Ptr3's destructor decrements its refcount to 0.
+//   }
+//
+// You can use IntrusiveRefCntPtr with isa<T>(), dyn_cast<T>(), etc.:
+//
+//   IntrusiveRefCntPtr<MyClass> Ptr(new MyClass());
+//   OtherClass *Other = dyn_cast<OtherClass>(Ptr);  // Ptr.get() not required
+//
+// IntrusiveRefCntPtr works with any class that
+//
+//  - inherits from (ThreadSafe)RefCountedBase,
+//  - has Retain() and Release() methods, or
+//  - specializes IntrusiveRefCntPtrInfo.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_INTRUSIVEREFCNTPTR_H
@@ -84,7 +79,7 @@ protected:
 #ifndef NDEBUG
   ~RefCountedBase() {
     assert(RefCount == 0 &&
-           "Destruction occurred when there are still references to this.");
+           "Destruction occured when there are still references to this.");
   }
 #else
   // Default the destructor in release builds, A trivial destructor may enable
@@ -115,7 +110,7 @@ protected:
 #ifndef NDEBUG
   ~ThreadSafeRefCountedBase() {
     assert(RefCount == 0 &&
-           "Destruction occurred when there are still references to this.");
+           "Destruction occured when there are still references to this.");
   }
 #else
   // Default the destructor in release builds, A trivial destructor may enable

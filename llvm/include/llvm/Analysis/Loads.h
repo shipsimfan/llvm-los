@@ -24,6 +24,7 @@ class DominatorTree;
 class Instruction;
 class LoadInst;
 class Loop;
+class MDNode;
 class MemoryLocation;
 class ScalarEvolution;
 class TargetLibraryInfo;
@@ -42,7 +43,8 @@ bool isDereferenceablePointer(const Value *V, Type *Ty,
 /// performs context-sensitive analysis and returns true if the pointer is
 /// dereferenceable at the specified instruction.
 bool isDereferenceableAndAlignedPointer(const Value *V, Type *Ty,
-                                        Align Alignment, const DataLayout &DL,
+                                        MaybeAlign Alignment,
+                                        const DataLayout &DL,
                                         const Instruction *CtxI = nullptr,
                                         const DominatorTree *DT = nullptr,
                                         const TargetLibraryInfo *TLI = nullptr);

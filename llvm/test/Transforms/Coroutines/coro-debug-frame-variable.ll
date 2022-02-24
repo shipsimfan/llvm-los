@@ -1,3 +1,4 @@
+; RUN: opt < %s -O0 -enable-coroutines -S | FileCheck %s
 ; RUN: opt < %s -passes='default<O0>' -enable-coroutines -S | FileCheck %s
 
 ; Define a function 'f' that resembles the Clang frontend's output for the
@@ -62,7 +63,7 @@
 ; CHECK: ![[IVAR_RESUME]] = !DILocalVariable(name: "i"
 ; CHECK: ![[JVAR_RESUME]] = !DILocalVariable(name: "j"
 ; CHECK: ![[JDBGLOC_RESUME]] = !DILocation(line: 32, column: 7, scope: ![[RESUME_SCOPE]])
-define void @f() "coroutine.presplit"="0" {
+define void @f() {
 entry:
   %__promise = alloca i8, align 8
   %i = alloca i32, align 4

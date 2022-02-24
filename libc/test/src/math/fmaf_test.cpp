@@ -13,11 +13,11 @@
 using LlvmLibcFmaTest = FmaTestTemplate<float>;
 
 TEST_F(LlvmLibcFmaTest, SpecialNumbers) {
-  test_special_numbers(&__llvm_libc::fmaf);
+  testSpecialNumbers(&__llvm_libc::fmaf);
 }
 
 TEST_F(LlvmLibcFmaTest, SubnormalRange) {
-  test_subnormal_range(&__llvm_libc::fmaf);
+  testSubnormalRange(&__llvm_libc::fmaf);
 }
 
-TEST_F(LlvmLibcFmaTest, NormalRange) { test_normal_range(&__llvm_libc::fmaf); }
+TEST_F(LlvmLibcFmaTest, NormalRange) { testNormalRange(&__llvm_libc::fmaf); }

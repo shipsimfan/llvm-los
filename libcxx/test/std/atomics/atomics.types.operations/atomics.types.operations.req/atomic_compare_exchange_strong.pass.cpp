@@ -5,22 +5,20 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-
+//
+// UNSUPPORTED: libcpp-has-no-threads
 // XFAIL: !non-lockfree-atomics
+//  ... assertion fails line 34
 
 // <atomic>
 
 // template <class T>
 //     bool
-//     atomic_compare_exchange_strong(volatile atomic<T>*,
-//                                    atomic<T>::value_type*,
-//                                    atomic<T>::value_type) noexcept;
+//     atomic_compare_exchange_strong(volatile atomic<T>* obj, T* expc, T desr);
 //
 // template <class T>
 //     bool
-//     atomic_compare_exchange_strong(atomic<T>*,
-//                                    atomic<T>::value_type*,
-//                                    atomic<T>::value_type) noexcept;
+//     atomic_compare_exchange_strong(atomic<T>* obj, T* expc, T desr);
 
 #include <atomic>
 #include <type_traits>
@@ -34,29 +32,27 @@ struct TestFn {
   void operator()() const {
     {
         typedef std::atomic<T> A;
+        A a;
         T t(T(1));
-        A a(t);
+        std::atomic_init(&a, t);
         assert(std::atomic_compare_exchange_strong(&a, &t, T(2)) == true);
         assert(a == T(2));
         assert(t == T(1));
         assert(std::atomic_compare_exchange_strong(&a, &t, T(3)) == false);
         assert(a == T(2));
         assert(t == T(2));
-
-        ASSERT_NOEXCEPT(std::atomic_compare_exchange_strong(&a, &t, T(3)));
     }
     {
         typedef std::atomic<T> A;
+        volatile A a;
         T t(T(1));
-        volatile A a(t);
+        std::atomic_init(&a, t);
         assert(std::atomic_compare_exchange_strong(&a, &t, T(2)) == true);
         assert(a == T(2));
         assert(t == T(1));
         assert(std::atomic_compare_exchange_strong(&a, &t, T(3)) == false);
         assert(a == T(2));
         assert(t == T(2));
-
-        ASSERT_NOEXCEPT(std::atomic_compare_exchange_strong(&a, &t, T(3)));
     }
   }
 };

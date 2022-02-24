@@ -72,7 +72,7 @@ TEST(TBDv1, ReadFile) {
   TBDFile File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   auto Archs = AK_armv7 | AK_armv7s | AK_armv7k | AK_arm64;
-  auto Platform = PLATFORM_IOS;
+  auto Platform = PlatformKind::iOS;
   TargetList Targets;
   for (auto &&arch : Archs)
     Targets.emplace_back(Target(arch, Platform));
@@ -126,7 +126,7 @@ TEST(TBDv1, ReadFile2) {
   TBDFile File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   auto Archs = AK_armv7 | AK_armv7s | AK_armv7k | AK_arm64;
-  auto Platform = PLATFORM_IOS;
+  auto Platform = PlatformKind::iOS;
   TargetList Targets;
   for (auto &&arch : Archs)
     Targets.emplace_back(Target(arch, Platform));
@@ -171,7 +171,7 @@ TEST(TBDv1, WriteFile) {
   InterfaceFile File;
   TargetList Targets;
   for (auto &&arch : AK_i386 | AK_x86_64)
-    Targets.emplace_back(Target(arch, PLATFORM_MACOS));
+    Targets.emplace_back(Target(arch, PlatformKind::macOS));
   File.setPath("libfoo.dylib");
   File.setInstallName("/usr/lib/libfoo.dylib");
   File.setFileType(FileType::TBD_V1);
@@ -208,7 +208,7 @@ TEST(TBDv1, Platform_macOS) {
   Expected<TBDFile> Result =
       TextAPIReader::get(MemoryBufferRef(TBDv1PlatformMacOS, "Test.tbd"));
   EXPECT_TRUE(!!Result);
-  auto Platform = PLATFORM_MACOS;
+  auto Platform = PlatformKind::macOS;
   TBDFile File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   EXPECT_EQ(File->getPlatforms().size(), 1U);
@@ -225,7 +225,7 @@ TEST(TBDv1, Platform_iOS) {
   Expected<TBDFile> Result =
       TextAPIReader::get(MemoryBufferRef(TBDv1PlatformiOS, "Test.tbd"));
   EXPECT_TRUE(!!Result);
-  auto Platform = PLATFORM_IOS;
+  auto Platform = PlatformKind::iOS;
   TBDFile File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   EXPECT_EQ(File->getPlatforms().size(), 1U);
@@ -242,7 +242,7 @@ TEST(TBDv1, Platform_watchOS) {
   Expected<TBDFile> Result =
       TextAPIReader::get(MemoryBufferRef(TBDv1PlatformWatchOS, "Test.tbd"));
   EXPECT_TRUE(!!Result);
-  auto Platform = PLATFORM_WATCHOS;
+  auto Platform = PlatformKind::watchOS;
   TBDFile File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   EXPECT_EQ(File->getPlatforms().size(), 1U);
@@ -259,7 +259,7 @@ TEST(TBDv1, Platform_tvOS) {
   Expected<TBDFile> Result =
       TextAPIReader::get(MemoryBufferRef(TBDv1PlatformtvOS, "Test.tbd"));
   EXPECT_TRUE(!!Result);
-  auto Platform = PLATFORM_TVOS;
+  auto Platform = PlatformKind::tvOS;
   TBDFile File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   EXPECT_EQ(File->getPlatforms().size(), 1U);
@@ -276,7 +276,7 @@ TEST(TBDv1, Platform_bridgeOS) {
   Expected<TBDFile> Result =
       TextAPIReader::get(MemoryBufferRef(TBDv1BridgeOS, "Test.tbd"));
   EXPECT_TRUE(!!Result);
-  auto Platform = PLATFORM_BRIDGEOS;
+  auto Platform = PlatformKind::bridgeOS;
   TBDFile File = std::move(Result.get());
   EXPECT_EQ(FileType::TBD_V1, File->getFileType());
   EXPECT_EQ(File->getPlatforms().size(), 1U);

@@ -8,7 +8,7 @@
 invalid_expression:
 	.rept *
 
-# CHECK: error: invalid token in expression
+# CHECK: error: unknown token in expression
 # CHECK: 	.rept *
 # CHECK:              ^
 

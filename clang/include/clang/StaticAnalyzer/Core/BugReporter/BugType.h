@@ -23,6 +23,8 @@ namespace clang {
 namespace ento {
 
 class BugReporter;
+class ExplodedNode;
+class ExprEngine;
 
 class BugType {
 private:

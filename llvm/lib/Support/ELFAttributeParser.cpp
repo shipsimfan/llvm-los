@@ -7,14 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/ELFAttributeParser.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Errc.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/ScopedPrinter.h"
 
 using namespace llvm;
 using namespace llvm::ELFAttrs;
 
-static constexpr EnumEntry<unsigned> tagNames[] = {
+static const EnumEntry<unsigned> tagNames[] = {
     {"Tag_File", ELFAttrs::File},
     {"Tag_Section", ELFAttrs::Section},
     {"Tag_Symbol", ELFAttrs::Symbol},

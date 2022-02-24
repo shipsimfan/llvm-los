@@ -30,13 +30,12 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/MemAlloc.h"
 #include "llvm/Support/TypeSize.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
-#include <new>
+#include <tuple>
 #include <utility>
 
 using namespace llvm;
@@ -125,25 +124,26 @@ LayoutAlignElem::operator==(const LayoutAlignElem &rhs) const {
 // PointerAlignElem, PointerAlign support
 //===----------------------------------------------------------------------===//
 
-PointerAlignElem PointerAlignElem::getInBits(uint32_t AddressSpace,
-                                             Align ABIAlign, Align PrefAlign,
-                                             uint32_t TypeBitWidth,
-                                             uint32_t IndexBitWidth) {
+PointerAlignElem PointerAlignElem::get(uint32_t AddressSpace, Align ABIAlign,
+                                       Align PrefAlign, uint32_t TypeByteWidth,
+                                       uint32_t IndexWidth) {
   assert(ABIAlign <= PrefAlign && "Preferred alignment worse than ABI!");
   PointerAlignElem retval;
   retval.AddressSpace = AddressSpace;
   retval.ABIAlign = ABIAlign;
   retval.PrefAlign = PrefAlign;
-  retval.TypeBitWidth = TypeBitWidth;
-  retval.IndexBitWidth = IndexBitWidth;
+  retval.TypeByteWidth = TypeByteWidth;
+  retval.IndexWidth = IndexWidth;
   return retval;
 }
 
 bool
 PointerAlignElem::operator==(const PointerAlignElem &rhs) const {
-  return (ABIAlign == rhs.ABIAlign && AddressSpace == rhs.AddressSpace &&
-          PrefAlign == rhs.PrefAlign && TypeBitWidth == rhs.TypeBitWidth &&
-          IndexBitWidth == rhs.IndexBitWidth);
+  return (ABIAlign == rhs.ABIAlign
+          && AddressSpace == rhs.AddressSpace
+          && PrefAlign == rhs.PrefAlign
+          && TypeByteWidth == rhs.TypeByteWidth
+          && IndexWidth == rhs.IndexWidth);
 }
 
 //===----------------------------------------------------------------------===//
@@ -151,8 +151,6 @@ PointerAlignElem::operator==(const PointerAlignElem &rhs) const {
 //===----------------------------------------------------------------------===//
 
 const char *DataLayout::getManglingComponent(const Triple &T) {
-  if (T.isOSBinFormatGOFF())
-    return "-m:l";
   if (T.isOSBinFormatMachO())
     return "-m:o";
   if (T.isOSWindows() && T.isOSBinFormatCOFF())
@@ -197,7 +195,7 @@ void DataLayout::reset(StringRef Desc) {
                                  E.PrefAlign, E.TypeBitWidth))
       return report_fatal_error(std::move(Err));
   }
-  if (Error Err = setPointerAlignmentInBits(0, Align(8), Align(8), 64, 64))
+  if (Error Err = setPointerAlignment(0, Align(8), Align(8), 8, 8))
     return report_fatal_error(std::move(Err));
 
   if (Error Err = parseSpecifier(Desc))
@@ -260,12 +258,12 @@ Error DataLayout::parseSpecifier(StringRef Desc) {
   while (!Desc.empty()) {
     // Split at '-'.
     std::pair<StringRef, StringRef> Split;
-    if (Error Err = ::split(Desc, '-', Split))
+    if (Error Err = split(Desc, '-', Split))
       return Err;
     Desc = Split.second;
 
     // Split at ':'.
-    if (Error Err = ::split(Split.first, ':', Split))
+    if (Error Err = split(Split.first, ':', Split))
       return Err;
 
     // Aliases used below.
@@ -274,7 +272,7 @@ Error DataLayout::parseSpecifier(StringRef Desc) {
 
     if (Tok == "ni") {
       do {
-        if (Error Err = ::split(Rest, ':', Split))
+        if (Error Err = split(Rest, ':', Split))
           return Err;
         Rest = Split.second;
         unsigned AS;
@@ -315,10 +313,10 @@ Error DataLayout::parseSpecifier(StringRef Desc) {
       if (Rest.empty())
         return reportError(
             "Missing size specification for pointer in datalayout string");
-      if (Error Err = ::split(Rest, ':', Split))
+      if (Error Err = split(Rest, ':', Split))
         return Err;
       unsigned PointerMemSize;
-      if (Error Err = getInt(Tok, PointerMemSize))
+      if (Error Err = getIntInBytes(Tok, PointerMemSize))
         return Err;
       if (!PointerMemSize)
         return reportError("Invalid pointer size of 0 bytes");
@@ -327,7 +325,7 @@ Error DataLayout::parseSpecifier(StringRef Desc) {
       if (Rest.empty())
         return reportError(
             "Missing alignment specification for pointer in datalayout string");
-      if (Error Err = ::split(Rest, ':', Split))
+      if (Error Err = split(Rest, ':', Split))
         return Err;
       unsigned PointerABIAlign;
       if (Error Err = getIntInBytes(Tok, PointerABIAlign))
@@ -342,7 +340,7 @@ Error DataLayout::parseSpecifier(StringRef Desc) {
       // Preferred alignment.
       unsigned PointerPrefAlign = PointerABIAlign;
       if (!Rest.empty()) {
-        if (Error Err = ::split(Rest, ':', Split))
+        if (Error Err = split(Rest, ':', Split))
           return Err;
         if (Error Err = getIntInBytes(Tok, PointerPrefAlign))
           return Err;
@@ -352,15 +350,15 @@ Error DataLayout::parseSpecifier(StringRef Desc) {
 
         // Now read the index. It is the second optional parameter here.
         if (!Rest.empty()) {
-          if (Error Err = ::split(Rest, ':', Split))
+          if (Error Err = split(Rest, ':', Split))
             return Err;
-          if (Error Err = getInt(Tok, IndexSize))
+          if (Error Err = getIntInBytes(Tok, IndexSize))
             return Err;
           if (!IndexSize)
             return reportError("Invalid index size of 0 bytes");
         }
       }
-      if (Error Err = setPointerAlignmentInBits(
+      if (Error Err = setPointerAlignment(
               AddrSpace, assumeAligned(PointerABIAlign),
               assumeAligned(PointerPrefAlign), PointerMemSize, IndexSize))
         return Err;
@@ -393,7 +391,7 @@ Error DataLayout::parseSpecifier(StringRef Desc) {
       if (Rest.empty())
         return reportError(
             "Missing alignment specification in datalayout string");
-      if (Error Err = ::split(Rest, ':', Split))
+      if (Error Err = split(Rest, ':', Split))
         return Err;
       unsigned ABIAlign;
       if (Error Err = getIntInBytes(Tok, ABIAlign))
@@ -410,7 +408,7 @@ Error DataLayout::parseSpecifier(StringRef Desc) {
       // Preferred alignment.
       unsigned PrefAlign = ABIAlign;
       if (!Rest.empty()) {
-        if (Error Err = ::split(Rest, ':', Split))
+        if (Error Err = split(Rest, ':', Split))
           return Err;
         if (Error Err = getIntInBytes(Tok, PrefAlign))
           return Err;
@@ -439,7 +437,7 @@ Error DataLayout::parseSpecifier(StringRef Desc) {
         LegalIntWidths.push_back(Width);
         if (Rest.empty())
           break;
-        if (Error Err = ::split(Rest, ':', Split))
+        if (Error Err = split(Rest, ':', Split))
           return Err;
       }
       break;
@@ -501,9 +499,6 @@ Error DataLayout::parseSpecifier(StringRef Desc) {
         return reportError("Unknown mangling in datalayout string");
       case 'e':
         ManglingMode = MM_ELF;
-        break;
-      case 'l':
-        ManglingMode = MM_GOFF;
         break;
       case 'o':
         ManglingMode = MM_MachO;
@@ -603,10 +598,9 @@ DataLayout::getPointerAlignElem(uint32_t AddressSpace) const {
   return Pointers[0];
 }
 
-Error DataLayout::setPointerAlignmentInBits(uint32_t AddrSpace, Align ABIAlign,
-                                            Align PrefAlign,
-                                            uint32_t TypeBitWidth,
-                                            uint32_t IndexBitWidth) {
+Error DataLayout::setPointerAlignment(uint32_t AddrSpace, Align ABIAlign,
+                                      Align PrefAlign, uint32_t TypeByteWidth,
+                                      uint32_t IndexWidth) {
   if (PrefAlign < ABIAlign)
     return reportError(
         "Preferred alignment cannot be less than the ABI alignment");
@@ -616,14 +610,13 @@ Error DataLayout::setPointerAlignmentInBits(uint32_t AddrSpace, Align ABIAlign,
     return A.AddressSpace < AddressSpace;
   });
   if (I == Pointers.end() || I->AddressSpace != AddrSpace) {
-    Pointers.insert(I,
-                    PointerAlignElem::getInBits(AddrSpace, ABIAlign, PrefAlign,
-                                                TypeBitWidth, IndexBitWidth));
+    Pointers.insert(I, PointerAlignElem::get(AddrSpace, ABIAlign, PrefAlign,
+                                             TypeByteWidth, IndexWidth));
   } else {
     I->ABIAlign = ABIAlign;
     I->PrefAlign = PrefAlign;
-    I->TypeBitWidth = TypeBitWidth;
-    I->IndexBitWidth = IndexBitWidth;
+    I->TypeByteWidth = TypeByteWidth;
+    I->IndexWidth = IndexWidth;
   }
   return Error::success();
 }
@@ -706,16 +699,15 @@ Align DataLayout::getPointerPrefAlignment(unsigned AS) const {
 }
 
 unsigned DataLayout::getPointerSize(unsigned AS) const {
-  return divideCeil(getPointerAlignElem(AS).TypeBitWidth, 8);
+  return getPointerAlignElem(AS).TypeByteWidth;
 }
 
-unsigned DataLayout::getMaxIndexSize() const {
-  unsigned MaxIndexSize = 0;
+unsigned DataLayout::getMaxPointerSize() const {
+  unsigned MaxPointerSize = 0;
   for (auto &P : Pointers)
-    MaxIndexSize =
-        std::max(MaxIndexSize, (unsigned)divideCeil(P.TypeBitWidth, 8));
+    MaxPointerSize = std::max(MaxPointerSize, P.TypeByteWidth);
 
-  return MaxIndexSize;
+  return MaxPointerSize;
 }
 
 unsigned DataLayout::getPointerTypeSizeInBits(Type *Ty) const {
@@ -726,7 +718,7 @@ unsigned DataLayout::getPointerTypeSizeInBits(Type *Ty) const {
 }
 
 unsigned DataLayout::getIndexSize(unsigned AS) const {
-  return divideCeil(getPointerAlignElem(AS).IndexBitWidth, 8);
+  return getPointerAlignElem(AS).IndexWidth;
 }
 
 unsigned DataLayout::getIndexTypeSizeInBits(Type *Ty) const {
@@ -808,11 +800,15 @@ Align DataLayout::getAlignment(Type *Ty, bool abi_or_pref) const {
 
     // By default, use natural alignment for vector types. This is consistent
     // with what clang and llvm-gcc do.
-    //
+    // TODO: This should probably not be using the alloc size.
+    unsigned Alignment =
+        getTypeAllocSize(cast<VectorType>(Ty)->getElementType());
     // We're only calculating a natural alignment, so it doesn't have to be
     // based on the full size for scalable vectors. Using the minimum element
     // count should be enough here.
-    return Align(PowerOf2Ceil(getTypeStoreSize(Ty).getKnownMinSize()));
+    Alignment *= cast<VectorType>(Ty)->getElementCount().getKnownMinValue();
+    Alignment = PowerOf2Ceil(Alignment);
+    return Align(Alignment);
   }
   case Type::X86_AMXTyID:
     return Align(64);
@@ -822,7 +818,7 @@ Align DataLayout::getAlignment(Type *Ty, bool abi_or_pref) const {
 }
 
 /// TODO: Remove this function once the transition to Align is over.
-uint64_t DataLayout::getABITypeAlignment(Type *Ty) const {
+unsigned DataLayout::getABITypeAlignment(Type *Ty) const {
   return getABITypeAlign(Ty).value();
 }
 
@@ -831,7 +827,7 @@ Align DataLayout::getABITypeAlign(Type *Ty) const {
 }
 
 /// TODO: Remove this function once the transition to Align is over.
-uint64_t DataLayout::getPrefTypeAlignment(Type *Ty) const {
+unsigned DataLayout::getPrefTypeAlignment(Type *Ty) const {
   return getPrefTypeAlign(Ty).value();
 }
 
@@ -902,75 +898,6 @@ int64_t DataLayout::getIndexedOffsetInType(Type *ElemTy,
   }
 
   return Result;
-}
-
-static APInt getElementIndex(TypeSize ElemSize, APInt &Offset) {
-  // Skip over scalable or zero size elements. Also skip element sizes larger
-  // than the positive index space, because the arithmetic below may not be
-  // correct in that case.
-  unsigned BitWidth = Offset.getBitWidth();
-  if (ElemSize.isScalable() || ElemSize == 0 ||
-      !isUIntN(BitWidth - 1, ElemSize)) {
-    return APInt::getZero(BitWidth);
-  }
-
-  APInt Index = Offset.sdiv(ElemSize);
-  Offset -= Index * ElemSize;
-  if (Offset.isNegative()) {
-    // Prefer a positive remaining offset to allow struct indexing.
-    --Index;
-    Offset += ElemSize;
-    assert(Offset.isNonNegative() && "Remaining offset shouldn't be negative");
-  }
-  return Index;
-}
-
-Optional<APInt> DataLayout::getGEPIndexForOffset(Type *&ElemTy,
-                                                 APInt &Offset) const {
-  if (auto *ArrTy = dyn_cast<ArrayType>(ElemTy)) {
-    ElemTy = ArrTy->getElementType();
-    return getElementIndex(getTypeAllocSize(ElemTy), Offset);
-  }
-
-  if (auto *VecTy = dyn_cast<VectorType>(ElemTy)) {
-    ElemTy = VecTy->getElementType();
-    unsigned ElemSizeInBits = getTypeSizeInBits(ElemTy).getFixedSize();
-    // GEPs over non-multiple of 8 size vector elements are invalid.
-    if (ElemSizeInBits % 8 != 0)
-      return None;
-
-    return getElementIndex(TypeSize::Fixed(ElemSizeInBits / 8), Offset);
-  }
-
-  if (auto *STy = dyn_cast<StructType>(ElemTy)) {
-    const StructLayout *SL = getStructLayout(STy);
-    uint64_t IntOffset = Offset.getZExtValue();
-    if (IntOffset >= SL->getSizeInBytes())
-      return None;
-
-    unsigned Index = SL->getElementContainingOffset(IntOffset);
-    Offset -= SL->getElementOffset(Index);
-    ElemTy = STy->getElementType(Index);
-    return APInt(32, Index);
-  }
-
-  // Non-aggregate type.
-  return None;
-}
-
-SmallVector<APInt> DataLayout::getGEPIndicesForOffset(Type *&ElemTy,
-                                                      APInt &Offset) const {
-  assert(ElemTy->isSized() && "Element type must be sized");
-  SmallVector<APInt> Indices;
-  Indices.push_back(getElementIndex(getTypeAllocSize(ElemTy), Offset));
-  while (Offset != 0) {
-    Optional<APInt> Index = getGEPIndexForOffset(ElemTy, Offset);
-    if (!Index)
-      break;
-    Indices.push_back(*Index);
-  }
-
-  return Indices;
 }
 
 /// getPreferredAlign - Return the preferred alignment of the specified global.

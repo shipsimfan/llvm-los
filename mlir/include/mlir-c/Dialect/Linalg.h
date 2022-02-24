@@ -18,9 +18,11 @@ extern "C" {
 #endif
 
 /// Apply the special region builder for the builtin named Linalg op.
-/// Assert that `mlirOp` is a builtin named Linalg op.
+/// The list of `capture` MlirValue is passed as-is to the region builder.
+/// Assert that `op` is a builtin named Linalg op.
 MLIR_CAPI_EXPORTED void
-mlirLinalgFillBuiltinNamedOpRegion(MlirOperation mlirOp);
+mlirLinalgFillBuiltinNamedOpRegion(MlirDialect linalgDialect, MlirOperation op,
+                                   intptr_t n, MlirValue const *mlirCaptures);
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Linalg, linalg);
 

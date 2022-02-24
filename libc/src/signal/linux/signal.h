@@ -9,8 +9,8 @@
 #ifndef LLVM_LIBC_SRC_SIGNAL_LINUX_SIGNAL_H
 #define LLVM_LIBC_SRC_SIGNAL_LINUX_SIGNAL_H
 
-#include "include/sys/syscall.h"          // For syscall numbers.
-#include "src/__support/OSUtil/syscall.h" // For internal syscall function.
+#include "config/linux/syscall.h" // For internal syscall function.
+#include "include/sys/syscall.h"  // For syscall numbers.
 
 #include "include/signal.h"
 
@@ -21,32 +21,32 @@ namespace __llvm_libc {
 // Using this internally defined type will make it easier in the future to port
 // to different architectures.
 struct Sigset {
-  sigset_t native_sigset;
+  sigset_t nativeSigset;
 
   constexpr static Sigset fullset() { return {-1UL}; }
-  constexpr static Sigset empty_set() { return {0}; }
+  constexpr static Sigset emptySet() { return {0}; }
 
-  constexpr void addset(int signal) { native_sigset |= (1L << (signal - 1)); }
+  constexpr void addset(int signal) { nativeSigset |= (1L << (signal - 1)); }
 
-  constexpr void delset(int signal) { native_sigset &= ~(1L << (signal - 1)); }
+  constexpr void delset(int signal) { nativeSigset &= ~(1L << (signal - 1)); }
 
-  operator sigset_t() const { return native_sigset; }
+  operator sigset_t() const { return nativeSigset; }
 };
 
-constexpr static Sigset ALL = Sigset::fullset();
+constexpr static Sigset all = Sigset::fullset();
 
 static inline int block_all_signals(Sigset &set) {
-  sigset_t native_sigset = ALL;
-  sigset_t old_set = set;
-  int ret = __llvm_libc::syscall(SYS_rt_sigprocmask, SIG_BLOCK, &native_sigset,
-                                 &old_set, sizeof(sigset_t));
-  set = {old_set};
+  sigset_t nativeSigset = all;
+  sigset_t oldSet = set;
+  int ret = __llvm_libc::syscall(SYS_rt_sigprocmask, SIG_BLOCK, &nativeSigset,
+                                 &oldSet, sizeof(sigset_t));
+  set = {oldSet};
   return ret;
 }
 
 static inline int restore_signals(const Sigset &set) {
-  sigset_t native_sigset = set;
-  return __llvm_libc::syscall(SYS_rt_sigprocmask, SIG_SETMASK, &native_sigset,
+  sigset_t nativeSigset = set;
+  return __llvm_libc::syscall(SYS_rt_sigprocmask, SIG_SETMASK, &nativeSigset,
                               nullptr, sizeof(sigset_t));
 }
 

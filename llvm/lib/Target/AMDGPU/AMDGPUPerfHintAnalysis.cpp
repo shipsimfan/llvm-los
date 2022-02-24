@@ -23,7 +23,6 @@
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetMachine.h"
 
@@ -119,27 +118,31 @@ private:
   bool isConstantAddr(const Value *V) const;
 };
 
-static std::pair<const Value *, const Type *> getMemoryInstrPtrAndType(
-    const Instruction *Inst) {
-  if (auto LI = dyn_cast<LoadInst>(Inst))
-    return {LI->getPointerOperand(), LI->getType()};
-  if (auto SI = dyn_cast<StoreInst>(Inst))
-    return {SI->getPointerOperand(), SI->getValueOperand()->getType()};
-  if (auto AI = dyn_cast<AtomicCmpXchgInst>(Inst))
-    return {AI->getPointerOperand(), AI->getCompareOperand()->getType()};
-  if (auto AI = dyn_cast<AtomicRMWInst>(Inst))
-    return {AI->getPointerOperand(), AI->getValOperand()->getType()};
-  if (auto MI = dyn_cast<AnyMemIntrinsic>(Inst))
-    return {MI->getRawDest(), Type::getInt8Ty(MI->getContext())};
+static const Value *getMemoryInstrPtr(const Instruction *Inst) {
+  if (auto LI = dyn_cast<LoadInst>(Inst)) {
+    return LI->getPointerOperand();
+  }
+  if (auto SI = dyn_cast<StoreInst>(Inst)) {
+    return SI->getPointerOperand();
+  }
+  if (auto AI = dyn_cast<AtomicCmpXchgInst>(Inst)) {
+    return AI->getPointerOperand();
+  }
+  if (auto AI = dyn_cast<AtomicRMWInst>(Inst)) {
+    return AI->getPointerOperand();
+  }
+  if (auto MI = dyn_cast<AnyMemIntrinsic>(Inst)) {
+    return MI->getRawDest();
+  }
 
-  return {nullptr, nullptr};
+  return nullptr;
 }
 
 bool AMDGPUPerfHint::isIndirectAccess(const Instruction *Inst) const {
   LLVM_DEBUG(dbgs() << "[isIndirectAccess] " << *Inst << '\n');
   SmallSet<const Value *, 32> WorkSet;
   SmallSet<const Value *, 32> Visited;
-  if (const Value *MO = getMemoryInstrPtrAndType(Inst).first) {
+  if (const Value *MO = getMemoryInstrPtr(Inst)) {
     if (isGlobalAddr(MO))
       WorkSet.insert(MO);
   }
@@ -205,20 +208,19 @@ AMDGPUPerfHintAnalysis::FuncInfo *AMDGPUPerfHint::visit(const Function &F) {
   for (auto &B : F) {
     LastAccess = MemAccessInfo();
     for (auto &I : B) {
-      if (const Type *Ty = getMemoryInstrPtrAndType(&I).second) {
-        unsigned Size = divideCeil(Ty->getPrimitiveSizeInBits(), 32);
+      if (getMemoryInstrPtr(&I)) {
         if (isIndirectAccess(&I))
-          FI.IAMInstCost += Size;
+          ++FI.IAMInstCount;
         if (isLargeStride(&I))
-          FI.LSMInstCost += Size;
-        FI.MemInstCost += Size;
-        FI.InstCost += Size;
+          ++FI.LSMInstCount;
+        ++FI.MemInstCount;
+        ++FI.InstCount;
         continue;
       }
       if (auto *CB = dyn_cast<CallBase>(&I)) {
         Function *Callee = CB->getCalledFunction();
         if (!Callee || Callee->isDeclaration()) {
-          ++FI.InstCost;
+          ++FI.InstCount;
           continue;
         }
         if (&F == Callee) // Handle immediate recursion
@@ -228,10 +230,10 @@ AMDGPUPerfHintAnalysis::FuncInfo *AMDGPUPerfHint::visit(const Function &F) {
         if (Loc == FIM.end())
           continue;
 
-        FI.MemInstCost += Loc->second.MemInstCost;
-        FI.InstCost += Loc->second.InstCost;
-        FI.IAMInstCost += Loc->second.IAMInstCost;
-        FI.LSMInstCost += Loc->second.LSMInstCost;
+        FI.MemInstCount += Loc->second.MemInstCount;
+        FI.InstCount += Loc->second.InstCount;
+        FI.IAMInstCount += Loc->second.IAMInstCount;
+        FI.LSMInstCount += Loc->second.LSMInstCount;
       } else if (auto *GEP = dyn_cast<GetElementPtrInst>(&I)) {
         TargetLoweringBase::AddrMode AM;
         auto *Ptr = GetPointerBaseWithConstantOffset(GEP, AM.BaseOffs, *DL);
@@ -241,9 +243,9 @@ AMDGPUPerfHintAnalysis::FuncInfo *AMDGPUPerfHint::visit(const Function &F) {
                                        GEP->getPointerAddressSpace()))
           // Offset will likely be folded into load or store
           continue;
-        ++FI.InstCost;
+        ++FI.InstCount;
       } else {
-        ++FI.InstCost;
+        ++FI.InstCount;
       }
     }
   }
@@ -261,38 +263,35 @@ bool AMDGPUPerfHint::runOnFunction(Function &F) {
 
   const AMDGPUPerfHintAnalysis::FuncInfo *Info = visit(F);
 
-  LLVM_DEBUG(dbgs() << F.getName() << " MemInst cost: " << Info->MemInstCost
+  LLVM_DEBUG(dbgs() << F.getName() << " MemInst: " << Info->MemInstCount
                     << '\n'
-                    << " IAMInst cost: " << Info->IAMInstCost << '\n'
-                    << " LSMInst cost: " << Info->LSMInstCost << '\n'
-                    << " TotalInst cost: " << Info->InstCost << '\n');
-
-  bool Changed = false;
+                    << " IAMInst: " << Info->IAMInstCount << '\n'
+                    << " LSMInst: " << Info->LSMInstCount << '\n'
+                    << " TotalInst: " << Info->InstCount << '\n');
 
   if (isMemBound(*Info)) {
     LLVM_DEBUG(dbgs() << F.getName() << " is memory bound\n");
     NumMemBound++;
     F.addFnAttr("amdgpu-memory-bound", "true");
-    Changed = true;
   }
 
   if (AMDGPU::isEntryFunctionCC(F.getCallingConv()) && needLimitWave(*Info)) {
     LLVM_DEBUG(dbgs() << F.getName() << " needs limit wave\n");
     NumLimitWave++;
     F.addFnAttr("amdgpu-wave-limiter", "true");
-    Changed = true;
   }
 
-  return Changed;
+  return true;
 }
 
 bool AMDGPUPerfHint::isMemBound(const AMDGPUPerfHintAnalysis::FuncInfo &FI) {
-  return FI.MemInstCost * 100 / FI.InstCost > MemBoundThresh;
+  return FI.MemInstCount * 100 / FI.InstCount > MemBoundThresh;
 }
 
 bool AMDGPUPerfHint::needLimitWave(const AMDGPUPerfHintAnalysis::FuncInfo &FI) {
-  return ((FI.MemInstCost + FI.IAMInstCost * IAWeight +
-           FI.LSMInstCost * LSWeight) * 100 / FI.InstCost) > LimitWaveThresh;
+  return ((FI.MemInstCount + FI.IAMInstCount * IAWeight +
+           FI.LSMInstCount * LSWeight) *
+          100 / FI.InstCount) > LimitWaveThresh;
 }
 
 bool AMDGPUPerfHint::isGlobalAddr(const Value *V) const {
@@ -324,7 +323,7 @@ bool AMDGPUPerfHint::isLargeStride(const Instruction *Inst) {
 AMDGPUPerfHint::MemAccessInfo
 AMDGPUPerfHint::makeMemAccessInfo(Instruction *Inst) const {
   MemAccessInfo MAI;
-  const Value *MO = getMemoryInstrPtrAndType(Inst).first;
+  const Value *MO = getMemoryInstrPtr(Inst);
 
   LLVM_DEBUG(dbgs() << "[isLargeStride] MO: " << *MO << '\n');
   // Do not treat local-addr memory access as large stride.

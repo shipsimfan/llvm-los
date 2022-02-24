@@ -6,7 +6,8 @@
 // be able to handle this case somehow (e.g. by using a different register for
 // DW_AT_frame_base) but at least we shouldn't get confused by it.
 
-// REQUIRES: pointer-tagging
+// Stack aliasing is not implemented on x86.
+// XFAIL: x86_64
 
 __attribute((noinline))
 char *buggy() {

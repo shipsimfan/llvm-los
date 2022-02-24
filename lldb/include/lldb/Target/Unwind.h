@@ -18,10 +18,10 @@ namespace lldb_private {
 class Unwind {
 protected:
   // Classes that inherit from Unwind can see and modify these
-  Unwind(Thread &thread) : m_thread(thread) {}
+  Unwind(Thread &thread) : m_thread(thread), m_unwind_mutex() {}
 
 public:
-  virtual ~Unwind() = default;
+  virtual ~Unwind() {}
 
   void Clear() {
     std::lock_guard<std::recursive_mutex> guard(m_unwind_mutex);

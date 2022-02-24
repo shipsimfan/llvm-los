@@ -73,13 +73,15 @@ private:
 } // end anonymous namespace
 
 MCCodeEmitter *llvm::createBPFMCCodeEmitter(const MCInstrInfo &MCII,
+                                            const MCRegisterInfo &MRI,
                                             MCContext &Ctx) {
-  return new BPFMCCodeEmitter(MCII, *Ctx.getRegisterInfo(), true);
+  return new BPFMCCodeEmitter(MCII, MRI, true);
 }
 
 MCCodeEmitter *llvm::createBPFbeMCCodeEmitter(const MCInstrInfo &MCII,
+                                              const MCRegisterInfo &MRI,
                                               MCContext &Ctx) {
-  return new BPFMCCodeEmitter(MCII, *Ctx.getRegisterInfo(), false);
+  return new BPFMCCodeEmitter(MCII, MRI, false);
 }
 
 unsigned BPFMCCodeEmitter::getMachineOpValue(const MCInst &MI,

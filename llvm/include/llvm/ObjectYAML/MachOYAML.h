@@ -76,7 +76,7 @@ struct LoadCommand {
   std::vector<Section> Sections;
   std::vector<MachO::build_tool_version> Tools;
   std::vector<llvm::yaml::Hex8> PayloadBytes;
-  std::string Content;
+  std::string PayloadString;
   uint64_t ZeroPadBytes;
 };
 
@@ -121,8 +121,6 @@ struct LinkEditData {
   MachOYAML::ExportEntry ExportTrie;
   std::vector<NListEntry> NameList;
   std::vector<StringRef> StringTable;
-  std::vector<yaml::Hex32> IndirectSymbols;
-  std::vector<yaml::Hex64> FunctionStarts;
 
   bool isEmpty() const;
 };
@@ -133,7 +131,6 @@ struct Object {
   std::vector<LoadCommand> LoadCommands;
   std::vector<Section> Sections;
   LinkEditData LinkEdit;
-  Optional<llvm::yaml::BinaryRef> RawLinkEditSegment;
   DWARFYAML::Data DWARF;
 };
 

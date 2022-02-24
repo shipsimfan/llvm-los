@@ -5,24 +5,23 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-
+//
+// UNSUPPORTED: libcpp-has-no-threads
 // XFAIL: !non-lockfree-atomics
+//  ... assertion fails line 38
 
 // <atomic>
 
 // template <class T>
 //     bool
-//     atomic_compare_exchange_weak_explicit(volatile atomic<T>*,
-//                                           atomic<T>::value_type*,
-//                                           atomic<T>::value_type,
-//                                           memory_order, memory_order) noexcept;
+//     atomic_compare_exchange_weak_explicit(volatile atomic<T>* obj, T* expc,
+//                                           T desr,
+//                                           memory_order s, memory_order f);
 //
 // template <class T>
 //     bool
-//     atomic_compare_exchange_weak_explicit(atomic<T>*,
-//                                           atomic<T>::value_type*,
-//                                           atomic<T>::value_type,
-//                                           memory_order, memory_order) noexcept;
+//     atomic_compare_exchange_weak_explicit(atomic<T>* obj, T* expc, T desr,
+//                                           memory_order s, memory_order f);
 
 #include <atomic>
 #include <type_traits>
@@ -38,8 +37,9 @@ struct TestFn {
   void operator()() const {
     {
         typedef std::atomic<T> A;
+        A a;
         T t(T(1));
-        A a(t);
+        std::atomic_init(&a, t);
         assert(c_cmpxchg_weak_loop(&a, &t, T(2),
                std::memory_order_seq_cst, std::memory_order_seq_cst) == true);
         assert(a == T(2));
@@ -48,14 +48,12 @@ struct TestFn {
                std::memory_order_seq_cst, std::memory_order_seq_cst) == false);
         assert(a == T(2));
         assert(t == T(2));
-
-        ASSERT_NOEXCEPT(std::atomic_compare_exchange_weak_explicit(&a, &t, T(3), std::memory_order_seq_cst,
-                                                                   std::memory_order_seq_cst));
     }
     {
         typedef std::atomic<T> A;
+        volatile A a;
         T t(T(1));
-        volatile A a(t);
+        std::atomic_init(&a, t);
         assert(c_cmpxchg_weak_loop(&a, &t, T(2),
                std::memory_order_seq_cst, std::memory_order_seq_cst) == true);
         assert(a == T(2));
@@ -64,9 +62,6 @@ struct TestFn {
                std::memory_order_seq_cst, std::memory_order_seq_cst) == false);
         assert(a == T(2));
         assert(t == T(2));
-
-        ASSERT_NOEXCEPT(std::atomic_compare_exchange_weak_explicit(&a, &t, T(3), std::memory_order_seq_cst,
-                                                                   std::memory_order_seq_cst));
     }
   }
 };

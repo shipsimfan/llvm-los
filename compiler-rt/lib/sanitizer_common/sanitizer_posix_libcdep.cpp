@@ -128,6 +128,14 @@ void SetAddressSpaceUnlimited() {
   CHECK(AddressSpaceIsUnlimited());
 }
 
+void SleepForSeconds(int seconds) {
+  sleep(seconds);
+}
+
+void SleepForMillis(int millis) {
+  usleep(millis * 1000);
+}
+
 void Abort() {
 #if !SANITIZER_GO
   // If we are handling SIGABRT, unhandle it first.
@@ -135,7 +143,7 @@ void Abort() {
   if (GetHandleSignalMode(SIGABRT) != kHandleSignalNo) {
     struct sigaction sigact;
     internal_memset(&sigact, 0, sizeof(sigact));
-    sigact.sa_handler = SIG_DFL;
+    sigact.sa_sigaction = (sa_sigaction_t)SIG_DFL;
     internal_sigaction(SIGABRT, &sigact, nullptr);
   }
 #endif
@@ -151,8 +159,6 @@ int Atexit(void (*function)(void)) {
 #endif
 }
 
-bool CreateDir(const char *pathname) { return mkdir(pathname, 0755) == 0; }
-
 bool SupportsColoredOutput(fd_t fd) {
   return isatty(fd) != 0;
 }
@@ -160,10 +166,9 @@ bool SupportsColoredOutput(fd_t fd) {
 #if !SANITIZER_GO
 // TODO(glider): different tools may require different altstack size.
 static uptr GetAltStackSize() {
-  // Note: since GLIBC_2.31, SIGSTKSZ may be a function call, so this may be
-  // more costly that you think. However GetAltStackSize is only call 2-3 times
-  // per thread so don't cache the evaluation.
-  return SIGSTKSZ * 4;
+  // SIGSTKSZ is not enough.
+  static const uptr kAltStackSize = SIGSTKSZ * 4;
+  return kAltStackSize;
 }
 
 void SetAlternateSignalStack() {
@@ -290,7 +295,7 @@ bool IsAccessibleMemoryRange(uptr beg, uptr size) {
   return result;
 }
 
-void PlatformPrepareForSandboxing(void *args) {
+void PlatformPrepareForSandboxing(__sanitizer_sandbox_arguments *args) {
   // Some kinds of sandboxes may forbid filesystem access, so we won't be able
   // to read the file mappings from /proc/self/maps. Luckily, neither the
   // process will be able to load additional libraries, so it's fine to use the

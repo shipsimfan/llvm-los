@@ -16,7 +16,6 @@
 #include "ResourceScriptToken.h"
 #include "ResourceVisitor.h"
 
-#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/StringSet.h"
 
 namespace llvm {
@@ -139,14 +138,14 @@ private:
 
 public:
   IntOrString() : IntOrString(RCInt(0)) {}
-  IntOrString(uint32_t Value) : Data(Value), IsInt(true) {}
-  IntOrString(RCInt Value) : Data(Value), IsInt(true) {}
-  IntOrString(StringRef Value) : Data(Value), IsInt(false) {}
+  IntOrString(uint32_t Value) : Data(Value), IsInt(1) {}
+  IntOrString(RCInt Value) : Data(Value), IsInt(1) {}
+  IntOrString(StringRef Value) : Data(Value), IsInt(0) {}
   IntOrString(const RCToken &Token)
       : Data(Token), IsInt(Token.kind() == RCToken::Kind::Int) {}
 
   bool equalsLower(const char *Str) {
-    return !IsInt && Data.String.equals_insensitive(Str);
+    return !IsInt && Data.String.equals_lower(Str);
   }
 
   bool isInt() const { return IsInt; }
@@ -769,10 +768,10 @@ class VersionInfoValue : public VersionInfoStmt {
 public:
   StringRef Key;
   std::vector<IntOrString> Values;
-  BitVector HasPrecedingComma;
+  std::vector<bool> HasPrecedingComma;
 
   VersionInfoValue(StringRef InfoKey, std::vector<IntOrString> &&Vals,
-                   BitVector &&CommasBeforeVals)
+                   std::vector<bool> &&CommasBeforeVals)
       : Key(InfoKey), Values(std::move(Vals)),
         HasPrecedingComma(std::move(CommasBeforeVals)) {}
   raw_ostream &log(raw_ostream &) const override;

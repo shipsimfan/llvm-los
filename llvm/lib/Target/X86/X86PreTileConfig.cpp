@@ -25,7 +25,6 @@
 
 #include "X86.h"
 #include "X86InstrBuilder.h"
-#include "X86MachineFunctionInfo.h"
 #include "X86RegisterInfo.h"
 #include "X86Subtarget.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -126,13 +125,8 @@ class X86PreTileConfig : public MachineFunctionPass {
 
   /// Check if it is an edge from loop bottom to loop head.
   bool isLoopBackEdge(MachineBasicBlock *Header, MachineBasicBlock *Bottom) {
-    if (!MLI->isLoopHeader(Header))
-      return false;
-    auto *ML = MLI->getLoopFor(Header);
-    if (ML->contains(Bottom) && ML->isLoopLatch(Bottom))
-      return true;
-
-    return false;
+    return MLI->isLoopHeader(Header) &&
+           MLI->getLoopFor(Header)->getBottomBlock() == Bottom;
   }
 
   /// Collect the shape def information for later use.
@@ -236,7 +230,6 @@ bool X86PreTileConfig::runOnMachineFunction(MachineFunction &MF) {
   const TargetInstrInfo *TII = ST.getInstrInfo();
   const TargetRegisterInfo *TRI = ST.getRegisterInfo();
   const TargetRegisterClass *RC = TRI->getRegClass(X86::TILERegClassID);
-  X86MachineFunctionInfo *X86FI = MF.getInfo<X86MachineFunctionInfo>();
 
   BitVector AMXRegs(TRI->getNumRegs());
   for (unsigned I = 0; I < RC->getNumRegs(); I++)
@@ -296,7 +289,6 @@ bool X86PreTileConfig::runOnMachineFunction(MachineFunction &MF) {
   // There's no AMX instruction if we didn't find a tile config live in point.
   if (CfgNeedInsert.empty())
     return false;
-  X86FI->setHasVirtualTileReg(true);
 
   // Avoid to insert ldtilecfg before any shape defs.
   SmallVector<MachineBasicBlock *, 8> WorkList;
@@ -326,7 +318,7 @@ bool X86PreTileConfig::runOnMachineFunction(MachineFunction &MF) {
       ST.getTileConfigSize(), ST.getTileConfigAlignment(), false);
 
   // Try to insert for the tile config live in points.
-  for (const auto &I : CfgNeedInsert) {
+  for (auto I : CfgNeedInsert) {
     SmallSet<MIRef, 8> InsertPoints;
     SmallVector<MIRef, 8> WorkList({I});
     while (!WorkList.empty()) {

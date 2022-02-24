@@ -123,7 +123,7 @@ void ForwardDeclarationNamespaceCheck::onEndOfTranslationUnit() {
       if (CurDecl->hasDefinition() || CurDecl->isReferenced()) {
         continue; // Skip forward declarations that are used/referenced.
       }
-      if (FriendTypes.contains(CurDecl->getTypeForDecl())) {
+      if (FriendTypes.count(CurDecl->getTypeForDecl()) != 0) {
         continue; // Skip forward declarations referenced as friend.
       }
       if (CurDecl->getLocation().isMacroID() ||

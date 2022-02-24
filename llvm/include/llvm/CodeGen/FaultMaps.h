@@ -18,6 +18,7 @@ namespace llvm {
 
 class AsmPrinter;
 class MCExpr;
+class raw_ostream;
 
 class FaultMaps {
 public:

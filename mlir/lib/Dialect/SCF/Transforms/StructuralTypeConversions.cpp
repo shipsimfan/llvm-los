@@ -21,7 +21,7 @@ class ConvertForOpTypes : public OpConversionPattern<ForOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(ForOp op, OpAdaptor adaptor,
+  matchAndRewrite(ForOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     SmallVector<Type, 6> newResultTypes;
     for (auto type : op.getResultTypes()) {
@@ -63,7 +63,7 @@ public:
     }
     // Change the clone to use the updated operands. We could have cloned with
     // a BlockAndValueMapping, but this seems a bit more direct.
-    newOp->setOperands(adaptor.getOperands());
+    newOp->setOperands(operands);
     // Update the result types to the new converted types.
     for (auto t : llvm::zip(newOp.getResults(), newResultTypes))
       std::get<0>(t).setType(std::get<1>(t));
@@ -79,7 +79,7 @@ class ConvertIfOpTypes : public OpConversionPattern<IfOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(IfOp op, OpAdaptor adaptor,
+  matchAndRewrite(IfOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     // TODO: Generalize this to any type conversion, not just 1:1.
     //
@@ -102,13 +102,13 @@ public:
     // See comments in the ForOp pattern for why we clone without regions and
     // then inline.
     IfOp newOp = cast<IfOp>(rewriter.cloneWithoutRegions(*op.getOperation()));
-    rewriter.inlineRegionBefore(op.getThenRegion(), newOp.getThenRegion(),
-                                newOp.getThenRegion().end());
-    rewriter.inlineRegionBefore(op.getElseRegion(), newOp.getElseRegion(),
-                                newOp.getElseRegion().end());
+    rewriter.inlineRegionBefore(op.thenRegion(), newOp.thenRegion(),
+                                newOp.thenRegion().end());
+    rewriter.inlineRegionBefore(op.elseRegion(), newOp.elseRegion(),
+                                newOp.elseRegion().end());
 
     // Update the operands and types.
-    newOp->setOperands(adaptor.getOperands());
+    newOp->setOperands(operands);
     for (auto t : llvm::zip(newOp.getResults(), newResultTypes))
       std::get<0>(t).setType(std::get<1>(t));
     rewriter.replaceOp(op, newOp.getResults());
@@ -125,51 +125,9 @@ class ConvertYieldOpTypes : public OpConversionPattern<scf::YieldOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(scf::YieldOp op, OpAdaptor adaptor,
+  matchAndRewrite(scf::YieldOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<scf::YieldOp>(op, adaptor.getOperands());
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-class ConvertWhileOpTypes : public OpConversionPattern<WhileOp> {
-public:
-  using OpConversionPattern<WhileOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(WhileOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto *converter = getTypeConverter();
-    assert(converter);
-    SmallVector<Type> newResultTypes;
-    if (failed(converter->convertTypes(op.getResultTypes(), newResultTypes)))
-      return failure();
-
-    auto newOp = rewriter.create<WhileOp>(op.getLoc(), newResultTypes,
-                                          adaptor.getOperands());
-    for (auto i : {0u, 1u}) {
-      auto &dstRegion = newOp.getRegion(i);
-      rewriter.inlineRegionBefore(op.getRegion(i), dstRegion, dstRegion.end());
-      if (failed(rewriter.convertRegionTypes(&dstRegion, *converter)))
-        return rewriter.notifyMatchFailure(op, "could not convert body types");
-    }
-    rewriter.replaceOp(op, newOp.getResults());
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-class ConvertConditionOpTypes : public OpConversionPattern<ConditionOp> {
-public:
-  using OpConversionPattern<ConditionOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(ConditionOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.updateRootInPlace(
-        op, [&]() { op->setOperands(adaptor.getOperands()); });
+    rewriter.replaceOpWithNewOp<scf::YieldOp>(op, operands);
     return success();
   }
 };
@@ -178,8 +136,7 @@ public:
 void mlir::scf::populateSCFStructuralTypeConversionsAndLegality(
     TypeConverter &typeConverter, RewritePatternSet &patterns,
     ConversionTarget &target) {
-  patterns.add<ConvertForOpTypes, ConvertIfOpTypes, ConvertYieldOpTypes,
-               ConvertWhileOpTypes, ConvertConditionOpTypes>(
+  patterns.add<ConvertForOpTypes, ConvertIfOpTypes, ConvertYieldOpTypes>(
       typeConverter, patterns.getContext());
   target.addDynamicallyLegalOp<ForOp, IfOp>([&](Operation *op) {
     return typeConverter.isLegal(op->getResultTypes());
@@ -187,10 +144,8 @@ void mlir::scf::populateSCFStructuralTypeConversionsAndLegality(
   target.addDynamicallyLegalOp<scf::YieldOp>([&](scf::YieldOp op) {
     // We only have conversions for a subset of ops that use scf.yield
     // terminators.
-    if (!isa<ForOp, IfOp, WhileOp>(op->getParentOp()))
+    if (!isa<ForOp, IfOp>(op->getParentOp()))
       return true;
     return typeConverter.isLegal(op.getOperandTypes());
   });
-  target.addDynamicallyLegalOp<WhileOp, ConditionOp>(
-      [&](Operation *op) { return typeConverter.isLegal(op); });
 }

@@ -15,7 +15,6 @@
 
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/StorageUniquerSupport.h"
-#include "mlir/IR/Types.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/Twine.h"
 
@@ -31,18 +30,14 @@ class Type;
 /// a registered Attribute.
 class AbstractAttribute {
 public:
-  using HasTraitFn = llvm::unique_function<bool(TypeID) const>;
-
   /// Look up the specified abstract attribute in the MLIRContext and return a
   /// reference to it.
   static const AbstractAttribute &lookup(TypeID typeID, MLIRContext *context);
 
   /// This method is used by Dialect objects when they register the list of
   /// attributes they contain.
-  template <typename T>
-  static AbstractAttribute get(Dialect &dialect) {
-    return AbstractAttribute(dialect, T::getInterfaceMap(), T::getHasTraitFn(),
-                             T::getTypeID());
+  template <typename T> static AbstractAttribute get(Dialect &dialect) {
+    return AbstractAttribute(dialect, T::getInterfaceMap(), T::getTypeID());
   }
 
   /// Return the dialect this attribute was registered to.
@@ -51,56 +46,27 @@ public:
   /// Returns an instance of the concept object for the given interface if it
   /// was registered to this attribute, null otherwise. This should not be used
   /// directly.
-  template <typename T>
-  typename T::Concept *getInterface() const {
+  template <typename T> typename T::Concept *getInterface() const {
     return interfaceMap.lookup<T>();
   }
-
-  /// Returns true if the attribute has the interface with the given ID
-  /// registered.
-  bool hasInterface(TypeID interfaceID) const {
-    return interfaceMap.contains(interfaceID);
-  }
-
-  /// Returns true if the attribute has a particular trait.
-  template <template <typename T> class Trait>
-  bool hasTrait() const {
-    return hasTraitFn(TypeID::get<Trait>());
-  }
-
-  /// Returns true if the attribute has a particular trait.
-  bool hasTrait(TypeID traitID) const { return hasTraitFn(traitID); }
 
   /// Return the unique identifier representing the concrete attribute class.
   TypeID getTypeID() const { return typeID; }
 
 private:
   AbstractAttribute(Dialect &dialect, detail::InterfaceMap &&interfaceMap,
-                    HasTraitFn &&hasTrait, TypeID typeID)
+                    TypeID typeID)
       : dialect(dialect), interfaceMap(std::move(interfaceMap)),
-        hasTraitFn(std::move(hasTrait)), typeID(typeID) {}
-
-  /// Give StorageUserBase access to the mutable lookup.
-  template <typename ConcreteT, typename BaseT, typename StorageT,
-            typename UniquerT, template <typename T> class... Traits>
-  friend class detail::StorageUserBase;
-
-  /// Look up the specified abstract attribute in the MLIRContext and return a
-  /// (mutable) pointer to it. Return a null pointer if the attribute could not
-  /// be found in the context.
-  static AbstractAttribute *lookupMutable(TypeID typeID, MLIRContext *context);
+        typeID(typeID) {}
 
   /// This is the dialect that this attribute was registered to.
-  const Dialect &dialect;
+  Dialect &dialect;
 
   /// This is a collection of the interfaces registered to this attribute.
   detail::InterfaceMap interfaceMap;
 
-  /// Function to check if the attribute has a particular trait.
-  HasTraitFn hasTraitFn;
-
   /// The unique identifier of the derived Attribute class.
-  const TypeID typeID;
+  TypeID typeID;
 };
 
 //===----------------------------------------------------------------------===//
@@ -109,7 +75,7 @@ private:
 
 namespace detail {
 class AttributeUniquer;
-} // namespace detail
+} // end namespace detail
 
 /// Base storage class appearing in an attribute. Derived storage classes should
 /// only be constructed within the context of the AttributeUniquer.
@@ -119,7 +85,7 @@ class alignas(8) AttributeStorage : public StorageUniquer::BaseStorage {
 
 public:
   /// Get the type of this attribute.
-  Type getType() const { return type; }
+  Type getType() const;
 
   /// Return the abstract descriptor for this attribute.
   const AbstractAttribute &getAbstractAttribute() const {
@@ -132,27 +98,24 @@ protected:
   /// Note: All attributes require a valid type. If no type is provided here,
   ///       the type of the attribute will automatically default to NoneType
   ///       upon initialization in the uniquer.
-  AttributeStorage(Type type = nullptr) : type(type) {}
+  AttributeStorage(Type type);
+  AttributeStorage();
 
   /// Set the type of this attribute.
-  void setType(Type newType) { type = newType; }
+  void setType(Type type);
 
-  /// Set the abstract attribute for this storage instance. This is used by the
-  /// AttributeUniquer when initializing a newly constructed storage object.
-  void initializeAbstractAttribute(const AbstractAttribute &abstractAttr) {
+  // Set the abstract attribute for this storage instance. This is used by the
+  // AttributeUniquer when initializing a newly constructed storage object.
+  void initialize(const AbstractAttribute &abstractAttr) {
     abstractAttribute = &abstractAttr;
   }
 
-  /// Default initialization for attribute storage classes that require no
-  /// additional initialization.
-  void initialize(MLIRContext *context) {}
-
 private:
-  /// The type of the attribute value.
-  Type type;
-
   /// The abstract descriptor for this attribute.
-  const AbstractAttribute *abstractAttribute = nullptr;
+  const AbstractAttribute *abstractAttribute;
+
+  /// The opaque type of the attribute value.
+  const void *type;
 };
 
 /// Default storage type for attributes that require no additional
@@ -183,19 +146,14 @@ public:
 #ifndef NDEBUG
     if (!ctx->getAttributeUniquer().isParametricStorageInitialized(
             T::getTypeID()))
-      llvm::report_fatal_error(
-          llvm::Twine("can't create Attribute '") + llvm::getTypeName<T>() +
-          "' because storage uniquer isn't initialized: the dialect was likely "
-          "not loaded, or the attribute wasn't added with addAttributes<...>() "
-          "in the Dialect::initialize() method.");
+      llvm::report_fatal_error(llvm::Twine("can't create Attribute '") +
+                               llvm::getTypeName<T>() +
+                               "' because storage uniquer isn't initialized: "
+                               "the dialect was likely not loaded.");
 #endif
     return ctx->getAttributeUniquer().get<typename T::ImplType>(
         [ctx](AttributeStorage *storage) {
           initializeAttributeStorage(storage, ctx, T::getTypeID());
-
-          // Execute any additional attribute storage initialization with the
-          // context.
-          static_cast<typename T::ImplType *>(storage)->initialize(ctx);
         },
         T::getTypeID(), std::forward<Args>(args)...);
   }
@@ -207,11 +165,10 @@ public:
 #ifndef NDEBUG
     if (!ctx->getAttributeUniquer().isSingletonStorageInitialized(
             T::getTypeID()))
-      llvm::report_fatal_error(
-          llvm::Twine("can't create Attribute '") + llvm::getTypeName<T>() +
-          "' because storage uniquer isn't initialized: the dialect was likely "
-          "not loaded, or the attribute wasn't added with addAttributes<...>() "
-          "in the Dialect::initialize() method.");
+      llvm::report_fatal_error(llvm::Twine("can't create Attribute '") +
+                               llvm::getTypeName<T>() +
+                               "' because storage uniquer isn't initialized: "
+                               "the dialect was likely not loaded.");
 #endif
     return ctx->getAttributeUniquer().get<typename T::ImplType>(T::getTypeID());
   }
@@ -251,6 +208,6 @@ private:
 };
 } // namespace detail
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif

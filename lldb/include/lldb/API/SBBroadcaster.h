@@ -77,7 +77,7 @@ protected:
 
 private:
   lldb::BroadcasterSP m_opaque_sp;
-  lldb_private::Broadcaster *m_opaque_ptr = nullptr;
+  lldb_private::Broadcaster *m_opaque_ptr;
 };
 
 } // namespace lldb

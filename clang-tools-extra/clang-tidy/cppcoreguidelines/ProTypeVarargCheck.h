@@ -28,8 +28,6 @@ public:
     return LangOpts.CPlusPlus;
   }
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
-  void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
-                           Preprocessor *ModuleExpanderPP) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 };
 

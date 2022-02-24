@@ -13,7 +13,6 @@
 #include "lldb/Host/FileSystem.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Host/ProcessLaunchInfo.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
 
@@ -21,7 +20,7 @@
 #include "llvm/Support/FileSystem.h"
 
 #if !defined(_WIN32)
-#include <climits>
+#include <limits.h>
 #endif
 
 using namespace lldb;
@@ -31,9 +30,10 @@ using namespace lldb_private;
 
 ProcessLaunchInfo::ProcessLaunchInfo()
     : ProcessInfo(), m_working_dir(), m_plugin_name(), m_flags(0),
-      m_file_actions(), m_pty(new PseudoTerminal), m_monitor_callback(nullptr),
-      m_listener_sp(), m_hijack_listener_sp(), m_scripted_process_class_name(),
-      m_scripted_process_dictionary_sp() {}
+      m_file_actions(), m_pty(new PseudoTerminal), m_resume_count(0),
+      m_monitor_callback(nullptr), m_monitor_callback_baton(nullptr),
+      m_monitor_signals(false), m_listener_sp(), m_hijack_listener_sp(),
+      m_scripted_process_class_name(), m_scripted_process_dictionary_sp() {}
 
 ProcessLaunchInfo::ProcessLaunchInfo(const FileSpec &stdin_file_spec,
                                      const FileSpec &stdout_file_spec,
@@ -184,7 +184,7 @@ void ProcessLaunchInfo::SetMonitorProcessCallback(
 }
 
 bool ProcessLaunchInfo::NoOpMonitorCallback(lldb::pid_t pid, bool exited, int signal, int status) {
-  Log *log = GetLog(LLDBLog::Process);
+  Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS);
   LLDB_LOG(log, "pid = {0}, exited = {1}, signal = {2}, status = {3}", pid,
            exited, signal, status);
   return true;
@@ -196,7 +196,8 @@ bool ProcessLaunchInfo::MonitorProcess() const {
     Host::StartMonitoringChildProcess(m_monitor_callback, GetProcessID(),
                                       m_monitor_signals);
     if (!maybe_thread)
-      LLDB_LOG(GetLog(LLDBLog::Host), "failed to launch host thread: {}",
+      LLDB_LOG(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST),
+               "failed to launch host thread: {}",
                llvm::toString(maybe_thread.takeError()));
     return true;
   }
@@ -211,15 +212,7 @@ void ProcessLaunchInfo::SetDetachOnError(bool enable) {
 }
 
 llvm::Error ProcessLaunchInfo::SetUpPtyRedirection() {
-  Log *log = GetLog(LLDBLog::Process);
-
-  bool stdin_free = GetFileActionForFD(STDIN_FILENO) == nullptr;
-  bool stdout_free = GetFileActionForFD(STDOUT_FILENO) == nullptr;
-  bool stderr_free = GetFileActionForFD(STDERR_FILENO) == nullptr;
-  bool any_free = stdin_free || stdout_free || stderr_free;
-  if (!any_free)
-    return llvm::Error::success();
-
+  Log *log = GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS);
   LLDB_LOG(log, "Generating a pty to use for stdin/out/err");
 
   int open_flags = O_RDWR | O_NOCTTY;
@@ -234,13 +227,19 @@ llvm::Error ProcessLaunchInfo::SetUpPtyRedirection() {
 
   const FileSpec secondary_file_spec(m_pty->GetSecondaryName());
 
-  if (stdin_free)
+  // Only use the secondary tty if we don't have anything specified for
+  // input and don't have an action for stdin
+  if (GetFileActionForFD(STDIN_FILENO) == nullptr)
     AppendOpenFileAction(STDIN_FILENO, secondary_file_spec, true, false);
 
-  if (stdout_free)
+  // Only use the secondary tty if we don't have anything specified for
+  // output and don't have an action for stdout
+  if (GetFileActionForFD(STDOUT_FILENO) == nullptr)
     AppendOpenFileAction(STDOUT_FILENO, secondary_file_spec, false, true);
 
-  if (stderr_free)
+  // Only use the secondary tty if we don't have anything specified for
+  // error and don't have an action for stderr
+  if (GetFileActionForFD(STDERR_FILENO) == nullptr)
     AppendOpenFileAction(STDERR_FILENO, secondary_file_spec, false, true);
   return llvm::Error::success();
 }

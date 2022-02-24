@@ -11,37 +11,40 @@
 #define _LIBCPP___ITERATOR_ITERATOR_TRAITS_H
 
 #include <__config>
+#include <concepts>
 #include <__iterator/incrementable_traits.h>
 #include <__iterator/readable_traits.h>
-#include <concepts>
 #include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
-#  pragma GCC system_header
+#pragma GCC system_header
 #endif
+
+_LIBCPP_PUSH_MACROS
+#include <__undef_macros>
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if !defined(_LIBCPP_HAS_NO_CONCEPTS)
+#if !defined(_LIBCPP_HAS_NO_RANGES)
 
 template <class _Tp>
 using __with_reference = _Tp&;
 
 template <class _Tp>
-concept __can_reference = requires {
+concept __referenceable = requires {
   typename __with_reference<_Tp>;
 };
 
 template <class _Tp>
 concept __dereferenceable = requires(_Tp& __t) {
-  { *__t } -> __can_reference; // not required to be equality-preserving
+  { *__t } -> __referenceable; // not required to be equality-preserving
 };
 
 // [iterator.traits]
 template<__dereferenceable _Tp>
 using iter_reference_t = decltype(*declval<_Tp&>());
 
-#endif // !defined(_LIBCPP_HAS_NO_CONCEPTS)
+#endif // !defined(_LIBCPP_HAS_NO_RANGES)
 
 template <class _Iter>
 struct _LIBCPP_TEMPLATE_VIS iterator_traits;
@@ -76,7 +79,7 @@ struct __iter_concept_category_test {
 };
 struct __iter_concept_random_fallback {
   template <class _Iter>
-  using _Apply = __enable_if_t<
+  using _Apply = _EnableIf<
                           __is_primary_template<iterator_traits<_Iter> >::value,
                           random_access_iterator_tag
                         >;
@@ -139,7 +142,7 @@ public:
     static const bool value = sizeof(__test<_Tp>(nullptr)) == 1;
 };
 
-#if !defined(_LIBCPP_HAS_NO_CONCEPTS)
+#if !defined(_LIBCPP_HAS_NO_RANGES)
 
 // The `cpp17-*-iterator` exposition-only concepts are easily confused with the Cpp17*Iterator tables,
 // so they've been banished to a namespace that makes it obvious they have a niche use-case.
@@ -147,9 +150,9 @@ namespace __iterator_traits_detail {
 template<class _Ip>
 concept __cpp17_iterator =
   requires(_Ip __i) {
-    {   *__i } -> __can_reference;
+    {   *__i } -> __referenceable;
     {  ++__i } -> same_as<_Ip&>;
-    { *__i++ } -> __can_reference;
+    { *__i++ } -> __referenceable;
   } &&
   copyable<_Ip>;
 
@@ -190,8 +193,8 @@ concept __cpp17_bidirectional_iterator =
 
 template<class _Ip>
 concept __cpp17_random_access_iterator =
-  __cpp17_bidirectional_iterator<_Ip> &&
-  totally_ordered<_Ip> &&
+  __cpp17_bidirectional_iterator<_Ip> and
+  totally_ordered<_Ip> and
   requires(_Ip __i, typename incrementable_traits<_Ip>::difference_type __n) {
     { __i += __n } -> same_as<_Ip&>;
     { __i -= __n } -> same_as<_Ip&>;
@@ -252,7 +255,13 @@ struct __iterator_traits_member_pointer_or_arrow_or_void<_Ip> { using type = typ
 // Otherwise, if `decltype(declval<I&>().operator->())` is well-formed, then `pointer` names that
 // type.
 template<class _Ip>
-  requires requires(_Ip& __i) { __i.operator->(); } && (!__has_member_pointer<_Ip>)
+concept __has_arrow =
+  requires(_Ip& __i) {
+    __i.operator->();
+  };
+
+template<class _Ip>
+  requires __has_arrow<_Ip> && (!__has_member_pointer<_Ip>)
 struct __iterator_traits_member_pointer_or_arrow_or_void<_Ip> {
   using type = decltype(declval<_Ip&>().operator->());
 };
@@ -362,7 +371,7 @@ struct iterator_traits : __iterator_traits<_Ip> {
   using __primary_template = iterator_traits;
 };
 
-#else // !defined(_LIBCPP_HAS_NO_CONCEPTS)
+#else // !defined(_LIBCPP_HAS_NO_RANGES)
 
 template <class _Iter, bool> struct __iterator_traits {};
 
@@ -399,10 +408,10 @@ struct _LIBCPP_TEMPLATE_VIS iterator_traits
 
   using __primary_template = iterator_traits;
 };
-#endif // !defined(_LIBCPP_HAS_NO_CONCEPTS)
+#endif // !defined(_LIBCPP_HAS_NO_RANGES)
 
 template<class _Tp>
-#if !defined(_LIBCPP_HAS_NO_CONCEPTS)
+#if !defined(_LIBCPP_HAS_NO_RANGES)
 requires is_object_v<_Tp>
 #endif
 struct _LIBCPP_TEMPLATE_VIS iterator_traits<_Tp*>
@@ -419,7 +428,7 @@ struct _LIBCPP_TEMPLATE_VIS iterator_traits<_Tp*>
 
 template <class _Tp, class _Up, bool = __has_iterator_category<iterator_traits<_Tp> >::value>
 struct __has_iterator_category_convertible_to
-    : is_convertible<typename iterator_traits<_Tp>::iterator_category, _Up>
+    : _BoolConstant<is_convertible<typename iterator_traits<_Tp>::iterator_category, _Up>::value>
 {};
 
 template <class _Tp, class _Up>
@@ -427,7 +436,7 @@ struct __has_iterator_category_convertible_to<_Tp, _Up, false> : false_type {};
 
 template <class _Tp, class _Up, bool = __has_iterator_concept<_Tp>::value>
 struct __has_iterator_concept_convertible_to
-    : is_convertible<typename _Tp::iterator_concept, _Up>
+    : _BoolConstant<is_convertible<typename _Tp::iterator_concept, _Up>::value>
 {};
 
 template <class _Tp, class _Up>
@@ -445,12 +454,10 @@ struct __is_cpp17_bidirectional_iterator : public __has_iterator_category_conver
 template <class _Tp>
 struct __is_cpp17_random_access_iterator : public __has_iterator_category_convertible_to<_Tp, random_access_iterator_tag> {};
 
-// __is_cpp17_contiguous_iterator determines if an iterator is known by
-// libc++ to be contiguous, either because it advertises itself as such
-// (in C++20) or because it is a pointer type or a known trivial wrapper
-// around a (possibly fancy) pointer type, such as __wrap_iter<T*>.
-// Such iterators receive special "contiguous" optimizations in
-// std::copy and std::sort.
+// __is_cpp17_contiguous_iterator determines if an iterator is contiguous,
+// either because it advertises itself as such (in C++20) or because it
+// is a pointer type or a known trivial wrapper around a pointer type,
+// such as __wrap_iter<T*>.
 //
 #if _LIBCPP_STD_VER > 17
 template <class _Tp>
@@ -474,7 +481,7 @@ struct __is_exactly_cpp17_input_iterator
          __has_iterator_category_convertible_to<_Tp, input_iterator_tag>::value &&
         !__has_iterator_category_convertible_to<_Tp, forward_iterator_tag>::value> {};
 
-#if _LIBCPP_STD_VER >= 17
+#ifndef _LIBCPP_HAS_NO_DEDUCTION_GUIDES
 template<class _InputIterator>
 using __iter_value_type = typename iterator_traits<_InputIterator>::value_type;
 
@@ -488,8 +495,10 @@ template<class _InputIterator>
 using __iter_to_alloc_type = pair<
     add_const_t<typename iterator_traits<_InputIterator>::value_type::first_type>,
     typename iterator_traits<_InputIterator>::value_type::second_type>;
-#endif // _LIBCPP_STD_VER >= 17
+#endif // _LIBCPP_HAS_NO_DEDUCTION_GUIDES
 
 _LIBCPP_END_NAMESPACE_STD
+
+_LIBCPP_POP_MACROS
 
 #endif // _LIBCPP___ITERATOR_ITERATOR_TRAITS_H

@@ -13,7 +13,7 @@
 TEST_F(AArch64GISelMITest, TestKnownBitsBuildVector) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(s8) = G_LOAD %ptr(p0) :: (load (s8))
+   %unknown:_(s8) = G_LOAD %ptr(p0) :: (load 1)
    %mask0:_(s8) = G_CONSTANT i8 24
    %mask1:_(s8) = G_CONSTANT i8 224
    %tmp0:_(s8) = G_AND %unknown, %mask0
@@ -201,11 +201,10 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorDecreasingCstPHIWithLoop) {
    %10:_(s8) = G_CONSTANT i8 5
    %11:_(<2 x s8>) = G_BUILD_VECTOR %10:_(s8), %10:_(s8)
    %12:_(s8) = G_CONSTANT i8 1
-   %16:_(<2 x s8>) = G_BUILD_VECTOR %12:_(s8), %12:_(s8)
 
    bb.12:
    %13:_(<2 x s8>) = PHI %11(<2 x s8>), %bb.10, %14(<2 x s8>), %bb.12
-   %14:_(<2 x s8>) = G_LSHR %13, %16
+   %14:_(<2 x s8>) = G_LSHR %13, %12
    %15:_(<2 x s8>) = COPY %14
    G_BR %bb.12
 )";
@@ -230,7 +229,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorDecreasingCstPHIWithLoop) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorAND) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load (<2 x s8>))
+   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load 2)
    %mask0:_(s8) = G_CONSTANT i8 52
    %mask0_splat:_(<2 x s8>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s8) = G_CONSTANT i8 10
@@ -263,7 +262,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorAND) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorOR) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load (<2 x s8>))
+   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load 2)
    %mask0:_(s8) = G_CONSTANT i8 52
    %mask0_splat:_(<2 x s8>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s8) = G_CONSTANT i8 10
@@ -296,7 +295,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorOR) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorXOR) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load (<2 x s8>))
+   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load 2)
    %mask0:_(s8) = G_CONSTANT i8 52
    %mask0_splat:_(<2 x s8>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s8) = G_CONSTANT i8 10
@@ -364,7 +363,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorXORConstant) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorASHR) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load (<2 x s8>))
+   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load 2)
    %mask0:_(s8) = G_CONSTANT i8 38
    %mask0_splat:_(<2 x s8>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s8) = G_CONSTANT i8 202
@@ -409,7 +408,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorASHR) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorLSHR) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load (<2 x s8>))
+   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load 2)
    %mask0:_(s8) = G_CONSTANT i8 38
    %mask0_splat:_(<2 x s8>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s8) = G_CONSTANT i8 202
@@ -454,7 +453,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorLSHR) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorSHL) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load (<2 x s8>))
+   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load 2)
    %mask0:_(s8) = G_CONSTANT i8 51
    %mask0_splat:_(<2 x s8>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s8) = G_CONSTANT i8 72
@@ -483,7 +482,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorSHL) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorADD) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s16>) = G_LOAD %ptr(p0) :: (load (<2 x s16>))
+   %unknown:_(<2 x s16>) = G_LOAD %ptr(p0) :: (load 4)
    %mask0:_(s16) = G_CONSTANT i16 4642
    %mask0_splat:_(<2 x s16>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s16) = G_CONSTANT i16 9536
@@ -516,7 +515,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorADD) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorSUB) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s16>) = G_LOAD %ptr(p0) :: (load (<2 x s16>))
+   %unknown:_(<2 x s16>) = G_LOAD %ptr(p0) :: (load 4)
    %mask0:_(s16) = G_CONSTANT i16 4642
    %mask0_splat:_(<2 x s16>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s16) = G_CONSTANT i16 9536
@@ -549,7 +548,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorSUB) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorMUL) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s16>) = G_LOAD %ptr(p0) :: (load (<2 x s16>))
+   %unknown:_(<2 x s16>) = G_LOAD %ptr(p0) :: (load 4)
    %mask0:_(s16) = G_CONSTANT i16 4
    %mask0_splat:_(<2 x s16>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s16) = G_CONSTANT i16 18
@@ -578,7 +577,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorMUL) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorSelect) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load (<2 x s8>))
+   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load 2)
    %mask0:_(s8) = G_CONSTANT i8 24
    %mask0_splat:_(<2 x s8>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s8) = G_CONSTANT i8 224
@@ -615,7 +614,7 @@ TEST_F(AArch64GISelMITest, TestVectorSignBitIsZero) {
   if (!TM)
     return;
 
-  const LLT V2S32 = LLT::fixed_vector(2, 32);
+  const LLT V2S32 = LLT::vector(2, 32);
   // Vector buildConstant makes splat G_BUILD_VECTOR instruction.
   auto SignBit = B.buildConstant(V2S32, 0x80000000);
   auto Zero = B.buildConstant(V2S32, 0);
@@ -698,7 +697,7 @@ TEST_F(AArch64GISelMITest, TestVectorNumSignBitsConstant) {
 TEST_F(AArch64GISelMITest, TestVectorNumSignBitsSext) {
   StringRef MIRString = R"(
    %3:_(p0) = G_IMPLICIT_DEF
-   %4:_(<2 x s8>) = G_LOAD %3 :: (load (<2 x s8>))
+   %4:_(<2 x s8>) = G_LOAD %3 :: (load 1)
    %5:_(<2 x s32>) = G_SEXT %4
    %6:_(<2 x s32>) = COPY %5
 
@@ -729,7 +728,7 @@ TEST_F(AArch64GISelMITest, TestVectorNumSignBitsSext) {
 TEST_F(AArch64GISelMITest, TestVectorNumSignBitsSextInReg) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %load2x4:_(<2 x s32>) = G_LOAD %ptr :: (load (<2 x s32>))
+   %load2x4:_(<2 x s32>) = G_LOAD %ptr :: (load 8)
 
    %inreg7:_(<2 x s32>) = G_SEXT_INREG %load2x4, 7
    %copy_inreg7:_(<2 x s32>) = COPY %inreg7
@@ -743,7 +742,7 @@ TEST_F(AArch64GISelMITest, TestVectorNumSignBitsSextInReg) {
    %inreg31:_(<2 x s32>) = G_SEXT_INREG %load2x4, 31
    %copy_inreg31:_(<2 x s32>) = COPY %inreg31
 
-   %load2x1:_(<2 x s8>) = G_LOAD %ptr :: (load (<2 x s8>))
+   %load2x1:_(<2 x s8>) = G_LOAD %ptr :: (load 2)
    %sext_load2x1:_(<2 x s32>) = G_SEXT %load2x1
 
    %inreg6_sext:_(<2 x s32>) = G_SEXT_INREG %sext_load2x1, 6
@@ -793,7 +792,7 @@ TEST_F(AArch64GISelMITest, TestVectorNumSignBitsSextInReg) {
 TEST_F(AArch64GISelMITest, TestNumSignBitsVectorAssertSext) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %load2x4:_(<2 x s32>) = G_LOAD %ptr :: (load (<2 x s32>))
+   %load2x4:_(<2 x s32>) = G_LOAD %ptr :: (load 8)
 
    %assert_sext1:_(<2 x s32>) = G_ASSERT_SEXT %load2x4, 1
    %copy_assert_sext1:_(<2 x s32>) = COPY %assert_sext1
@@ -810,7 +809,7 @@ TEST_F(AArch64GISelMITest, TestNumSignBitsVectorAssertSext) {
    %assert_sext31:_(<2 x s32>) = G_ASSERT_SEXT %load2x4, 31
    %copy_assert_sext31:_(<2 x s32>) = COPY %assert_sext31
 
-   %load2x1:_(<2 x s8>) = G_LOAD %ptr :: (load (<2 x s8>))
+   %load2x1:_(<2 x s8>) = G_LOAD %ptr :: (load 2)
    %sext_load2x1:_(<2 x s32>) = G_SEXT %load2x1
 
    %assert_sext6_sext:_(<2 x s32>) = G_ASSERT_SEXT %sext_load2x1, 6
@@ -862,7 +861,7 @@ TEST_F(AArch64GISelMITest, TestNumSignBitsVectorAssertSext) {
 TEST_F(AArch64GISelMITest, TestVectorNumSignBitsTrunc) {
   StringRef MIRString = R"(
    %3:_(p0) = G_IMPLICIT_DEF
-   %4:_(<2 x s32>) = G_LOAD %3 :: (load (<2 x s32>))
+   %4:_(<2 x s32>) = G_LOAD %3 :: (load 4)
    %5:_(<2 x s8>) = G_TRUNC %4
    %6:_(<2 x s8>) = COPY %5
 
@@ -918,7 +917,7 @@ TEST_F(AMDGPUGISelMITest, TestVectorIsKnownToBeAPowerOfTwo) {
   %copy_trunc_five_splat:_(<2 x s1>) = COPY %trunc_five_splat
 
   %ptr:_(p1) = G_IMPLICIT_DEF
-  %shift_amt:_(<2 x s32>) = G_LOAD %ptr :: (load (<2 x s32>), addrspace 1)
+  %shift_amt:_(<2 x s32>) = G_LOAD %ptr :: (load 4, addrspace 1)
 
   %shl_1:_(<2 x s32>) = G_SHL %one_splat, %shift_amt
   %copy_shl_1:_(<2 x s32>) = COPY %shl_1
@@ -926,7 +925,7 @@ TEST_F(AMDGPUGISelMITest, TestVectorIsKnownToBeAPowerOfTwo) {
   %shl_2:_(<2 x s32>) = G_SHL %two_splat, %shift_amt
   %copy_shl_2:_(<2 x s32>) = COPY %shl_2
 
-  %not_sign_mask:_(<2 x s32>) = G_LOAD %ptr :: (load (<2 x s32>), addrspace 1)
+  %not_sign_mask:_(<2 x s32>) = G_LOAD %ptr :: (load 4, addrspace 1)
   %sign_mask:_(s32) = G_CONSTANT i32 -2147483648
   %sign_mask_splat:_(<2 x s32>) = G_BUILD_VECTOR %sign_mask:_(s32), %sign_mask:_(s32)
 
@@ -981,7 +980,7 @@ TEST_F(AMDGPUGISelMITest, TestVectorIsKnownToBeAPowerOfTwo) {
 TEST_F(AArch64GISelMITest, TestVectorMetadata) {
   StringRef MIRString = R"(
    %imp:_(p0) = G_IMPLICIT_DEF
-   %load:_(<2 x s8>) = G_LOAD %imp(p0) :: (load (<2 x s8>))
+   %load:_(<2 x s8>) = G_LOAD %imp(p0) :: (load 2)
    %ext:_(<2 x s32>) = G_ZEXT %load(<2 x s8>)
    %cst_elt:_(s32) = G_CONSTANT i32 1
    %cst:_(<2 x s32>) = G_BUILD_VECTOR %cst_elt:_(s32), %cst_elt:_(s32)
@@ -1017,7 +1016,7 @@ TEST_F(AArch64GISelMITest, TestVectorMetadata) {
   GISelKnownBits Info(*MF);
   KnownBits Res = Info.getKnownBits(And->getOperand(1).getReg());
 
-  EXPECT_TRUE(Res.One.isZero());
+  EXPECT_TRUE(Res.One.isNullValue());
 
   APInt Mask(Res.getBitWidth(), 1);
   Mask.flipAllBits();
@@ -1228,8 +1227,7 @@ TEST_F(AArch64GISelMITest, TestVectorKnownBitsBSwapBitReverse) {
   if (!TM)
     return;
 
-  const uint32_t ByteSwappedVal = 0x44332211;
-  const uint32_t BitSwappedVal = 0x22cc4488;
+  const uint32_t TestVal = 0x11223344;
 
   Register CopyBSwap = Copies[Copies.size() - 2];
   Register CopyBitReverse = Copies[Copies.size() - 1];
@@ -1238,19 +1236,19 @@ TEST_F(AArch64GISelMITest, TestVectorKnownBitsBSwapBitReverse) {
 
   KnownBits BSwapKnown = Info.getKnownBits(CopyBSwap);
   EXPECT_EQ(32u, BSwapKnown.getBitWidth());
-  EXPECT_EQ(ByteSwappedVal, BSwapKnown.One.getZExtValue());
-  EXPECT_EQ(~ByteSwappedVal, BSwapKnown.Zero.getZExtValue());
+  EXPECT_EQ(TestVal, BSwapKnown.One.getZExtValue());
+  EXPECT_EQ(~TestVal, BSwapKnown.Zero.getZExtValue());
 
   KnownBits BitReverseKnown = Info.getKnownBits(CopyBitReverse);
   EXPECT_EQ(32u, BitReverseKnown.getBitWidth());
-  EXPECT_EQ(BitSwappedVal, BitReverseKnown.One.getZExtValue());
-  EXPECT_EQ(~BitSwappedVal, BitReverseKnown.Zero.getZExtValue());
+  EXPECT_EQ(TestVal, BitReverseKnown.One.getZExtValue());
+  EXPECT_EQ(~TestVal, BitReverseKnown.Zero.getZExtValue());
 }
 
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorUMAX) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load (<2 x s8>))
+   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load 2)
    %mask0:_(s8) = G_CONSTANT i8 10
    %mask0_splat:_(<2 x s8>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s8) = G_CONSTANT i8 1
@@ -1331,7 +1329,7 @@ TEST_F(AArch64GISelMITest, TestVectorKnownBitsUMax) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorUMIN) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load (<2 x s8>))
+   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load 2)
    %mask0:_(s8) = G_CONSTANT i8 10
    %mask0_splat:_(<2 x s8>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s8) = G_CONSTANT i8 1
@@ -1364,7 +1362,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorUMIN) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorSMAX) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load (<2 x s8>))
+   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load 2)
    %mask0:_(s8) = G_CONSTANT i8 128
    %mask0_splat:_(<2 x s8>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s8) = G_CONSTANT i8 64
@@ -1397,7 +1395,7 @@ TEST_F(AArch64GISelMITest, TestKnownBitsVectorSMAX) {
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorSMIN) {
   StringRef MIRString = R"(
    %ptr:_(p0) = G_IMPLICIT_DEF
-   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load (<2 x s8>))
+   %unknown:_(<2 x s8>) = G_LOAD %ptr(p0) :: (load 2)
    %mask0:_(s8) = G_CONSTANT i8 128
    %mask0_splat:_(<2 x s8>) = G_BUILD_VECTOR %mask0, %mask0
    %mask1:_(s8) = G_CONSTANT i8 64
@@ -1455,11 +1453,11 @@ TEST_F(AArch64GISelMITest, TestVectorInvalidQueries) {
   KnownBits EqSizeRes = Info.getKnownBits(EqSizedShl);
   KnownBits BiggerSizeRes = Info.getKnownBits(BiggerSizedShl);
 
-  EXPECT_TRUE(EqSizeRes.One.isZero());
-  EXPECT_TRUE(EqSizeRes.Zero.isZero());
+  EXPECT_TRUE(EqSizeRes.One.isNullValue());
+  EXPECT_TRUE(EqSizeRes.Zero.isNullValue());
 
-  EXPECT_TRUE(BiggerSizeRes.One.isZero());
-  EXPECT_TRUE(BiggerSizeRes.Zero.isZero());
+  EXPECT_TRUE(BiggerSizeRes.One.isNullValue());
+  EXPECT_TRUE(BiggerSizeRes.Zero.isNullValue());
 }
 
 TEST_F(AArch64GISelMITest, TestKnownBitsVectorAssertZext) {

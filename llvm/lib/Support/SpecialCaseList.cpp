@@ -15,6 +15,7 @@
 
 #include "llvm/Support/SpecialCaseList.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/VirtualFileSystem.h"
@@ -63,7 +64,7 @@ unsigned SpecialCaseList::Matcher::match(StringRef Query) const {
     return It->second;
   if (Trigrams.isDefinitelyOut(Query))
     return false;
-  for (const auto &RegExKV : RegExes)
+  for (auto& RegExKV : RegExes)
     if (RegExKV.first->match(Query))
       return RegExKV.second;
   return 0;
@@ -92,7 +93,7 @@ SpecialCaseList::createOrDie(const std::vector<std::string> &Paths,
   std::string Error;
   if (auto SCL = create(Paths, FS, Error))
     return SCL;
-  report_fatal_error(Twine(Error));
+  report_fatal_error(Error);
 }
 
 bool SpecialCaseList::createInternal(const std::vector<std::string> &Paths,
@@ -198,7 +199,7 @@ bool SpecialCaseList::parse(const MemoryBuffer *MB,
   return true;
 }
 
-SpecialCaseList::~SpecialCaseList() = default;
+SpecialCaseList::~SpecialCaseList() {}
 
 bool SpecialCaseList::inSection(StringRef Section, StringRef Prefix,
                                 StringRef Query, StringRef Category) const {
@@ -208,7 +209,7 @@ bool SpecialCaseList::inSection(StringRef Section, StringRef Prefix,
 unsigned SpecialCaseList::inSectionBlame(StringRef Section, StringRef Prefix,
                                          StringRef Query,
                                          StringRef Category) const {
-  for (const auto &SectionIter : Sections)
+  for (auto &SectionIter : Sections)
     if (SectionIter.SectionMatcher->match(Section)) {
       unsigned Blame =
           inSectionBlame(SectionIter.Entries, Prefix, Query, Category);

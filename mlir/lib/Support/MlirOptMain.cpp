@@ -24,7 +24,6 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/DebugCounter.h"
 #include "mlir/Support/FileUtilities.h"
-#include "mlir/Support/Timing.h"
 #include "mlir/Support/ToolUtilities.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileUtilities.h"
@@ -32,11 +31,11 @@
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/StringSaver.h"
-#include "llvm/Support/ThreadPool.h"
 #include "llvm/Support/ToolOutputFile.h"
 
 using namespace mlir;
 using namespace llvm;
+using llvm::SMLoc;
 
 /// Perform the actions on the input file indicated by the command line flags
 /// within the specified context.
@@ -47,32 +46,30 @@ using namespace llvm;
 static LogicalResult performActions(raw_ostream &os, bool verifyDiagnostics,
                                     bool verifyPasses, SourceMgr &sourceMgr,
                                     MLIRContext *context,
-                                    PassPipelineFn passManagerSetupFn) {
-  DefaultTimingManager tm;
-  applyDefaultTimingManagerCLOptions(tm);
-  TimingScope timing = tm.getRootScope();
-
+                                    const PassPipelineCLParser &passPipeline) {
   // Disable multi-threading when parsing the input file. This removes the
   // unnecessary/costly context synchronization when parsing.
   bool wasThreadingEnabled = context->isMultithreadingEnabled();
   context->disableMultithreading();
 
   // Parse the input file and reset the context threading state.
-  TimingScope parserTiming = timing.nest("Parser");
-  OwningOpRef<ModuleOp> module(parseSourceFile(sourceMgr, context));
+  OwningModuleRef module(parseSourceFile(sourceMgr, context));
   context->enableMultithreading(wasThreadingEnabled);
   if (!module)
     return failure();
-  parserTiming.stop();
 
   // Apply any pass manager command line options.
   PassManager pm(context, OpPassManager::Nesting::Implicit);
   pm.enableVerifier(verifyPasses);
   applyPassManagerCLOptions(pm);
-  pm.enableTiming(timing);
 
-  // Callback to build the pipeline.
-  if (failed(passManagerSetupFn(pm)))
+  auto errorHandler = [&](const Twine &msg) {
+    emitError(UnknownLoc::get(context)) << msg;
+    return failure();
+  };
+
+  // Build the provided pipeline.
+  if (failed(passPipeline.addToPipeline(pm, errorHandler)))
     return failure();
 
   // Run the pipeline.
@@ -80,7 +77,6 @@ static LogicalResult performActions(raw_ostream &os, bool verifyDiagnostics,
     return failure();
 
   // Print the output.
-  TimingScope outputTiming = timing.nest("Output");
   module->print(os);
   os << '\n';
   return success();
@@ -88,28 +84,23 @@ static LogicalResult performActions(raw_ostream &os, bool verifyDiagnostics,
 
 /// Parses the memory buffer.  If successfully, run a series of passes against
 /// it and print the result.
-static LogicalResult
-processBuffer(raw_ostream &os, std::unique_ptr<MemoryBuffer> ownedBuffer,
-              bool verifyDiagnostics, bool verifyPasses,
-              bool allowUnregisteredDialects, bool preloadDialectsInContext,
-              PassPipelineFn passManagerSetupFn, DialectRegistry &registry,
-              llvm::ThreadPool *threadPool) {
+static LogicalResult processBuffer(raw_ostream &os,
+                                   std::unique_ptr<MemoryBuffer> ownedBuffer,
+                                   bool verifyDiagnostics, bool verifyPasses,
+                                   bool allowUnregisteredDialects,
+                                   bool preloadDialectsInContext,
+                                   const PassPipelineCLParser &passPipeline,
+                                   DialectRegistry &registry) {
   // Tell sourceMgr about this buffer, which is what the parser will pick up.
   SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(ownedBuffer), SMLoc());
 
-  // Create a context just for the current buffer. Disable threading on creation
-  // since we'll inject the thread-pool separately.
-  MLIRContext context(registry, MLIRContext::Threading::DISABLED);
-  if (threadPool)
-    context.setThreadPool(*threadPool);
-
   // Parse the input file.
+  MLIRContext context(registry);
   if (preloadDialectsInContext)
     context.loadAllAvailableDialects();
   context.allowUnregisteredDialects(allowUnregisteredDialects);
-  if (verifyDiagnostics)
-    context.printOpOnDiagnostic(false);
+  context.printOpOnDiagnostic(!verifyDiagnostics);
   context.getDebugActionManager().registerActionHandler<DebugCounter>();
 
   // If we are in verify diagnostics mode then we have a lot of work to do,
@@ -117,7 +108,7 @@ processBuffer(raw_ostream &os, std::unique_ptr<MemoryBuffer> ownedBuffer,
   if (!verifyDiagnostics) {
     SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
     return performActions(os, verifyDiagnostics, verifyPasses, sourceMgr,
-                          &context, passManagerSetupFn);
+                          &context, passPipeline);
   }
 
   SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
@@ -126,50 +117,11 @@ processBuffer(raw_ostream &os, std::unique_ptr<MemoryBuffer> ownedBuffer,
   // these actions succeed or fail, we only care what diagnostics they produce
   // and whether they match our expectations.
   (void)performActions(os, verifyDiagnostics, verifyPasses, sourceMgr, &context,
-                       passManagerSetupFn);
+                       passPipeline);
 
   // Verify the diagnostic handler to make sure that each of the diagnostics
   // matched.
   return sourceMgrHandler.verify();
-}
-
-LogicalResult mlir::MlirOptMain(raw_ostream &outputStream,
-                                std::unique_ptr<MemoryBuffer> buffer,
-                                PassPipelineFn passManagerSetupFn,
-                                DialectRegistry &registry, bool splitInputFile,
-                                bool verifyDiagnostics, bool verifyPasses,
-                                bool allowUnregisteredDialects,
-                                bool preloadDialectsInContext) {
-  // The split-input-file mode is a very specific mode that slices the file
-  // up into small pieces and checks each independently.
-  // We use an explicit threadpool to avoid creating and joining/destroying
-  // threads for each of the split.
-  ThreadPool *threadPool = nullptr;
-  // Create a temporary context for the sake of checking if
-  // --mlir-disable-threading was passed on the command line.
-  // We use the thread-pool this context is creating, and avoid
-  // creating any thread when disabled.
-  MLIRContext threadPoolCtx;
-  if (threadPoolCtx.isMultithreadingEnabled())
-    threadPool = &threadPoolCtx.getThreadPool();
-
-  if (splitInputFile)
-    return splitAndProcessBuffer(
-        std::move(buffer),
-        [&](std::unique_ptr<MemoryBuffer> chunkBuffer, raw_ostream &os) {
-          LogicalResult result = processBuffer(
-              os, std::move(chunkBuffer), verifyDiagnostics, verifyPasses,
-              allowUnregisteredDialects, preloadDialectsInContext,
-              passManagerSetupFn, registry, threadPool);
-          os << "// -----\n";
-          return result;
-        },
-        outputStream);
-
-  return processBuffer(outputStream, std::move(buffer), verifyDiagnostics,
-                       verifyPasses, allowUnregisteredDialects,
-                       preloadDialectsInContext, passManagerSetupFn, registry,
-                       threadPool);
 }
 
 LogicalResult mlir::MlirOptMain(raw_ostream &outputStream,
@@ -179,16 +131,22 @@ LogicalResult mlir::MlirOptMain(raw_ostream &outputStream,
                                 bool verifyDiagnostics, bool verifyPasses,
                                 bool allowUnregisteredDialects,
                                 bool preloadDialectsInContext) {
-  auto passManagerSetupFn = [&](PassManager &pm) {
-    auto errorHandler = [&](const Twine &msg) {
-      emitError(UnknownLoc::get(pm.getContext())) << msg;
-      return failure();
-    };
-    return passPipeline.addToPipeline(pm, errorHandler);
-  };
-  return MlirOptMain(outputStream, std::move(buffer), passManagerSetupFn,
-                     registry, splitInputFile, verifyDiagnostics, verifyPasses,
-                     allowUnregisteredDialects, preloadDialectsInContext);
+  // The split-input-file mode is a very specific mode that slices the file
+  // up into small pieces and checks each independently.
+  if (splitInputFile)
+    return splitAndProcessBuffer(
+        std::move(buffer),
+        [&](std::unique_ptr<MemoryBuffer> chunkBuffer, raw_ostream &os) {
+          return processBuffer(os, std::move(chunkBuffer), verifyDiagnostics,
+                               verifyPasses, allowUnregisteredDialects,
+                               preloadDialectsInContext, passPipeline,
+                               registry);
+        },
+        outputStream);
+
+  return processBuffer(outputStream, std::move(buffer), verifyDiagnostics,
+                       verifyPasses, allowUnregisteredDialects,
+                       preloadDialectsInContext, passPipeline, registry);
 }
 
 LogicalResult mlir::MlirOptMain(int argc, char **argv, llvm::StringRef toolName,
@@ -237,7 +195,6 @@ LogicalResult mlir::MlirOptMain(int argc, char **argv, llvm::StringRef toolName,
   registerAsmPrinterCLOptions();
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
-  registerDefaultTimingManagerCLOptions();
   DebugCounter::registerCLOptions();
   PassPipelineCLParser passPipeline("", "Compiler passes to run");
 
@@ -245,6 +202,7 @@ LogicalResult mlir::MlirOptMain(int argc, char **argv, llvm::StringRef toolName,
   std::string helpHeader = (toolName + "\nAvailable Dialects: ").str();
   {
     llvm::raw_string_ostream os(helpHeader);
+    MLIRContext context;
     interleaveComma(registry.getDialectNames(), os,
                     [&](auto name) { os << name; });
   }

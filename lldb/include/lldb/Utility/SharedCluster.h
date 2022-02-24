@@ -48,7 +48,7 @@ public:
   }
 
 private:
-  ClusterManager() : m_objects() {}
+  ClusterManager() : m_objects(), m_mutex() {}
 
   llvm::SmallVector<T *, 16> m_objects;
   std::mutex m_mutex;

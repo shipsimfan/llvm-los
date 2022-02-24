@@ -12,12 +12,12 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/Dwarf.h"
-#include "llvm/DebugInfo/DWARF/DWARFDataExtractor.h"
-#include "llvm/DebugInfo/DWARF/DWARFDie.h"
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
+#include "llvm/DebugInfo/DWARF/DWARFRelocMap.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cassert>
@@ -28,10 +28,6 @@
 
 using namespace llvm;
 using namespace dwarf;
-
-namespace llvm {
-class DwarfContext;
-}
 
 using FileLineInfoKind = DILineInfoSpecifier::FileLineInfoKind;
 
@@ -1335,8 +1331,8 @@ Optional<StringRef> DWARFDebugLine::LineTable::getSourceByIndex(uint64_t FileInd
   if (Kind == FileLineInfoKind::None || !Prologue.hasFileAtIndex(FileIndex))
     return None;
   const FileNameEntry &Entry = Prologue.getFileNameEntry(FileIndex);
-  if (auto E = dwarf::toString(Entry.Source))
-    return StringRef(*E);
+  if (Optional<const char *> source = Entry.Source.getAsCString())
+    return StringRef(*source);
   return None;
 }
 
@@ -1354,10 +1350,10 @@ bool DWARFDebugLine::Prologue::getFileNameByIndex(
   if (Kind == FileLineInfoKind::None || !hasFileAtIndex(FileIndex))
     return false;
   const FileNameEntry &Entry = getFileNameEntry(FileIndex);
-  auto E = dwarf::toString(Entry.Name);
-  if (!E)
+  Optional<const char *> Name = Entry.Name.getAsCString();
+  if (!Name)
     return false;
-  StringRef FileName = *E;
+  StringRef FileName = *Name;
   if (Kind == FileLineInfoKind::RawValue ||
       isPathAbsoluteOnWindowsOrPosix(FileName)) {
     Result = std::string(FileName);
@@ -1376,10 +1372,11 @@ bool DWARFDebugLine::Prologue::getFileNameByIndex(
     // relative names.
     if ((Entry.DirIdx != 0 || Kind != FileLineInfoKind::RelativeFilePath) &&
         Entry.DirIdx < IncludeDirectories.size())
-      IncludeDir = dwarf::toStringRef(IncludeDirectories[Entry.DirIdx]);
+      IncludeDir = IncludeDirectories[Entry.DirIdx].getAsCString().getValue();
   } else {
     if (0 < Entry.DirIdx && Entry.DirIdx <= IncludeDirectories.size())
-      IncludeDir = dwarf::toStringRef(IncludeDirectories[Entry.DirIdx - 1]);
+      IncludeDir =
+          IncludeDirectories[Entry.DirIdx - 1].getAsCString().getValue();
   }
 
   // For absolute paths only, include the compilation directory of compile unit.

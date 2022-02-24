@@ -66,9 +66,7 @@ public:
     return false;
   }
 
-  bool hasBitIntType() const override { return true; }
-
-  bool isCLZForZeroUndef() const override { return false; }
+  bool hasExtIntType() const override { return true; }
 };
 
 } // namespace targets

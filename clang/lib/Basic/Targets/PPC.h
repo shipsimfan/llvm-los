@@ -73,11 +73,6 @@ class LLVM_LIBRARY_VISIBILITY PPCTargetInfo : public TargetInfo {
   bool PairedVectorMemops = false;
   bool HasP10Vector = false;
   bool HasPCRelativeMemops = false;
-  bool HasPrefixInstrs = false;
-  bool IsISA2_06 = false;
-  bool IsISA2_07 = false;
-  bool IsISA3_0 = false;
-  bool IsISA3_1 = false;
 
 protected:
   std::string ABI;
@@ -90,11 +85,10 @@ public:
     LongDoubleWidth = LongDoubleAlign = 128;
     LongDoubleFormat = &llvm::APFloat::PPCDoubleDouble();
     HasStrictFP = true;
-    HasIbm128 = true;
   }
 
   // Set the language option for altivec based on our value.
-  void adjust(DiagnosticsEngine &Diags, LangOptions &Opts) override;
+  void adjust(LangOptions &Opts) override;
 
   // Note: GCC recognizes the following additional cpus:
   //  401, 403, 405, 405fp, 440fp, 464, 464fp, 476, 476fp, 505, 740, 801,
@@ -349,9 +343,8 @@ public:
                : "u9__ieee128";
   }
   const char *getFloat128Mangling() const override { return "u9__ieee128"; }
-  const char *getIbm128Mangling() const override { return "g"; }
 
-  bool hasBitIntType() const override { return true; }
+  bool hasExtIntType() const override { return true; }
 
   bool isSPRegName(StringRef RegName) const override {
     return RegName.equals("r1") || RegName.equals("x1");
@@ -414,7 +407,7 @@ public:
     LongWidth = LongAlign = PointerWidth = PointerAlign = 64;
     IntMaxType = SignedLong;
     Int64Type = SignedLong;
-    std::string DataLayout;
+    std::string DataLayout = "";
 
     if (Triple.isOSAIX()) {
       // TODO: Set appropriate ABI for AIX platform.
@@ -460,8 +453,6 @@ public:
     switch (CC) {
     case CC_Swift:
       return CCCR_OK;
-    case CC_SwiftAsync:
-      return CCCR_Error;
     default:
       return CCCR_Warning;
     }

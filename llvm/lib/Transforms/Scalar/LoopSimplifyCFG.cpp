@@ -256,8 +256,8 @@ private:
         }
     }
 
-    // Amount of dead and live loop blocks should match the total number of
-    // blocks in loop.
+    // Sanity check: amount of dead and live loop blocks should match the total
+    // number of blocks in loop.
     assert(L.getNumBlocks() == LiveLoopBlocks.size() + DeadLoopBlocks.size() &&
            "Malformed block sets?");
 
@@ -305,6 +305,7 @@ private:
         BlocksInLoopAfterFolding.insert(BB);
     }
 
+    // Sanity check: header must be in loop.
     assert(BlocksInLoopAfterFolding.count(L.getHeader()) &&
            "Header not in loop?");
     assert(BlocksInLoopAfterFolding.size() <= LiveLoopBlocks.size() &&
@@ -468,7 +469,7 @@ private:
       LI.removeBlock(BB);
     }
 
-    detachDeadBlocks(DeadLoopBlocks, &DTUpdates, /*KeepOneInputPHIs*/true);
+    DetatchDeadBlocks(DeadLoopBlocks, &DTUpdates, /*KeepOneInputPHIs*/true);
     DTU.applyUpdates(DTUpdates);
     DTUpdates.clear();
     for (auto *BB : DeadLoopBlocks)
@@ -732,12 +733,13 @@ public:
     DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
     LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
     ScalarEvolution &SE = getAnalysis<ScalarEvolutionWrapperPass>().getSE();
-    auto *MSSAA = getAnalysisIfAvailable<MemorySSAWrapperPass>();
     Optional<MemorySSAUpdater> MSSAU;
-    if (MSSAA)
-      MSSAU = MemorySSAUpdater(&MSSAA->getMSSA());
-    if (MSSAA && VerifyMemorySSA)
-      MSSAU->getMemorySSA()->verifyMemorySSA();
+    if (EnableMSSALoopDependency) {
+      MemorySSA *MSSA = &getAnalysis<MemorySSAWrapperPass>().getMSSA();
+      MSSAU = MemorySSAUpdater(MSSA);
+      if (VerifyMemorySSA)
+        MSSA->verifyMemorySSA();
+    }
     bool DeleteCurrentLoop = false;
     bool Changed = simplifyLoopCFG(
         *L, DT, LI, SE, MSSAU.hasValue() ? MSSAU.getPointer() : nullptr,
@@ -748,7 +750,10 @@ public:
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.addPreserved<MemorySSAWrapperPass>();
+    if (EnableMSSALoopDependency) {
+      AU.addRequired<MemorySSAWrapperPass>();
+      AU.addPreserved<MemorySSAWrapperPass>();
+    }
     AU.addPreserved<DependenceAnalysisWrapperPass>();
     getLoopAnalysisUsage(AU);
   }

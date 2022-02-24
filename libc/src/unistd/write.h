@@ -9,7 +9,8 @@
 #ifndef LLVM_LIBC_SRC_UNISTD_WRITE_H
 #define LLVM_LIBC_SRC_UNISTD_WRITE_H
 
-#include <unistd.h>
+#include "include/unistd.h"
+#include <stddef.h>
 
 namespace __llvm_libc {
 

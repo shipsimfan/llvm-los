@@ -21,7 +21,7 @@ using namespace toy;
 namespace {
 /// Include the patterns defined in the Declarative Rewrite framework.
 #include "ToyCombine.inc"
-} // namespace
+} // end anonymous namespace
 
 /// This is an example of a c++ rewrite pattern for the TransposeOp. It
 /// optimizes the following scenario: transpose(transpose(x)) -> x

@@ -386,7 +386,8 @@ void HexagonVectorLoopCarriedReuse::findValueToReuse() {
                       << " can be reused\n");
 
     SmallVector<Instruction *, 4> PNUsers;
-    for (Use &U : PN->uses()) {
+    for (auto UI = PN->use_begin(), E = PN->use_end(); UI != E; ++UI) {
+      Use &U = *UI;
       Instruction *User = cast<Instruction>(U.getUser());
 
       if (User->getParent() != BB)
@@ -414,7 +415,9 @@ void HexagonVectorLoopCarriedReuse::findValueToReuse() {
     // rematerialized in OtherBB, we may find more such "fixup" opportunities
     // in this block. So, we'll start over again.
     for (Instruction *I : PNUsers) {
-      for (Use &U : BEInst->uses()) {
+      for (auto UI = BEInst->use_begin(), E = BEInst->use_end(); UI != E;
+           ++UI) {
+        Use &U = *UI;
         Instruction *BEUser = cast<Instruction>(U.getUser());
 
         if (BEUser->getParent() != BB)
@@ -659,7 +662,8 @@ void HexagonVectorLoopCarriedReuse::findLoopCarriedDeps() {
       delete D;
   }
   LLVM_DEBUG(dbgs() << "Found " << Dependences.size() << " dependences\n");
-  LLVM_DEBUG(for (const DepChain *D : Dependences) dbgs() << *D << "\n";);
+  LLVM_DEBUG(for (size_t i = 0; i < Dependences.size();
+                  ++i) { dbgs() << *Dependences[i] << "\n"; });
 }
 
 Pass *llvm::createHexagonVectorLoopCarriedReuseLegacyPass() {

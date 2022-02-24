@@ -8,6 +8,7 @@
 
 #include "RegisterContextMemory.h"
 
+#include "DynamicRegisterInfo.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Utility/DataBufferHeap.h"
@@ -38,7 +39,7 @@ RegisterContextMemory::RegisterContextMemory(Thread &thread,
 }
 
 // Destructor
-RegisterContextMemory::~RegisterContextMemory() = default;
+RegisterContextMemory::~RegisterContextMemory() {}
 
 void RegisterContextMemory::InvalidateAllRegisters() {
   if (m_reg_data_addr != LLDB_INVALID_ADDRESS)

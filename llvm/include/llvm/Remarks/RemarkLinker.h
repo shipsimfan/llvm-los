@@ -13,6 +13,7 @@
 #ifndef LLVM_REMARKS_REMARKLINKER_H
 #define LLVM_REMARKS_REMARKLINKER_H
 
+#include "llvm/Object/ObjectFile.h"
 #include "llvm/Remarks/Remark.h"
 #include "llvm/Remarks/RemarkFormat.h"
 #include "llvm/Remarks/RemarkStringTable.h"
@@ -21,11 +22,6 @@
 #include <set>
 
 namespace llvm {
-
-namespace object {
-class ObjectFile;
-}
-
 namespace remarks {
 
 struct RemarkLinker {

@@ -56,12 +56,6 @@ AttrOrTypeDef::AttrOrTypeDef(const llvm::Record *def) : def(def) {
       if (traitSet.insert(traitInit).second)
         traits.push_back(Trait::create(traitInit));
   }
-
-  // Populate the parameters.
-  if (auto *parametersDag = def->getValueAsDag("parameters")) {
-    for (unsigned i = 0, e = parametersDag->getNumArgs(); i < e; ++i)
-      parameters.push_back(AttrOrTypeParameter(parametersDag, i));
-  }
 }
 
 Dialect AttrOrTypeDef::getDialect() const {
@@ -113,6 +107,14 @@ bool AttrOrTypeDef::hasStorageCustomConstructor() const {
   return def->getValueAsBit("hasStorageCustomConstructor");
 }
 
+void AttrOrTypeDef::getParameters(
+    SmallVectorImpl<AttrOrTypeParameter> &parameters) const {
+  if (auto *parametersDag = def->getValueAsDag("parameters")) {
+    for (unsigned i = 0, e = parametersDag->getNumArgs(); i < e; ++i)
+      parameters.push_back(AttrOrTypeParameter(parametersDag, i));
+  }
+}
+
 unsigned AttrOrTypeDef::getNumParameters() const {
   auto *parametersDag = def->getValueAsDag("parameters");
   return parametersDag ? parametersDag->getNumArgs() : 0;
@@ -130,10 +132,6 @@ Optional<StringRef> AttrOrTypeDef::getParserCode() const {
   return def->getValueAsOptionalString("parser");
 }
 
-Optional<StringRef> AttrOrTypeDef::getAssemblyFormat() const {
-  return def->getValueAsOptionalString("assemblyFormat");
-}
-
 bool AttrOrTypeDef::genAccessors() const {
   return def->getValueAsBit("genAccessors");
 }
@@ -147,7 +145,7 @@ Optional<StringRef> AttrOrTypeDef::getExtraDecls() const {
   return value.empty() ? Optional<StringRef>() : value;
 }
 
-ArrayRef<SMLoc> AttrOrTypeDef::getLoc() const { return def->getLoc(); }
+ArrayRef<llvm::SMLoc> AttrOrTypeDef::getLoc() const { return def->getLoc(); }
 
 bool AttrOrTypeDef::skipDefaultBuilders() const {
   return def->getValueAsBit("skipDefaultBuilders");
@@ -177,35 +175,32 @@ bool AttrDef::classof(const AttrOrTypeDef *def) {
 // AttrOrTypeParameter
 //===----------------------------------------------------------------------===//
 
-template <typename InitT>
-auto AttrOrTypeParameter::getDefValue(StringRef name) const {
-  Optional<decltype(std::declval<InitT>().getValue())> result;
-  if (auto *param = dyn_cast<llvm::DefInit>(getDef()))
-    if (auto *init = param->getDef()->getValue(name))
-      if (auto *value = dyn_cast_or_null<InitT>(init->getValue()))
-        result = value->getValue();
-  return result;
-}
-
-bool AttrOrTypeParameter::isAnonymous() const {
-  return !def->getArgName(index);
-}
-
 StringRef AttrOrTypeParameter::getName() const {
   return def->getArgName(index)->getValue();
 }
 
 Optional<StringRef> AttrOrTypeParameter::getAllocator() const {
-  return getDefValue<llvm::StringInit>("allocator");
+  llvm::Init *parameterType = def->getArg(index);
+  if (isa<llvm::StringInit>(parameterType))
+    return Optional<StringRef>();
+  if (auto *param = dyn_cast<llvm::DefInit>(parameterType))
+    return param->getDef()->getValueAsOptionalString("allocator");
+  llvm::PrintFatalError("Parameters DAG arguments must be either strings or "
+                        "defs which inherit from AttrOrTypeParameter\n");
 }
 
-StringRef AttrOrTypeParameter::getComparator() const {
-  return getDefValue<llvm::StringInit>("comparator")
-      .getValueOr("$_lhs == $_rhs");
+Optional<StringRef> AttrOrTypeParameter::getComparator() const {
+  llvm::Init *parameterType = def->getArg(index);
+  if (isa<llvm::StringInit>(parameterType))
+    return Optional<StringRef>();
+  if (auto *param = dyn_cast<llvm::DefInit>(parameterType))
+    return param->getDef()->getValueAsOptionalString("comparator");
+  llvm::PrintFatalError("Parameters DAG arguments must be either strings or "
+                        "defs which inherit from AttrOrTypeParameter\n");
 }
 
 StringRef AttrOrTypeParameter::getCppType() const {
-  llvm::Init *parameterType = getDef();
+  auto *parameterType = def->getArg(index);
   if (auto *stringType = dyn_cast<llvm::StringInit>(parameterType))
     return stringType->getValue();
   if (auto *param = dyn_cast<llvm::DefInit>(parameterType))
@@ -215,52 +210,40 @@ StringRef AttrOrTypeParameter::getCppType() const {
       "which inherit from AttrOrTypeParameter\n");
 }
 
-StringRef AttrOrTypeParameter::getCppAccessorType() const {
-  return getDefValue<llvm::StringInit>("cppAccessorType")
-      .getValueOr(getCppType());
-}
-
-StringRef AttrOrTypeParameter::getCppStorageType() const {
-  return getDefValue<llvm::StringInit>("cppStorageType")
-      .getValueOr(getCppType());
-}
-
-Optional<StringRef> AttrOrTypeParameter::getParser() const {
-  return getDefValue<llvm::StringInit>("parser");
-}
-
-Optional<StringRef> AttrOrTypeParameter::getPrinter() const {
-  return getDefValue<llvm::StringInit>("printer");
-}
-
 Optional<StringRef> AttrOrTypeParameter::getSummary() const {
-  return getDefValue<llvm::StringInit>("summary");
+  auto *parameterType = def->getArg(index);
+  if (auto *param = dyn_cast<llvm::DefInit>(parameterType)) {
+    const auto *desc = param->getDef()->getValue("summary");
+    if (llvm::StringInit *ci = dyn_cast<llvm::StringInit>(desc->getValue()))
+      return ci->getValue();
+  }
+  return Optional<StringRef>();
 }
 
 StringRef AttrOrTypeParameter::getSyntax() const {
-  if (auto *stringType = dyn_cast<llvm::StringInit>(getDef()))
+  auto *parameterType = def->getArg(index);
+  if (auto *stringType = dyn_cast<llvm::StringInit>(parameterType))
     return stringType->getValue();
-  return getDefValue<llvm::StringInit>("syntax").getValueOr(getCppType());
+  if (auto *param = dyn_cast<llvm::DefInit>(parameterType)) {
+    const auto *syntax = param->getDef()->getValue("syntax");
+    if (syntax && isa<llvm::StringInit>(syntax->getValue()))
+      return cast<llvm::StringInit>(syntax->getValue())->getValue();
+    return getCppType();
+  }
+  llvm::PrintFatalError("Parameters DAG arguments must be either strings or "
+                        "defs which inherit from AttrOrTypeParameter");
 }
 
-bool AttrOrTypeParameter::isOptional() const {
-  // Parameters with default values are automatically optional.
-  return getDefValue<llvm::BitInit>("isOptional").getValueOr(false) ||
-         getDefaultValue().hasValue();
+const llvm::Init *AttrOrTypeParameter::getDef() const {
+  return def->getArg(index);
 }
-
-Optional<StringRef> AttrOrTypeParameter::getDefaultValue() const {
-  return getDefValue<llvm::StringInit>("defaultValue");
-}
-
-llvm::Init *AttrOrTypeParameter::getDef() const { return def->getArg(index); }
 
 //===----------------------------------------------------------------------===//
 // AttributeSelfTypeParameter
 //===----------------------------------------------------------------------===//
 
 bool AttributeSelfTypeParameter::classof(const AttrOrTypeParameter *param) {
-  llvm::Init *paramDef = param->getDef();
+  const llvm::Init *paramDef = param->getDef();
   if (auto *paramDefInit = dyn_cast<llvm::DefInit>(paramDef))
     return paramDefInit->getDef()->isSubClassOf("AttributeSelfTypeParameter");
   return false;

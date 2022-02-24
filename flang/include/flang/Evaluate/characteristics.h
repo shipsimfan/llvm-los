@@ -17,7 +17,6 @@
 #include "expression.h"
 #include "shape.h"
 #include "type.h"
-#include "flang/Common/Fortran-features.h"
 #include "flang/Common/Fortran.h"
 #include "flang/Common/enum-set.h"
 #include "flang/Common/idioms.h"
@@ -44,11 +43,9 @@ namespace Fortran::evaluate::characteristics {
 using common::CopyableIndirection;
 
 // Are these procedures distinguishable for a generic name or FINAL?
-bool Distinguishable(const common::LanguageFeatureControl &, const Procedure &,
-    const Procedure &);
+bool Distinguishable(const Procedure &, const Procedure &);
 // Are these procedures distinguishable for a generic operator or assignment?
-bool DistinguishableOpOrAssign(const common::LanguageFeatureControl &,
-    const Procedure &, const Procedure &);
+bool DistinguishableOpOrAssign(const Procedure &, const Procedure &);
 
 // Shapes of function results and dummy arguments have to have
 // the same rank, the same deferred dimensions, and the same
@@ -147,8 +144,8 @@ public:
   int Rank() const { return GetRank(shape_); }
   bool IsCompatibleWith(parser::ContextualMessages &, const TypeAndShape &that,
       const char *thisIs = "pointer", const char *thatIs = "target",
-      bool omitShapeConformanceCheck = false,
-      enum CheckConformanceFlags::Flags = CheckConformanceFlags::None) const;
+      bool isElemental = false, bool thisIsDeferredShape = false,
+      bool thatIsDeferredShape = false) const;
   std::optional<Expr<SubscriptInteger>> MeasureElementSizeInBytes(
       FoldingContext &, bool align) const;
   std::optional<Expr<SubscriptInteger>> MeasureSizeInBytes(
@@ -298,11 +295,11 @@ struct Procedure {
   bool operator==(const Procedure &) const;
   bool operator!=(const Procedure &that) const { return !(*this == that); }
 
-  // Characterizes a procedure.  If a Symbol, it may be an
+  // Characterizes the procedure represented by a symbol, which may be an
   // "unrestricted specific intrinsic function".
-  // Error messages are produced when a procedure cannot be characterized.
   static std::optional<Procedure> Characterize(
       const semantics::Symbol &, FoldingContext &);
+  // This function is the initial point of entry for characterizing procedure
   static std::optional<Procedure> Characterize(
       const ProcedureDesignator &, FoldingContext &);
   static std::optional<Procedure> Characterize(

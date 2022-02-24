@@ -41,10 +41,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "CallGraphSort.h"
-#include "InputFiles.h"
-#include "InputSection.h"
+#include "OutputSections.h"
+#include "SymbolTable.h"
 #include "Symbols.h"
-#include "llvm/Support/FileSystem.h"
 
 #include <numeric>
 
@@ -115,8 +114,8 @@ CallGraphSort::CallGraphSort() {
 
   // Create the graph.
   for (std::pair<SectionPair, uint64_t> &c : profile) {
-    const auto *fromSB = cast<InputSectionBase>(c.first.first);
-    const auto *toSB = cast<InputSectionBase>(c.first.second);
+    const auto *fromSB = cast<InputSectionBase>(c.first.first->repl);
+    const auto *toSB = cast<InputSectionBase>(c.first.second->repl);
     uint64_t weight = c.second;
 
     // Ignore edges between input sections belonging to different output
@@ -260,7 +259,7 @@ DenseMap<const InputSectionBase *, int> CallGraphSort::run() {
   return orderMap;
 }
 
-// Sort sections by the profile data provided by --callgraph-profile-file.
+// Sort sections by the profile data provided by -callgraph-profile-file
 //
 // This first builds a call graph based on the profile data then merges sections
 // according to the C³ heuristic. All clusters are then sorted by a density

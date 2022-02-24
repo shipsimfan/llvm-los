@@ -30,7 +30,6 @@ class TestGdbRemoteHostInfo(GdbRemoteTestCaseBase):
         "ptrsize",
         "triple",
         "vendor",
-        "vm-page-size",
         "watchpoint_exceptions_received",
     ])
 

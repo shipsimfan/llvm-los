@@ -3,16 +3,15 @@
 // UNSUPPORTED: android
 
 #include <assert.h>
-#include <elf.h>
 #include <signal.h>
 #include <stdio.h>
-#include <string.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
-#include <sys/uio.h>
 #include <sys/user.h>
 #include <sys/wait.h>
+#include <sys/uio.h>
 #include <unistd.h>
+#include <elf.h>
 #if __mips64 || __arm__
  #include <asm/ptrace.h>
  #include <sys/procfs.h>
@@ -47,14 +46,9 @@ int main(void) {
 #endif // __x86_64__
 
 #if (__powerpc64__ || __mips64 || __arm__)
-    // Check that nothing writes out-of-bounds.
-    struct pt_regs regs_buf[4];
-    memset(&regs_buf, 0xcd, sizeof(regs_buf));
-    struct pt_regs &regs = regs_buf[1];
+    struct pt_regs regs;
     res = ptrace((enum __ptrace_request)PTRACE_GETREGS, pid, NULL, &regs);
     assert(!res);
-    assert(memcmp(&regs_buf[0], &regs_buf[3], sizeof(regs_buf[3])) == 0);
-    assert(memcmp(&regs_buf[2], &regs_buf[3], sizeof(regs_buf[3])) == 0);
 #if (__powerpc64__)
     if (regs.nip)
       printf("%lx\n", regs.nip);

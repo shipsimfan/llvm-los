@@ -47,7 +47,6 @@ public:
         : std::moneypunct_byname<char, true>(nm, refs) {}
 };
 
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
 class Fwf
     : public std::moneypunct_byname<wchar_t, false>
 {
@@ -63,7 +62,6 @@ public:
     explicit Fwt(const std::string& nm, std::size_t refs = 0)
         : std::moneypunct_byname<wchar_t, true>(nm, refs) {}
 };
-#endif // TEST_HAS_NO_WIDE_CHARACTERS
 
 int main(int, char**)
 {
@@ -83,7 +81,6 @@ int main(int, char**)
         assert(p.field[2] == std::money_base::none);
         assert(p.field[3] == std::money_base::value);
     }
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     {
         Fwf f("C", 1);
         std::money_base::pattern p = f.pos_format();
@@ -100,7 +97,6 @@ int main(int, char**)
         assert(p.field[2] == std::money_base::none);
         assert(p.field[3] == std::money_base::value);
     }
-#endif // TEST_HAS_NO_WIDE_CHARACTERS
 
     {
         Fnf f(LOCALE_en_US_UTF_8, 1);
@@ -118,7 +114,6 @@ int main(int, char**)
         assert(p.field[2] == std::money_base::none);
         assert(p.field[3] == std::money_base::value);
     }
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     {
         Fwf f(LOCALE_en_US_UTF_8, 1);
         std::money_base::pattern p = f.pos_format();
@@ -135,7 +130,6 @@ int main(int, char**)
         assert(p.field[2] == std::money_base::none);
         assert(p.field[3] == std::money_base::value);
     }
-#endif // TEST_HAS_NO_WIDE_CHARACTERS
 
     {
         Fnf f(LOCALE_fr_FR_UTF_8, 1);
@@ -153,7 +147,6 @@ int main(int, char**)
         assert(p.field[2] == std::money_base::none);
         assert(p.field[3] == std::money_base::symbol);
     }
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     {
         Fwf f(LOCALE_fr_FR_UTF_8, 1);
         std::money_base::pattern p = f.pos_format();
@@ -170,7 +163,6 @@ int main(int, char**)
         assert(p.field[2] == std::money_base::none);
         assert(p.field[3] == std::money_base::symbol);
     }
-#endif // TEST_HAS_NO_WIDE_CHARACTERS
 
     {
         Fnf f(LOCALE_ru_RU_UTF_8, 1);
@@ -188,7 +180,6 @@ int main(int, char**)
         assert(p.field[2] == std::money_base::none);
         assert(p.field[3] == std::money_base::symbol);
     }
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     {
         Fwf f(LOCALE_ru_RU_UTF_8, 1);
         std::money_base::pattern p = f.pos_format();
@@ -205,7 +196,6 @@ int main(int, char**)
         assert(p.field[2] == std::money_base::none);
         assert(p.field[3] == std::money_base::symbol);
     }
-#endif // TEST_HAS_NO_WIDE_CHARACTERS
 
     {
         Fnf f(LOCALE_zh_CN_UTF_8, 1);
@@ -223,7 +213,6 @@ int main(int, char**)
         assert(p.field[2] == std::money_base::none);
         assert(p.field[3] == std::money_base::value);
     }
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     {
         Fwf f(LOCALE_zh_CN_UTF_8, 1);
         std::money_base::pattern p = f.pos_format();
@@ -240,7 +229,6 @@ int main(int, char**)
         assert(p.field[2] == std::money_base::none);
         assert(p.field[3] == std::money_base::value);
     }
-#endif // TEST_HAS_NO_WIDE_CHARACTERS
 
   return 0;
 }

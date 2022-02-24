@@ -68,7 +68,7 @@ typedef struct {
 ALWAYS_INLINE
 void lsan_register_worker_thread(int parent_tid) {
   if (GetCurrentThread() == kInvalidTid) {
-    u32 tid = ThreadCreate(parent_tid, true);
+    u32 tid = ThreadCreate(parent_tid, 0, true);
     ThreadStart(tid, GetTid());
     SetCurrentThread(tid);
   }

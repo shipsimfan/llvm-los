@@ -5,10 +5,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// This file defines the SmallSet class.
-///
+//
+// This file defines the SmallSet class.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_SMALLSET_H
@@ -17,7 +16,6 @@
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/type_traits.h"

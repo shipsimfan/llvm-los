@@ -1070,7 +1070,7 @@ void ItaniumVTableBuilder::AddThunk(const CXXMethodDecl *MD,
   SmallVectorImpl<ThunkInfo> &ThunksVector = Thunks[MD];
 
   // Check if we have this thunk already.
-  if (llvm::is_contained(ThunksVector, Thunk))
+  if (llvm::find(ThunksVector, Thunk) != ThunksVector.end())
     return;
 
   ThunksVector.push_back(Thunk);
@@ -1418,7 +1418,8 @@ FindNearestOverriddenMethod(const CXXMethodDecl *MD,
   OverriddenMethodsSetTy OverriddenMethods;
   ComputeAllOverriddenMethods(MD, OverriddenMethods);
 
-  for (const CXXRecordDecl *PrimaryBase : llvm::reverse(Bases)) {
+  for (const CXXRecordDecl *PrimaryBase :
+       llvm::make_range(Bases.rbegin(), Bases.rend())) {
     // Now check the overridden methods.
     for (const CXXMethodDecl *OverriddenMD : OverriddenMethods) {
       // We found our overridden method.
@@ -2328,7 +2329,7 @@ ItaniumVTableContext::computeVTableRelatedInformation(const CXXRecordDecl *RD) {
     return;
 
   ItaniumVTableBuilder Builder(*this, RD, CharUnits::Zero(),
-                               /*MostDerivedClassIsVirtual=*/false, RD);
+                               /*MostDerivedClassIsVirtual=*/0, RD);
   Entry = CreateVTableLayout(Builder);
 
   MethodVTableIndices.insert(Builder.vtable_indices_begin(),
@@ -2497,7 +2498,7 @@ private:
     SmallVector<ThunkInfo, 1> &ThunksVector = Thunks[MD];
 
     // Check if we have this thunk already.
-    if (llvm::is_contained(ThunksVector, Thunk))
+    if (llvm::find(ThunksVector, Thunk) != ThunksVector.end())
       return;
 
     ThunksVector.push_back(Thunk);
@@ -3097,7 +3098,8 @@ void VFTableBuilder::AddMethods(BaseSubobject Base, unsigned BaseDepth,
 }
 
 static void PrintBasePath(const VPtrInfo::BasePath &Path, raw_ostream &Out) {
-  for (const CXXRecordDecl *Elem : llvm::reverse(Path)) {
+  for (const CXXRecordDecl *Elem :
+       llvm::make_range(Path.rbegin(), Path.rend())) {
     Out << "'";
     Elem->printQualifiedName(Out);
     Out << "' in ";
@@ -3452,7 +3454,7 @@ static void removeRedundantPaths(std::list<FullPathTy> &FullPaths) {
       if (&SpecificPath == &OtherPath)
         continue;
       if (llvm::all_of(SpecificPath, [&](const BaseSubobject &BSO) {
-            return OtherPath.contains(BSO);
+            return OtherPath.count(BSO) != 0;
           })) {
         return true;
       }

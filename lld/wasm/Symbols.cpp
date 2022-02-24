@@ -22,7 +22,6 @@
 using namespace llvm;
 using namespace llvm::object;
 using namespace llvm::wasm;
-using namespace lld::wasm;
 
 namespace lld {
 std::string toString(const wasm::Symbol &sym) {
@@ -34,8 +33,9 @@ std::string maybeDemangleSymbol(StringRef name) {
   // `main` in the case where we need to pass it arguments.
   if (name == "__main_argc_argv")
     return "main";
-
-  return demangle(name, config->demangle);
+  if (wasm::config->demangle)
+    return demangleItanium(name);
+  return std::string(name);
 }
 
 std::string toString(wasm::Symbol::Kind kind) {
@@ -48,8 +48,8 @@ std::string toString(wasm::Symbol::Kind kind) {
     return "DefinedGlobal";
   case wasm::Symbol::DefinedTableKind:
     return "DefinedTable";
-  case wasm::Symbol::DefinedTagKind:
-    return "DefinedTag";
+  case wasm::Symbol::DefinedEventKind:
+    return "DefinedEvent";
   case wasm::Symbol::UndefinedFunctionKind:
     return "UndefinedFunction";
   case wasm::Symbol::UndefinedDataKind:
@@ -58,8 +58,6 @@ std::string toString(wasm::Symbol::Kind kind) {
     return "UndefinedGlobal";
   case wasm::Symbol::UndefinedTableKind:
     return "UndefinedTable";
-  case wasm::Symbol::UndefinedTagKind:
-    return "UndefinedTag";
   case wasm::Symbol::LazyKind:
     return "LazyKind";
   case wasm::Symbol::SectionKind:
@@ -76,7 +74,6 @@ DefinedFunction *WasmSym::callDtors;
 DefinedFunction *WasmSym::initMemory;
 DefinedFunction *WasmSym::applyDataRelocs;
 DefinedFunction *WasmSym::applyGlobalRelocs;
-DefinedFunction *WasmSym::applyGlobalTLSRelocs;
 DefinedFunction *WasmSym::initTLS;
 DefinedFunction *WasmSym::startFunction;
 DefinedData *WasmSym::dsoHandle;
@@ -90,8 +87,6 @@ GlobalSymbol *WasmSym::tlsSize;
 GlobalSymbol *WasmSym::tlsAlign;
 UndefinedGlobal *WasmSym::tableBase;
 DefinedData *WasmSym::definedTableBase;
-UndefinedGlobal *WasmSym::tableBase32;
-DefinedData *WasmSym::definedTableBase32;
 UndefinedGlobal *WasmSym::memoryBase;
 DefinedData *WasmSym::definedMemoryBase;
 TableSymbol *WasmSym::indirectFunctionTable;
@@ -103,8 +98,8 @@ WasmSymbolType Symbol::getWasmType() const {
     return WASM_SYMBOL_TYPE_DATA;
   if (isa<GlobalSymbol>(this))
     return WASM_SYMBOL_TYPE_GLOBAL;
-  if (isa<TagSymbol>(this))
-    return WASM_SYMBOL_TYPE_TAG;
+  if (isa<EventSymbol>(this))
+    return WASM_SYMBOL_TYPE_EVENT;
   if (isa<TableSymbol>(this))
     return WASM_SYMBOL_TYPE_TABLE;
   if (isa<SectionSymbol>(this) || isa<OutputSectionSymbol>(this))
@@ -115,8 +110,6 @@ WasmSymbolType Symbol::getWasmType() const {
 const WasmSignature *Symbol::getSignature() const {
   if (auto* f = dyn_cast<FunctionSymbol>(this))
     return f->signature;
-  if (auto *t = dyn_cast<TagSymbol>(this))
-    return t->signature;
   if (auto *l = dyn_cast<LazySymbol>(this))
     return l->signature;
   return nullptr;
@@ -142,8 +135,8 @@ bool Symbol::isDiscarded() const {
 bool Symbol::isLive() const {
   if (auto *g = dyn_cast<DefinedGlobal>(this))
     return g->global->live;
-  if (auto *t = dyn_cast<DefinedTag>(this))
-    return t->tag->live;
+  if (auto *e = dyn_cast<DefinedEvent>(this))
+    return e->event->live;
   if (auto *t = dyn_cast<DefinedTable>(this))
     return t->table->live;
   if (InputChunk *c = getChunk())
@@ -153,26 +146,17 @@ bool Symbol::isLive() const {
 
 void Symbol::markLive() {
   assert(!isDiscarded());
-  referenced = true;
-  if (file != nullptr && isDefined())
+  if (file != NULL && isDefined())
     file->markLive();
   if (auto *g = dyn_cast<DefinedGlobal>(this))
     g->global->live = true;
-  if (auto *t = dyn_cast<DefinedTag>(this))
-    t->tag->live = true;
+  if (auto *e = dyn_cast<DefinedEvent>(this))
+    e->event->live = true;
   if (auto *t = dyn_cast<DefinedTable>(this))
     t->table->live = true;
-  if (InputChunk *c = getChunk()) {
-    // Usually, a whole chunk is marked as live or dead, but in mergeable
-    // (splittable) sections, each piece of data has independent liveness bit.
-    // So we explicitly tell it which offset is in use.
-    if (auto *d = dyn_cast<DefinedData>(this)) {
-      if (auto *ms = dyn_cast<MergeInputChunk>(c)) {
-        ms->getSectionPiece(d->value)->live = true;
-      }
-    }
+  if (InputChunk *c = getChunk())
     c->live = true;
-  }
+  referenced = true;
 }
 
 uint32_t Symbol::getOutputSymbolIndex() const {
@@ -190,6 +174,11 @@ void Symbol::setOutputSymbolIndex(uint32_t index) {
 void Symbol::setGOTIndex(uint32_t index) {
   LLVM_DEBUG(dbgs() << "setGOTIndex " << name << " -> " << index << "\n");
   assert(gotIndex == INVALID_INDEX);
+  if (config->isPic) {
+    // Any symbol that is assigned a GOT entry must be exported otherwise the
+    // dynamic linker won't be able create the entry that contains it.
+    forceExport = true;
+  }
   gotIndex = index;
 }
 
@@ -205,8 +194,6 @@ bool Symbol::isHidden() const {
   return (flags & WASM_SYMBOL_VISIBILITY_MASK) == WASM_SYMBOL_VISIBILITY_HIDDEN;
 }
 
-bool Symbol::isTLS() const { return flags & WASM_SYMBOL_TLS; }
-
 void Symbol::setHidden(bool isHidden) {
   LLVM_DEBUG(dbgs() << "setHidden: " << name << " -> " << isHidden << "\n");
   flags &= ~WASM_SYMBOL_VISIBILITY_MASK;
@@ -217,23 +204,16 @@ void Symbol::setHidden(bool isHidden) {
 }
 
 bool Symbol::isExported() const {
-  // Shared libraries must export all weakly defined symbols
-  // in case they contain the version that will be chosen by
-  // the dynamic linker.
-  if (config->shared && isLive() && isDefined() && isWeak())
-    return true;
-
   if (!isDefined() || isLocal())
     return false;
 
-  if (config->exportAll || (config->exportDynamic && !isHidden()))
+  if (forceExport || config->exportAll)
     return true;
 
-  return isExportedExplicit();
-}
+  if (config->exportDynamic && !isHidden())
+    return true;
 
-bool Symbol::isExportedExplicit() const {
-  return forceExport || flags & WASM_SYMBOL_EXPORTED;
+  return flags & WASM_SYMBOL_EXPORTED;
 }
 
 bool Symbol::isNoStrip() const {
@@ -241,13 +221,15 @@ bool Symbol::isNoStrip() const {
 }
 
 uint32_t FunctionSymbol::getFunctionIndex() const {
-  if (const auto *u = dyn_cast<UndefinedFunction>(this))
-    if (u->stubFunction)
+  if (auto *f = dyn_cast<DefinedFunction>(this))
+    return f->function->getFunctionIndex();
+  if (const auto *u = dyn_cast<UndefinedFunction>(this)) {
+    if (u->stubFunction) {
       return u->stubFunction->getFunctionIndex();
-  if (functionIndex != INVALID_INDEX)
-    return functionIndex;
-  auto *f = cast<DefinedFunction>(this);
-  return f->function->getFunctionIndex();
+    }
+  }
+  assert(functionIndex != INVALID_INDEX);
+  return functionIndex;
 }
 
 void FunctionSymbol::setFunctionIndex(uint32_t index) {
@@ -294,19 +276,10 @@ DefinedFunction::DefinedFunction(StringRef name, uint32_t flags, InputFile *f,
                      function ? &function->signature : nullptr),
       function(function) {}
 
-uint32_t DefinedFunction::getExportedFunctionIndex() const {
-  return function->getFunctionIndex();
-}
-
-uint64_t DefinedData::getVA() const {
+uint64_t DefinedData::getVA(uint64_t addend) const {
   LLVM_DEBUG(dbgs() << "getVA: " << getName() << "\n");
-  // In the shared memory case, TLS symbols are relative to the start of the TLS
-  // output segment (__tls_base).  When building without shared memory, TLS
-  // symbols absolute, just like non-TLS.
-  if (isTLS() && config->sharedMemory)
-    return getOutputSegmentOffset() + value;
   if (segment)
-    return segment->getVA(value);
+    return segment->getVA(value + addend);
   return value;
 }
 
@@ -318,7 +291,7 @@ void DefinedData::setVA(uint64_t value_) {
 
 uint64_t DefinedData::getOutputSegmentOffset() const {
   LLVM_DEBUG(dbgs() << "getOutputSegmentOffset: " << getName() << "\n");
-  return segment->getChunkOffset(value);
+  return segment->outputSegmentOffset + value;
 }
 
 uint64_t DefinedData::getOutputSegmentIndex() const {
@@ -351,30 +324,31 @@ DefinedGlobal::DefinedGlobal(StringRef name, uint32_t flags, InputFile *file,
                    global ? &global->getType() : nullptr),
       global(global) {}
 
-uint32_t TagSymbol::getTagIndex() const {
-  if (auto *f = dyn_cast<DefinedTag>(this))
-    return f->tag->getAssignedIndex();
-  assert(tagIndex != INVALID_INDEX);
-  return tagIndex;
+uint32_t EventSymbol::getEventIndex() const {
+  if (auto *f = dyn_cast<DefinedEvent>(this))
+    return f->event->getAssignedIndex();
+  assert(eventIndex != INVALID_INDEX);
+  return eventIndex;
 }
 
-void TagSymbol::setTagIndex(uint32_t index) {
-  LLVM_DEBUG(dbgs() << "setTagIndex " << name << " -> " << index << "\n");
-  assert(tagIndex == INVALID_INDEX);
-  tagIndex = index;
+void EventSymbol::setEventIndex(uint32_t index) {
+  LLVM_DEBUG(dbgs() << "setEventIndex " << name << " -> " << index << "\n");
+  assert(eventIndex == INVALID_INDEX);
+  eventIndex = index;
 }
 
-bool TagSymbol::hasTagIndex() const {
-  if (auto *f = dyn_cast<DefinedTag>(this))
-    return f->tag->hasAssignedIndex();
-  return tagIndex != INVALID_INDEX;
+bool EventSymbol::hasEventIndex() const {
+  if (auto *f = dyn_cast<DefinedEvent>(this))
+    return f->event->hasAssignedIndex();
+  return eventIndex != INVALID_INDEX;
 }
 
-DefinedTag::DefinedTag(StringRef name, uint32_t flags, InputFile *file,
-                       InputTag *tag)
-    : TagSymbol(name, DefinedTagKind, flags, file,
-                tag ? &tag->signature : nullptr),
-      tag(tag) {}
+DefinedEvent::DefinedEvent(StringRef name, uint32_t flags, InputFile *file,
+                           InputEvent *event)
+    : EventSymbol(name, DefinedEventKind, flags, file,
+                  event ? &event->getType() : nullptr,
+                  event ? &event->signature : nullptr),
+      event(event) {}
 
 void TableSymbol::setLimits(const WasmLimits &limits) {
   if (auto *t = dyn_cast<DefinedTable>(this))

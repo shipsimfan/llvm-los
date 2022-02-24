@@ -9,7 +9,10 @@
 // UNSUPPORTED: c++03, c++11, c++14
 
 // Throwing bad_any_cast is supported starting in macosx10.13
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11|12}} && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.12 && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.11 && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.10 && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.9 && !no-exceptions
 
 // <any>
 
@@ -30,56 +33,64 @@
 #include "count_new.h"
 #include "test_macros.h"
 
+using std::any;
+using std::any_cast;
+using std::bad_any_cast;
+
+
 // Test that the operators are NOT marked noexcept.
 void test_cast_is_not_noexcept() {
-    std::any a;
-    static_assert(!noexcept(std::any_cast<int>(static_cast<std::any&>(a))), "");
-    static_assert(!noexcept(std::any_cast<int>(static_cast<std::any const&>(a))), "");
-    static_assert(!noexcept(std::any_cast<int>(static_cast<std::any &&>(a))), "");
+    any a;
+    static_assert(!noexcept(any_cast<int>(static_cast<any&>(a))), "");
+    static_assert(!noexcept(any_cast<int>(static_cast<any const&>(a))), "");
+    static_assert(!noexcept(any_cast<int>(static_cast<any &&>(a))), "");
 }
 
 // Test that the return type of any_cast is correct.
 void test_cast_return_type() {
-    std::any a;
-    static_assert(std::is_same<decltype(std::any_cast<int>(a)), int>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int const>(a)), int>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int&>(a)), int&>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int const&>(a)), int const&>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int&&>(a)), int&&>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int const&&>(a)), int const&&>::value, "");
+    any a;
+    static_assert(std::is_same<decltype(any_cast<int>(a)), int>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int const>(a)), int>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int&>(a)), int&>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int const&>(a)), int const&>::value, "");
 
-    static_assert(std::is_same<decltype(std::any_cast<int>(std::move(a))), int>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int const>(std::move(a))), int>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int&>(std::move(a))), int&>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int const&>(std::move(a))), int const&>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int&&>(std::move(a))), int&&>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int const&&>(std::move(a))), int const&&>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int&&>(a)), int&&>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int const&&>(a)), int const&&>::value, "");
 
-    const std::any& ca = a;
-    static_assert(std::is_same<decltype(std::any_cast<int>(ca)), int>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int const>(ca)), int>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int const&>(ca)), int const&>::value, "");
-    static_assert(std::is_same<decltype(std::any_cast<int const&&>(ca)), int const&&>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int>(std::move(a))), int>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int const>(std::move(a))), int>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int&>(std::move(a))), int&>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int const&>(std::move(a))), int const&>::value, "");
+
+    static_assert(std::is_same<decltype(any_cast<int&&>(std::move(a))), int&&>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int const&&>(std::move(a))), int const&&>::value, "");
+
+    any const& ca = a;
+    static_assert(std::is_same<decltype(any_cast<int>(ca)), int>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int const>(ca)), int>::value, "");
+    static_assert(std::is_same<decltype(any_cast<int const&>(ca)), int const&>::value, "");
+
+    static_assert(std::is_same<decltype(any_cast<int const&&>(ca)), int const&&>::value, "");
 }
 
 template <class Type, class ConstT = Type>
-void checkThrows(std::any& a)
+void checkThrows(any& a)
 {
 #if !defined(TEST_HAS_NO_EXCEPTIONS)
     try {
-        TEST_IGNORE_NODISCARD std::any_cast<Type>(a);
+        TEST_IGNORE_NODISCARD any_cast<Type>(a);
         assert(false);
-    } catch (const std::bad_any_cast&) {
-        // do nothing
+    } catch (bad_any_cast const &) {
+            // do nothing
     } catch (...) {
         assert(false);
     }
 
     try {
-        TEST_IGNORE_NODISCARD std::any_cast<ConstT>(static_cast<const std::any&>(a));
+        TEST_IGNORE_NODISCARD any_cast<ConstT>(static_cast<any const&>(a));
         assert(false);
-    } catch (const std::bad_any_cast&) {
-        // do nothing
+    } catch (bad_any_cast const &) {
+            // do nothing
     } catch (...) {
         assert(false);
     }
@@ -90,9 +101,9 @@ void checkThrows(std::any& a)
             typename std::remove_reference<Type>::type&&,
             Type
         >::type;
-        TEST_IGNORE_NODISCARD std::any_cast<RefType>(static_cast<std::any&&>(a));
+        TEST_IGNORE_NODISCARD any_cast<RefType>(static_cast<any&&>(a));
         assert(false);
-    } catch (const std::bad_any_cast&) {
+    } catch (bad_any_cast const &) {
             // do nothing
     } catch (...) {
         assert(false);
@@ -105,7 +116,7 @@ void checkThrows(std::any& a)
 void test_cast_empty() {
     // None of these operations should allocate.
     DisableAllocationGuard g; (TEST_IGNORE_NODISCARD g);
-    std::any a;
+    any a;
     checkThrows<int>(a);
 }
 
@@ -114,8 +125,8 @@ void test_cast_to_reference() {
     assert(Type::count == 0);
     Type::reset();
     {
-        std::any a = Type(42);
-        const std::any& ca = a;
+        any a((Type(42)));
+        any const& ca = a;
         assert(Type::count == 1);
         assert(Type::copied == 0);
         assert(Type::moved == 1);
@@ -129,47 +140,47 @@ void test_cast_to_reference() {
 
         // Check getting a type by reference from a non-const lvalue any.
         {
-            Type& v = std::any_cast<Type&>(a);
+            Type& v = any_cast<Type&>(a);
             assert(v.value == 42);
 
-            Type const &cv = std::any_cast<Type const&>(a);
+            Type const &cv = any_cast<Type const&>(a);
             assert(&cv == &v);
         }
         // Check getting a type by reference from a const lvalue any.
         {
-            Type const& v = std::any_cast<Type const&>(ca);
+            Type const& v = any_cast<Type const&>(ca);
             assert(v.value == 42);
 
-            Type const &cv = std::any_cast<Type const&>(ca);
+            Type const &cv = any_cast<Type const&>(ca);
             assert(&cv == &v);
         }
         // Check getting a type by reference from a const rvalue any.
         {
-            Type const& v = std::any_cast<Type const&>(std::move(ca));
+            Type const& v = any_cast<Type const&>(std::move(ca));
             assert(v.value == 42);
 
-            Type const &cv = std::any_cast<Type const&>(std::move(ca));
+            Type const &cv = any_cast<Type const&>(std::move(ca));
             assert(&cv == &v);
         }
         // Check getting a type by reference from a const rvalue any.
         {
-            Type&& v = std::any_cast<Type&&>(std::move(a));
+            Type&& v = any_cast<Type&&>(std::move(a));
             assert(v.value == 42);
-            assert(std::any_cast<Type&>(a).value == 42);
+            assert(any_cast<Type&>(a).value == 42);
 
-            Type&& cv = std::any_cast<Type&&>(std::move(a));
+            Type&& cv = any_cast<Type&&>(std::move(a));
             assert(&cv == &v);
-            assert(std::any_cast<Type&>(a).value == 42);
+            assert(any_cast<Type&>(a).value == 42);
         }
         // Check getting a type by reference from a const rvalue any.
         {
-            Type const&& v = std::any_cast<Type const&&>(std::move(a));
+            Type const&& v = any_cast<Type const&&>(std::move(a));
             assert(v.value == 42);
-            assert(std::any_cast<Type&>(a).value == 42);
+            assert(any_cast<Type&>(a).value == 42);
 
-            Type const&& cv = std::any_cast<Type const&&>(std::move(a));
+            Type const&& cv = any_cast<Type const&&>(std::move(a));
             assert(&cv == &v);
-            assert(std::any_cast<Type&>(a).value == 42);
+            assert(any_cast<Type&>(a).value == 42);
         }
         // Check that the original object hasn't been changed.
         assertContains<Type>(a, 42);
@@ -187,7 +198,7 @@ void test_cast_to_value() {
     assert(Type::count == 0);
     Type::reset();
     {
-        std::any a = Type(42);
+        any a((Type(42)));
         assert(Type::count == 1);
         assert(Type::copied == 0);
         assert(Type::moved == 1);
@@ -203,7 +214,7 @@ void test_cast_to_value() {
         // Check getting Type by value from a non-const lvalue any.
         // This should cause the non-const copy constructor to be called.
         {
-            Type t = std::any_cast<Type>(a);
+            Type t = any_cast<Type>(a);
 
             assert(Type::count == 2);
             assert(Type::copied == 1);
@@ -217,7 +228,7 @@ void test_cast_to_value() {
         // Check getting const Type by value from a non-const lvalue any.
         // This should cause the const copy constructor to be called.
         {
-            Type t = std::any_cast<Type const>(a);
+            Type t = any_cast<Type const>(a);
 
             assert(Type::count == 2);
             assert(Type::copied == 1);
@@ -231,7 +242,7 @@ void test_cast_to_value() {
         // Check getting Type by value from a non-const lvalue any.
         // This should cause the const copy constructor to be called.
         {
-            Type t = std::any_cast<Type>(static_cast<const std::any&>(a));
+            Type t = any_cast<Type>(static_cast<any const&>(a));
 
             assert(Type::count == 2);
             assert(Type::copied == 1);
@@ -245,7 +256,7 @@ void test_cast_to_value() {
         // Check getting Type by value from a non-const rvalue any.
         // This should cause the non-const copy constructor to be called.
         {
-            Type t = std::any_cast<Type>(static_cast<std::any&&>(a));
+            Type t = any_cast<Type>(static_cast<any &&>(a));
 
             assert(Type::count == 2);
             assert(Type::moved == 1);
@@ -253,15 +264,15 @@ void test_cast_to_value() {
             assert(Type::const_copied == 0);
             assert(Type::non_const_copied == 0);
             assert(t.value == 42);
-            assert(std::any_cast<Type&>(a).value == 0);
-            std::any_cast<Type&>(a).value = 42; // reset the value
+            assert(any_cast<Type&>(a).value == 0);
+            any_cast<Type&>(a).value = 42; // reset the value
         }
         assert(Type::count == 1);
         Type::reset();
         // Check getting const Type by value from a non-const rvalue any.
         // This should cause the const copy constructor to be called.
         {
-            Type t = std::any_cast<Type const>(static_cast<std::any&&>(a));
+            Type t = any_cast<Type const>(static_cast<any &&>(a));
 
             assert(Type::count == 2);
             assert(Type::copied == 0);
@@ -269,15 +280,15 @@ void test_cast_to_value() {
             assert(Type::non_const_copied == 0);
             assert(Type::moved == 1);
             assert(t.value == 42);
-            assert(std::any_cast<Type&>(a).value == 0);
-            std::any_cast<Type&>(a).value = 42; // reset the value
+            assert(any_cast<Type&>(a).value == 0);
+            any_cast<Type&>(a).value = 42; // reset the value
         }
         assert(Type::count == 1);
         Type::reset();
         // Check getting Type by value from a const rvalue any.
         // This should cause the const copy constructor to be called.
         {
-            Type t = std::any_cast<Type>(static_cast<const std::any&&>(a));
+            Type t = any_cast<Type>(static_cast<any const&&>(a));
 
             assert(Type::count == 2);
             assert(Type::copied == 1);
@@ -285,7 +296,7 @@ void test_cast_to_value() {
             assert(Type::non_const_copied == 0);
             assert(Type::moved == 0);
             assert(t.value == 42);
-            assert(std::any_cast<Type&>(a).value == 42);
+            assert(any_cast<Type&>(a).value == 42);
         }
         // Ensure we still only have 1 Type object alive.
         assert(Type::count == 1);

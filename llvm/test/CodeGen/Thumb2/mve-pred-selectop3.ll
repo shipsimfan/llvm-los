@@ -358,8 +358,8 @@ define arm_aapcs_vfpcc <4 x float> @fadd_v4f32_x(<4 x float> %x, <4 x float> %y,
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
-  %a = select <4 x i1> %c, <4 x float> %y, <4 x float> <float -0.000000e+00, float -0.000000e+00, float -0.000000e+00, float -0.000000e+00>
-  %b = fadd <4 x float> %a, %x
+  %a = fadd <4 x float> %x, %y
+  %b = select <4 x i1> %c, <4 x float> %a, <4 x float> %x
   ret <4 x float> %b
 }
 
@@ -372,8 +372,8 @@ define arm_aapcs_vfpcc <8 x half> @fadd_v8f16_x(<8 x half> %x, <8 x half> %y, i3
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
-  %a = select <8 x i1> %c, <8 x half> %y, <8 x half> <half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000>
-  %b = fadd <8 x half> %a, %x
+  %a = fadd <8 x half> %x, %y
+  %b = select <8 x i1> %c, <8 x half> %a, <8 x half> %x
   ret <8 x half> %b
 }
 
@@ -386,8 +386,8 @@ define arm_aapcs_vfpcc <4 x float> @fsub_v4f32_x(<4 x float> %x, <4 x float> %y,
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
-  %a = select <4 x i1> %c, <4 x float> %y, <4 x float> zeroinitializer
-  %b = fsub <4 x float> %x, %a
+  %a = fsub <4 x float> %x, %y
+  %b = select <4 x i1> %c, <4 x float> %a, <4 x float> %x
   ret <4 x float> %b
 }
 
@@ -400,8 +400,8 @@ define arm_aapcs_vfpcc <8 x half> @fsub_v8f16_x(<8 x half> %x, <8 x half> %y, i3
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
-  %a = select <8 x i1> %c, <8 x half> %y, <8 x half> zeroinitializer
-  %b = fsub <8 x half> %x, %a
+  %a = fsub <8 x half> %x, %y
+  %b = select <8 x i1> %c, <8 x half> %a, <8 x half> %x
   ret <8 x half> %b
 }
 
@@ -414,8 +414,8 @@ define arm_aapcs_vfpcc <4 x float> @fmul_v4f32_x(<4 x float> %x, <4 x float> %y,
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
-  %a = select <4 x i1> %c, <4 x float> %y, <4 x float> <float 1.000000e+00, float 1.000000e+00, float 1.000000e+00, float 1.000000e+00>
-  %b = fmul <4 x float> %a, %x
+  %a = fmul <4 x float> %x, %y
+  %b = select <4 x i1> %c, <4 x float> %a, <4 x float> %x
   ret <4 x float> %b
 }
 
@@ -428,72 +428,8 @@ define arm_aapcs_vfpcc <8 x half> @fmul_v8f16_x(<8 x half> %x, <8 x half> %y, i3
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
-  %a = select <8 x i1> %c, <8 x half> %y, <8 x half> <half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00>
-  %b = fmul <8 x half> %a, %x
-  ret <8 x half> %b
-}
-
-define arm_aapcs_vfpcc <4 x float> @fmai_v4f32_x(<4 x float> %x, <4 x float> %y, <4 x float> %z, i32 %n) {
-; CHECK-LABEL: fmai_v4f32_x:
-; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vmov.i32 q3, #0x80000000
-; CHECK-NEXT:    vctp.32 r0
-; CHECK-NEXT:    vpst
-; CHECK-NEXT:    vmovt q3, q0
-; CHECK-NEXT:    vfma.f32 q3, q1, q2
-; CHECK-NEXT:    vmov q0, q3
-; CHECK-NEXT:    bx lr
-entry:
-  %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
-  %a = select <4 x i1> %c, <4 x float> %x, <4 x float> <float -0.000000e+00, float -0.000000e+00, float -0.000000e+00, float -0.000000e+00>
-  %b = call <4 x float> @llvm.fma.v4f32(<4 x float> %y, <4 x float> %z, <4 x float> %a)
-  ret <4 x float> %b
-}
-
-define arm_aapcs_vfpcc <8 x half> @fmai_v8f16_x(<8 x half> %x, <8 x half> %y, <8 x half> %z, i32 %n) {
-; CHECK-LABEL: fmai_v8f16_x:
-; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vmov.i16 q3, #0x8000
-; CHECK-NEXT:    vctp.16 r0
-; CHECK-NEXT:    vpst
-; CHECK-NEXT:    vmovt q3, q0
-; CHECK-NEXT:    vfma.f16 q3, q1, q2
-; CHECK-NEXT:    vmov q0, q3
-; CHECK-NEXT:    bx lr
-entry:
-  %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
-  %a = select <8 x i1> %c, <8 x half> %x, <8 x half> <half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000>
-  %b = call <8 x half> @llvm.fma.v8f16(<8 x half> %y, <8 x half> %z, <8 x half> %a)
-  ret <8 x half> %b
-}
-
-define arm_aapcs_vfpcc <4 x float> @fma_v4f32_x(<4 x float> %x, <4 x float> %y, <4 x float> %z, i32 %n) {
-; CHECK-LABEL: fma_v4f32_x:
-; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vctp.32 r0
-; CHECK-NEXT:    vpst
-; CHECK-NEXT:    vfmat.f32 q0, q1, q2
-; CHECK-NEXT:    bx lr
-entry:
-  %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
-  %m = fmul fast <4 x float> %y, %z
-  %a = select <4 x i1> %c, <4 x float> %m, <4 x float> <float -0.000000e+00, float -0.000000e+00, float -0.000000e+00, float -0.000000e+00>
-  %b = fadd fast <4 x float> %a, %x
-  ret <4 x float> %b
-}
-
-define arm_aapcs_vfpcc <8 x half> @fma_v8f16_x(<8 x half> %x, <8 x half> %y, <8 x half> %z, i32 %n) {
-; CHECK-LABEL: fma_v8f16_x:
-; CHECK:       @ %bb.0: @ %entry
-; CHECK-NEXT:    vctp.16 r0
-; CHECK-NEXT:    vpst
-; CHECK-NEXT:    vfmat.f16 q0, q1, q2
-; CHECK-NEXT:    bx lr
-entry:
-  %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
-  %m = fmul fast <8 x half> %y, %z
-  %a = select <8 x i1> %c, <8 x half> %m, <8 x half> <half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000>
-  %b = fadd fast <8 x half> %a, %x
+  %a = fmul <8 x half> %x, %y
+  %b = select <8 x i1> %c, <8 x half> %a, <8 x half> %x
   ret <8 x half> %b
 }
 
@@ -1061,8 +997,8 @@ entry:
   %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
   %i = insertelement <4 x float> undef, float %y, i32 0
   %ys = shufflevector <4 x float> %i, <4 x float> undef, <4 x i32> zeroinitializer
-  %a = select <4 x i1> %c, <4 x float> %ys, <4 x float> <float -0.000000e+00, float -0.000000e+00, float -0.000000e+00, float -0.000000e+00>
-  %b = fadd <4 x float> %a, %x
+  %a = fadd <4 x float> %ys, %x
+  %b = select <4 x i1> %c, <4 x float> %a, <4 x float> %x
   ret <4 x float> %b
 }
 
@@ -1078,8 +1014,8 @@ entry:
   %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
   %i = insertelement <8 x half> undef, half %y, i32 0
   %ys = shufflevector <8 x half> %i, <8 x half> undef, <8 x i32> zeroinitializer
-  %a = select <8 x i1> %c, <8 x half> %ys, <8 x half> <half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000>
-  %b = fadd <8 x half> %a, %x
+  %a = fadd <8 x half> %ys, %x
+  %b = select <8 x i1> %c, <8 x half> %a, <8 x half> %x
   ret <8 x half> %b
 }
 
@@ -1095,8 +1031,8 @@ entry:
   %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
   %i = insertelement <4 x float> undef, float %y, i32 0
   %ys = shufflevector <4 x float> %i, <4 x float> undef, <4 x i32> zeroinitializer
-  %a = select <4 x i1> %c, <4 x float> %ys, <4 x float> zeroinitializer
-  %b = fsub <4 x float> %x, %a
+  %a = fsub <4 x float> %x, %ys
+  %b = select <4 x i1> %c, <4 x float> %a, <4 x float> %x
   ret <4 x float> %b
 }
 
@@ -1112,8 +1048,8 @@ entry:
   %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
   %i = insertelement <8 x half> undef, half %y, i32 0
   %ys = shufflevector <8 x half> %i, <8 x half> undef, <8 x i32> zeroinitializer
-  %a = select <8 x i1> %c, <8 x half> %ys, <8 x half> zeroinitializer
-  %b = fsub <8 x half> %x, %a
+  %a = fsub <8 x half> %x, %ys
+  %b = select <8 x i1> %c, <8 x half> %a, <8 x half> %x
   ret <8 x half> %b
 }
 
@@ -1129,8 +1065,8 @@ entry:
   %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
   %i = insertelement <4 x float> undef, float %y, i32 0
   %ys = shufflevector <4 x float> %i, <4 x float> undef, <4 x i32> zeroinitializer
-  %a = select <4 x i1> %c, <4 x float> %ys, <4 x float> <float 1.000000e+00, float 1.000000e+00, float 1.000000e+00, float 1.000000e+00>
-  %b = fmul <4 x float> %a, %x
+  %a = fmul <4 x float> %ys, %x
+  %b = select <4 x i1> %c, <4 x float> %a, <4 x float> %x
   ret <4 x float> %b
 }
 
@@ -1146,8 +1082,8 @@ entry:
   %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
   %i = insertelement <8 x half> undef, half %y, i32 0
   %ys = shufflevector <8 x half> %i, <8 x half> undef, <8 x i32> zeroinitializer
-  %a = select <8 x i1> %c, <8 x half> %ys, <8 x half> <half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00>
-  %b = fmul <8 x half> %a, %x
+  %a = fmul <8 x half> %ys, %x
+  %b = select <8 x i1> %c, <8 x half> %a, <8 x half> %x
   ret <8 x half> %b
 }
 
@@ -1714,13 +1650,13 @@ define arm_aapcs_vfpcc <4 x float> @fadd_v4f32_y(<4 x float> %x, <4 x float> %y,
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    vctp.32 r0
 ; CHECK-NEXT:    vpst
-; CHECK-NEXT:    vaddt.f32 q1, q1, q0
+; CHECK-NEXT:    vaddt.f32 q1, q0, q1
 ; CHECK-NEXT:    vmov q0, q1
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
-  %a = select <4 x i1> %c, <4 x float> %x, <4 x float> <float -0.000000e+00, float -0.000000e+00, float -0.000000e+00, float -0.000000e+00>
-  %b = fadd <4 x float> %a, %y
+  %a = fadd <4 x float> %x, %y
+  %b = select <4 x i1> %c, <4 x float> %a, <4 x float> %y
   ret <4 x float> %b
 }
 
@@ -1729,13 +1665,13 @@ define arm_aapcs_vfpcc <8 x half> @fadd_v8f16_y(<8 x half> %x, <8 x half> %y, i3
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    vctp.16 r0
 ; CHECK-NEXT:    vpst
-; CHECK-NEXT:    vaddt.f16 q1, q1, q0
+; CHECK-NEXT:    vaddt.f16 q1, q0, q1
 ; CHECK-NEXT:    vmov q0, q1
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
-  %a = select <8 x i1> %c, <8 x half> %x, <8 x half> <half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000>
-  %b = fadd <8 x half> %a, %y
+  %a = fadd <8 x half> %x, %y
+  %b = select <8 x i1> %c, <8 x half> %a, <8 x half> %y
   ret <8 x half> %b
 }
 
@@ -1774,13 +1710,13 @@ define arm_aapcs_vfpcc <4 x float> @fmul_v4f32_y(<4 x float> %x, <4 x float> %y,
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    vctp.32 r0
 ; CHECK-NEXT:    vpst
-; CHECK-NEXT:    vmult.f32 q1, q1, q0
+; CHECK-NEXT:    vmult.f32 q1, q0, q1
 ; CHECK-NEXT:    vmov q0, q1
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
-  %a = select <4 x i1> %c, <4 x float> %x, <4 x float> <float 1.000000e+00, float 1.000000e+00, float 1.000000e+00, float 1.000000e+00>
-  %b = fmul <4 x float> %a, %y
+  %a = fmul <4 x float> %x, %y
+  %b = select <4 x i1> %c, <4 x float> %a, <4 x float> %y
   ret <4 x float> %b
 }
 
@@ -1789,13 +1725,13 @@ define arm_aapcs_vfpcc <8 x half> @fmul_v8f16_y(<8 x half> %x, <8 x half> %y, i3
 ; CHECK:       @ %bb.0: @ %entry
 ; CHECK-NEXT:    vctp.16 r0
 ; CHECK-NEXT:    vpst
-; CHECK-NEXT:    vmult.f16 q1, q1, q0
+; CHECK-NEXT:    vmult.f16 q1, q0, q1
 ; CHECK-NEXT:    vmov q0, q1
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
-  %a = select <8 x i1> %c, <8 x half> %x, <8 x half> <half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00>
-  %b = fmul <8 x half> %a, %y
+  %a = fmul <8 x half> %x, %y
+  %b = select <8 x i1> %c, <8 x half> %a, <8 x half> %y
   ret <8 x half> %b
 }
 
@@ -2427,8 +2363,8 @@ entry:
   %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
   %i = insertelement <4 x float> undef, float %y, i32 0
   %ys = shufflevector <4 x float> %i, <4 x float> undef, <4 x i32> zeroinitializer
-  %a = select <4 x i1> %c, <4 x float> %x, <4 x float> <float -0.000000e+00, float -0.000000e+00, float -0.000000e+00, float -0.000000e+00>
-  %b = fadd <4 x float> %ys, %a
+  %a = fadd <4 x float> %ys, %x
+  %b = select <4 x i1> %c, <4 x float> %a, <4 x float> %ys
   ret <4 x float> %b
 }
 
@@ -2446,8 +2382,8 @@ entry:
   %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
   %i = insertelement <8 x half> undef, half %y, i32 0
   %ys = shufflevector <8 x half> %i, <8 x half> undef, <8 x i32> zeroinitializer
-  %a = select <8 x i1> %c, <8 x half> %x, <8 x half> <half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000, half 0xH8000>
-  %b = fadd <8 x half> %ys, %a
+  %a = fadd <8 x half> %ys, %x
+  %b = select <8 x i1> %c, <8 x half> %a, <8 x half> %ys
   ret <8 x half> %b
 }
 
@@ -2496,15 +2432,15 @@ define arm_aapcs_vfpcc <4 x float> @fmulqr_v4f32_y(<4 x float> %x, float %y, i32
 ; CHECK-NEXT:    vctp.32 r0
 ; CHECK-NEXT:    vdup.32 q1, r1
 ; CHECK-NEXT:    vpst
-; CHECK-NEXT:    vmult.f32 q1, q1, q0
+; CHECK-NEXT:    vmult.f32 q1, q0, r1
 ; CHECK-NEXT:    vmov q0, q1
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <4 x i1> @llvm.arm.mve.vctp32(i32 %n)
   %i = insertelement <4 x float> undef, float %y, i32 0
   %ys = shufflevector <4 x float> %i, <4 x float> undef, <4 x i32> zeroinitializer
-  %a = select <4 x i1> %c, <4 x float> %x, <4 x float> <float 1.000000e+00, float 1.000000e+00, float 1.000000e+00, float 1.000000e+00>
-  %b = fmul <4 x float> %ys, %a
+  %a = fmul <4 x float> %ys, %x
+  %b = select <4 x i1> %c, <4 x float> %a, <4 x float> %ys
   ret <4 x float> %b
 }
 
@@ -2515,15 +2451,15 @@ define arm_aapcs_vfpcc <8 x half> @fmulqr_v8f16_y(<8 x half> %x, half %y, i32 %n
 ; CHECK-NEXT:    vctp.16 r0
 ; CHECK-NEXT:    vdup.16 q1, r1
 ; CHECK-NEXT:    vpst
-; CHECK-NEXT:    vmult.f16 q1, q1, q0
+; CHECK-NEXT:    vmult.f16 q1, q0, r1
 ; CHECK-NEXT:    vmov q0, q1
 ; CHECK-NEXT:    bx lr
 entry:
   %c = call <8 x i1> @llvm.arm.mve.vctp16(i32 %n)
   %i = insertelement <8 x half> undef, half %y, i32 0
   %ys = shufflevector <8 x half> %i, <8 x half> undef, <8 x i32> zeroinitializer
-  %a = select <8 x i1> %c, <8 x half> %x, <8 x half> <half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00>
-  %b = fmul <8 x half> %ys, %a
+  %a = fmul <8 x half> %ys, %x
+  %b = select <8 x i1> %c, <8 x half> %a, <8 x half> %ys
   ret <8 x half> %b
 }
 
@@ -2755,8 +2691,6 @@ declare <4 x i32> @llvm.ssub.sat.v4i32(<4 x i32>, <4 x i32>)
 declare <16 x i8> @llvm.usub.sat.v16i8(<16 x i8>, <16 x i8>)
 declare <8 x i16> @llvm.usub.sat.v8i16(<8 x i16>, <8 x i16>)
 declare <4 x i32> @llvm.usub.sat.v4i32(<4 x i32>, <4 x i32>)
-declare <4 x float> @llvm.fma.v4f32(<4 x float>, <4 x float>, <4 x float>)
-declare <8 x half> @llvm.fma.v8f16(<8 x half>, <8 x half>, <8 x half>)
 
 declare <16 x i1> @llvm.arm.mve.vctp8(i32)
 declare <8 x i1> @llvm.arm.mve.vctp16(i32)

@@ -95,7 +95,8 @@ class SDiagsMerger : SerializedDiagnosticReader {
   AbbrevLookup DiagFlagLookup;
 
 public:
-  SDiagsMerger(SDiagsWriter &Writer) : Writer(Writer) {}
+  SDiagsMerger(SDiagsWriter &Writer)
+      : SerializedDiagnosticReader(), Writer(Writer) {}
 
   std::error_code mergeRecordsFromFile(const char *File) {
     return readDiagnostics(File);

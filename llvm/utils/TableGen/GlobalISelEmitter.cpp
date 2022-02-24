@@ -32,6 +32,7 @@
 #include "CodeGenDAGPatterns.h"
 #include "SubtargetFeatureInfo.h"
 #include "llvm/ADT/Optional.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/CodeGenCoverage.h"
 #include "llvm/Support/CommandLine.h"
@@ -108,7 +109,7 @@ public:
     raw_string_ostream OS(Str);
 
     emitCxxEnumValue(OS);
-    return Str;
+    return OS.str();
   }
 
   void emitCxxEnumValue(raw_ostream &OS) const {
@@ -117,9 +118,7 @@ public:
       return;
     }
     if (Ty.isVector()) {
-      OS << (Ty.isScalable() ? "GILLT_nxv" : "GILLT_v")
-         << Ty.getElementCount().getKnownMinValue() << "s"
-         << Ty.getScalarSizeInBits();
+      OS << "GILLT_v" << Ty.getNumElements() << "s" << Ty.getScalarSizeInBits();
       return;
     }
     if (Ty.isPointer()) {
@@ -137,10 +136,7 @@ public:
       return;
     }
     if (Ty.isVector()) {
-      OS << "LLT::vector("
-         << (Ty.isScalable() ? "ElementCount::getScalable("
-                             : "ElementCount::getFixed(")
-         << Ty.getElementCount().getKnownMinValue() << "), "
+      OS << "LLT::vector(" << Ty.getNumElements() << ", "
          << Ty.getScalarSizeInBits() << ")";
       return;
     }
@@ -173,21 +169,10 @@ public:
     if (Ty.isPointer() && Ty.getAddressSpace() != Other.Ty.getAddressSpace())
       return Ty.getAddressSpace() < Other.Ty.getAddressSpace();
 
-    if (Ty.isVector() && Ty.getElementCount() != Other.Ty.getElementCount())
-      return std::make_tuple(Ty.isScalable(),
-                             Ty.getElementCount().getKnownMinValue()) <
-             std::make_tuple(Other.Ty.isScalable(),
-                             Other.Ty.getElementCount().getKnownMinValue());
+    if (Ty.isVector() && Ty.getNumElements() != Other.Ty.getNumElements())
+      return Ty.getNumElements() < Other.Ty.getNumElements();
 
-    assert((!Ty.isVector() || Ty.isScalable() == Other.Ty.isScalable()) &&
-           "Unexpected mismatch of scalable property");
-    return Ty.isVector()
-               ? std::make_tuple(Ty.isScalable(),
-                                 Ty.getSizeInBits().getKnownMinSize()) <
-                     std::make_tuple(Other.Ty.isScalable(),
-                                     Other.Ty.getSizeInBits().getKnownMinSize())
-               : Ty.getSizeInBits().getFixedSize() <
-                     Other.Ty.getSizeInBits().getFixedSize();
+    return Ty.getSizeInBits() < Other.Ty.getSizeInBits();
   }
 
   bool operator==(const LLTCodeGen &B) const { return Ty == B.Ty; }
@@ -202,9 +187,12 @@ class InstructionMatcher;
 static Optional<LLTCodeGen> MVTToLLT(MVT::SimpleValueType SVT) {
   MVT VT(SVT);
 
-  if (VT.isVector() && !VT.getVectorElementCount().isScalar())
+  if (VT.isScalableVector())
+    return None;
+
+  if (VT.isFixedLengthVector() && VT.getVectorNumElements() != 1)
     return LLTCodeGen(
-        LLT::vector(VT.getVectorElementCount(), VT.getScalarSizeInBits()));
+        LLT::vector(VT.getVectorNumElements(), VT.getScalarSizeInBits()));
 
   if (VT.isInteger() || VT.isFloatingPoint())
     return LLTCodeGen(LLT::scalar(VT.getSizeInBits()));
@@ -667,6 +655,7 @@ MatchTable &operator<<(MatchTable &Table, const MatchTableRecord &Value) {
 class OperandMatcher;
 class MatchAction;
 class PredicateMatcher;
+class RuleMatcher;
 
 class Matcher {
 public:
@@ -881,7 +870,9 @@ protected:
 
 public:
   RuleMatcher(ArrayRef<SMLoc> SrcLoc)
-      : NextInsnVarID(0), NextOutputInsnID(0), NextTempRegID(0), SrcLoc(SrcLoc),
+      : Matchers(), Actions(), InsnVariableIDs(), MutatableInsns(),
+        DefinedOperands(), NextInsnVarID(0), NextOutputInsnID(0),
+        NextTempRegID(0), SrcLoc(SrcLoc), ComplexSubOperands(),
         RuleID(NextRuleID++) {}
   RuleMatcher(RuleMatcher &&Other) = default;
   RuleMatcher &operator=(RuleMatcher &&Other) = default;
@@ -1208,13 +1199,11 @@ PredicateListMatcher<OperandPredicateMatcher>::getNoPredicateComment() const {
 /// one as another.
 class SameOperandMatcher : public OperandPredicateMatcher {
   std::string MatchingName;
-  unsigned OrigOpIdx;
 
 public:
-  SameOperandMatcher(unsigned InsnVarID, unsigned OpIdx, StringRef MatchingName,
-                     unsigned OrigOpIdx)
+  SameOperandMatcher(unsigned InsnVarID, unsigned OpIdx, StringRef MatchingName)
       : OperandPredicateMatcher(OPM_SameOperand, InsnVarID, OpIdx),
-        MatchingName(MatchingName), OrigOpIdx(OrigOpIdx) {}
+        MatchingName(MatchingName) {}
 
   static bool classof(const PredicateMatcher *P) {
     return P->getKind() == OPM_SameOperand;
@@ -1225,7 +1214,6 @@ public:
 
   bool isIdentical(const PredicateMatcher &B) const override {
     return OperandPredicateMatcher::isIdentical(B) &&
-           OrigOpIdx == cast<SameOperandMatcher>(&B)->OrigOpIdx &&
            MatchingName == cast<SameOperandMatcher>(&B)->MatchingName;
   }
 };
@@ -1669,7 +1657,7 @@ public:
         CommentOS << "Operand " << OpIdx;
       else
         CommentOS << SymbolicName;
-      Table << MatchTable::Comment(Comment) << MatchTable::LineBreak;
+      Table << MatchTable::Comment(CommentOS.str()) << MatchTable::LineBreak;
     }
 
     emitPredicateListOpcodes(Table, Rule);
@@ -3290,8 +3278,7 @@ void RuleMatcher::defineOperand(StringRef SymbolicName, OperandMatcher &OM) {
 
   // If the operand is already defined, then we must ensure both references in
   // the matcher have the exact same node.
-  OM.addPredicate<SameOperandMatcher>(
-      OM.getSymbolicName(), getOperandMatcher(OM.getSymbolicName()).getOpIdx());
+  OM.addPredicate<SameOperandMatcher>(OM.getSymbolicName());
 }
 
 void RuleMatcher::definePhysRegOperand(Record *Reg, OperandMatcher &OM) {
@@ -3670,10 +3657,6 @@ private:
   Optional<const CodeGenRegisterClass *>
   inferRegClassFromPattern(TreePatternNode *N);
 
-  /// Return the size of the MemoryVT in this predicate, if possible.
-  Optional<unsigned>
-  getMemSizeBitsFromPredicate(const TreePredicateFn &Predicate);
-
   // Add builtin predicates.
   Expected<InstructionMatcher &>
   addBuiltinPredicates(const Record *SrcGIEquivOrNull,
@@ -3786,18 +3769,6 @@ Error GlobalISelEmitter::importRulePredicates(RuleMatcher &M,
   return Error::success();
 }
 
-Optional<unsigned> GlobalISelEmitter::getMemSizeBitsFromPredicate(const TreePredicateFn &Predicate) {
-  Optional<LLTCodeGen> MemTyOrNone =
-      MVTToLLT(getValueType(Predicate.getMemoryVT()));
-
-  if (!MemTyOrNone)
-    return None;
-
-  // Align so unusual types like i1 don't get rounded down.
-  return llvm::alignTo(
-      static_cast<unsigned>(MemTyOrNone->get().getSizeInBits()), 8);
-}
-
 Expected<InstructionMatcher &> GlobalISelEmitter::addBuiltinPredicates(
     const Record *SrcGIEquivOrNull, const TreePredicateFn &Predicate,
     InstructionMatcher &InsnMatcher, bool &HasAddedMatcher) {
@@ -3837,18 +3808,9 @@ Expected<InstructionMatcher &> GlobalISelEmitter::addBuiltinPredicates(
 
   if (Predicate.isStore()) {
     if (Predicate.isTruncStore()) {
-      if (Predicate.getMemoryVT() != nullptr) {
-        // FIXME: If MemoryVT is set, we end up with 2 checks for the MMO size.
-        auto MemSizeInBits = getMemSizeBitsFromPredicate(Predicate);
-        if (!MemSizeInBits)
-          return failedImport("MemVT could not be converted to LLT");
-
-        InsnMatcher.addPredicate<MemorySizePredicateMatcher>(0, *MemSizeInBits /
-                                                                    8);
-      } else {
-        InsnMatcher.addPredicate<MemoryVsLLTSizePredicateMatcher>(
-            0, MemoryVsLLTSizePredicateMatcher::LessThan, 0);
-      }
+      // FIXME: If MemoryVT is set, we end up with 2 checks for the MMO size.
+      InsnMatcher.addPredicate<MemoryVsLLTSizePredicateMatcher>(
+          0, MemoryVsLLTSizePredicateMatcher::LessThan, 0);
       return InsnMatcher;
     }
     if (Predicate.isNonTruncStore()) {
@@ -3875,12 +3837,19 @@ Expected<InstructionMatcher &> GlobalISelEmitter::addBuiltinPredicates(
 
   if (Predicate.isLoad() || Predicate.isStore() || Predicate.isAtomic()) {
     if (Predicate.getMemoryVT() != nullptr) {
-      auto MemSizeInBits = getMemSizeBitsFromPredicate(Predicate);
-      if (!MemSizeInBits)
+      Optional<LLTCodeGen> MemTyOrNone =
+          MVTToLLT(getValueType(Predicate.getMemoryVT()));
+
+      if (!MemTyOrNone)
         return failedImport("MemVT could not be converted to LLT");
 
+      // MMO's work in bytes so we must take care of unusual types like i1
+      // don't round down.
+      unsigned MemSizeInBits =
+          llvm::alignTo(MemTyOrNone->get().getSizeInBits(), 8);
+
       InsnMatcher.addPredicate<MemorySizePredicateMatcher>(0,
-                                                           *MemSizeInBits / 8);
+                                                           MemSizeInBits / 8);
       return InsnMatcher;
     }
   }

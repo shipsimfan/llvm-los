@@ -6,9 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Dialect/Bufferization/Transforms/Bufferize.h"
+#include "mlir/Transforms/Bufferize.h"
 #include "PassDetail.h"
-#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/Passes.h"
 #include "mlir/Dialect/SCF/SCF.h"
@@ -21,22 +20,22 @@ using namespace mlir::scf;
 
 namespace {
 struct SCFBufferizePass : public SCFBufferizeBase<SCFBufferizePass> {
-  void runOnOperation() override {
+  void runOnFunction() override {
     auto func = getOperation();
     auto *context = &getContext();
 
-    bufferization::BufferizeTypeConverter typeConverter;
+    BufferizeTypeConverter typeConverter;
     RewritePatternSet patterns(context);
     ConversionTarget target(*context);
 
-    bufferization::populateBufferizeMaterializationLegality(target);
+    populateBufferizeMaterializationLegality(target);
     populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns,
                                                     target);
     if (failed(applyPartialConversion(func, target, std::move(patterns))))
       return signalPassFailure();
   };
 };
-} // namespace
+} // end anonymous namespace
 
 std::unique_ptr<Pass> mlir::createSCFBufferizePass() {
   return std::make_unique<SCFBufferizePass>();

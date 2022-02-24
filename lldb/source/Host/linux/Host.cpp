@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cerrno>
-#include <cstdio>
-#include <cstring>
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
@@ -20,7 +20,6 @@
 #include "llvm/Object/ELF.h"
 #include "llvm/Support/ScopedPrinter.h"
 
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/ProcessInfo.h"
 #include "lldb/Utility/Status.h"
@@ -57,7 +56,7 @@ class ProcessLaunchInfo;
 static bool GetStatusInfo(::pid_t Pid, ProcessInstanceInfo &ProcessInfo,
                           ProcessState &State, ::pid_t &TracerPid,
                           ::pid_t &Tgid) {
-  Log *log = GetLog(LLDBLog::Host);
+  Log *log = GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
 
   auto BufferOrError = getProcFile(Pid, "status");
   if (!BufferOrError)
@@ -127,7 +126,7 @@ static bool IsDirNumeric(const char *dname) {
 }
 
 static ArchSpec GetELFProcessCPUType(llvm::StringRef exe_path) {
-  Log *log = GetLog(LLDBLog::Host);
+  Log *log = GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
 
   auto buffer_sp = FileSystem::Instance().CreateDataBuffer(exe_path, 0x20, 0);
   if (!buffer_sp)
@@ -166,7 +165,7 @@ static void GetProcessArgs(::pid_t pid, ProcessInstanceInfo &process_info) {
 }
 
 static void GetExePathAndArch(::pid_t pid, ProcessInstanceInfo &process_info) {
-  Log *log = GetLog(LLDBLog::Process);
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
   std::string ExePath(PATH_MAX, '\0');
 
   // We can't use getProcFile here because proc/[pid]/exe is a symbolic link.

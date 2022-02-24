@@ -16,7 +16,8 @@ define void @add_v64i8(<64 x i8>* %a) #0 {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.b, vl64
 ; CHECK-NEXT:    ld1b { z0.b }, p0/z, [x0]
-; CHECK-NEXT:    add z0.b, z0.b, #7 // =0x7
+; CHECK-NEXT:    mov z1.b, #7 // =0x7
+; CHECK-NEXT:    add z0.b, p0/m, z0.b, z1.b
 ; CHECK-NEXT:    st1b { z0.b }, p0, [x0]
 ; CHECK-NEXT:    ret
   %op1 = load <64 x i8>, <64 x i8>* %a
@@ -32,7 +33,8 @@ define void @add_v32i16(<32 x i16>* %a) #0 {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.h, vl32
 ; CHECK-NEXT:    ld1h { z0.h }, p0/z, [x0]
-; CHECK-NEXT:    add z0.h, z0.h, #15 // =0xf
+; CHECK-NEXT:    mov z1.h, #15 // =0xf
+; CHECK-NEXT:    add z0.h, p0/m, z0.h, z1.h
 ; CHECK-NEXT:    st1h { z0.h }, p0, [x0]
 ; CHECK-NEXT:    ret
   %op1 = load <32 x i16>, <32 x i16>* %a
@@ -48,7 +50,8 @@ define void @add_v16i32(<16 x i32>* %a) #0 {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.s, vl16
 ; CHECK-NEXT:    ld1w { z0.s }, p0/z, [x0]
-; CHECK-NEXT:    add z0.s, z0.s, #31 // =0x1f
+; CHECK-NEXT:    mov z1.s, #31 // =0x1f
+; CHECK-NEXT:    add z0.s, p0/m, z0.s, z1.s
 ; CHECK-NEXT:    st1w { z0.s }, p0, [x0]
 ; CHECK-NEXT:    ret
   %op1 = load <16 x i32>, <16 x i32>* %a
@@ -64,7 +67,8 @@ define void @add_v8i64(<8 x i64>* %a) #0 {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.d, vl8
 ; CHECK-NEXT:    ld1d { z0.d }, p0/z, [x0]
-; CHECK-NEXT:    add z0.d, z0.d, #63 // =0x3f
+; CHECK-NEXT:    mov z1.d, #63 // =0x3f
+; CHECK-NEXT:    add z0.d, p0/m, z0.d, z1.d
 ; CHECK-NEXT:    st1d { z0.d }, p0, [x0]
 ; CHECK-NEXT:    ret
   %op1 = load <8 x i64>, <8 x i64>* %a
@@ -363,8 +367,8 @@ define void @mul_v64i8(<64 x i8>* %a) #0 {
 ; CHECK-LABEL: mul_v64i8:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.b, vl64
-; CHECK-NEXT:    mov z1.b, #7 // =0x7
 ; CHECK-NEXT:    ld1b { z0.b }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.b, #7 // =0x7
 ; CHECK-NEXT:    mul z0.b, p0/m, z0.b, z1.b
 ; CHECK-NEXT:    st1b { z0.b }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -380,8 +384,8 @@ define void @mul_v32i16(<32 x i16>* %a) #0 {
 ; CHECK-LABEL: mul_v32i16:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.h, vl32
-; CHECK-NEXT:    mov z1.h, #15 // =0xf
 ; CHECK-NEXT:    ld1h { z0.h }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.h, #15 // =0xf
 ; CHECK-NEXT:    mul z0.h, p0/m, z0.h, z1.h
 ; CHECK-NEXT:    st1h { z0.h }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -397,8 +401,8 @@ define void @mul_v16i32(<16 x i32>* %a) #0 {
 ; CHECK-LABEL: mul_v16i32:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.s, vl16
-; CHECK-NEXT:    mov z1.s, #31 // =0x1f
 ; CHECK-NEXT:    ld1w { z0.s }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.s, #31 // =0x1f
 ; CHECK-NEXT:    mul z0.s, p0/m, z0.s, z1.s
 ; CHECK-NEXT:    st1w { z0.s }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -414,8 +418,8 @@ define void @mul_v8i64(<8 x i64>* %a) #0 {
 ; CHECK-LABEL: mul_v8i64:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.d, vl8
-; CHECK-NEXT:    mov z1.d, #63 // =0x3f
 ; CHECK-NEXT:    ld1d { z0.d }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.d, #63 // =0x3f
 ; CHECK-NEXT:    mul z0.d, p0/m, z0.d, z1.d
 ; CHECK-NEXT:    st1d { z0.d }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -571,8 +575,8 @@ define void @smax_v64i8(<64 x i8>* %a) #0 {
 ; CHECK-LABEL: smax_v64i8:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.b, vl64
-; CHECK-NEXT:    mov z1.b, #7 // =0x7
 ; CHECK-NEXT:    ld1b { z0.b }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.b, #7 // =0x7
 ; CHECK-NEXT:    smax z0.b, p0/m, z0.b, z1.b
 ; CHECK-NEXT:    st1b { z0.b }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -588,8 +592,8 @@ define void @smax_v32i16(<32 x i16>* %a) #0 {
 ; CHECK-LABEL: smax_v32i16:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.h, vl32
-; CHECK-NEXT:    mov z1.h, #15 // =0xf
 ; CHECK-NEXT:    ld1h { z0.h }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.h, #15 // =0xf
 ; CHECK-NEXT:    smax z0.h, p0/m, z0.h, z1.h
 ; CHECK-NEXT:    st1h { z0.h }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -605,8 +609,8 @@ define void @smax_v16i32(<16 x i32>* %a) #0 {
 ; CHECK-LABEL: smax_v16i32:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.s, vl16
-; CHECK-NEXT:    mov z1.s, #31 // =0x1f
 ; CHECK-NEXT:    ld1w { z0.s }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.s, #31 // =0x1f
 ; CHECK-NEXT:    smax z0.s, p0/m, z0.s, z1.s
 ; CHECK-NEXT:    st1w { z0.s }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -622,8 +626,8 @@ define void @smax_v8i64(<8 x i64>* %a) #0 {
 ; CHECK-LABEL: smax_v8i64:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.d, vl8
-; CHECK-NEXT:    mov z1.d, #63 // =0x3f
 ; CHECK-NEXT:    ld1d { z0.d }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.d, #63 // =0x3f
 ; CHECK-NEXT:    smax z0.d, p0/m, z0.d, z1.d
 ; CHECK-NEXT:    st1d { z0.d }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -643,8 +647,8 @@ define void @smin_v64i8(<64 x i8>* %a) #0 {
 ; CHECK-LABEL: smin_v64i8:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.b, vl64
-; CHECK-NEXT:    mov z1.b, #7 // =0x7
 ; CHECK-NEXT:    ld1b { z0.b }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.b, #7 // =0x7
 ; CHECK-NEXT:    smin z0.b, p0/m, z0.b, z1.b
 ; CHECK-NEXT:    st1b { z0.b }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -660,8 +664,8 @@ define void @smin_v32i16(<32 x i16>* %a) #0 {
 ; CHECK-LABEL: smin_v32i16:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.h, vl32
-; CHECK-NEXT:    mov z1.h, #15 // =0xf
 ; CHECK-NEXT:    ld1h { z0.h }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.h, #15 // =0xf
 ; CHECK-NEXT:    smin z0.h, p0/m, z0.h, z1.h
 ; CHECK-NEXT:    st1h { z0.h }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -677,8 +681,8 @@ define void @smin_v16i32(<16 x i32>* %a) #0 {
 ; CHECK-LABEL: smin_v16i32:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.s, vl16
-; CHECK-NEXT:    mov z1.s, #31 // =0x1f
 ; CHECK-NEXT:    ld1w { z0.s }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.s, #31 // =0x1f
 ; CHECK-NEXT:    smin z0.s, p0/m, z0.s, z1.s
 ; CHECK-NEXT:    st1w { z0.s }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -694,8 +698,8 @@ define void @smin_v8i64(<8 x i64>* %a) #0 {
 ; CHECK-LABEL: smin_v8i64:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.d, vl8
-; CHECK-NEXT:    mov z1.d, #63 // =0x3f
 ; CHECK-NEXT:    ld1d { z0.d }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.d, #63 // =0x3f
 ; CHECK-NEXT:    smin z0.d, p0/m, z0.d, z1.d
 ; CHECK-NEXT:    st1d { z0.d }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -716,7 +720,8 @@ define void @sub_v64i8(<64 x i8>* %a) #0 {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.b, vl64
 ; CHECK-NEXT:    ld1b { z0.b }, p0/z, [x0]
-; CHECK-NEXT:    sub z0.b, z0.b, #7 // =0x7
+; CHECK-NEXT:    mov z1.b, #7 // =0x7
+; CHECK-NEXT:    sub z0.b, p0/m, z0.b, z1.b
 ; CHECK-NEXT:    st1b { z0.b }, p0, [x0]
 ; CHECK-NEXT:    ret
   %op1 = load <64 x i8>, <64 x i8>* %a
@@ -732,7 +737,8 @@ define void @sub_v32i16(<32 x i16>* %a) #0 {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.h, vl32
 ; CHECK-NEXT:    ld1h { z0.h }, p0/z, [x0]
-; CHECK-NEXT:    sub z0.h, z0.h, #15 // =0xf
+; CHECK-NEXT:    mov z1.h, #15 // =0xf
+; CHECK-NEXT:    sub z0.h, p0/m, z0.h, z1.h
 ; CHECK-NEXT:    st1h { z0.h }, p0, [x0]
 ; CHECK-NEXT:    ret
   %op1 = load <32 x i16>, <32 x i16>* %a
@@ -748,7 +754,8 @@ define void @sub_v16i32(<16 x i32>* %a) #0 {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.s, vl16
 ; CHECK-NEXT:    ld1w { z0.s }, p0/z, [x0]
-; CHECK-NEXT:    sub z0.s, z0.s, #31 // =0x1f
+; CHECK-NEXT:    mov z1.s, #31 // =0x1f
+; CHECK-NEXT:    sub z0.s, p0/m, z0.s, z1.s
 ; CHECK-NEXT:    st1w { z0.s }, p0, [x0]
 ; CHECK-NEXT:    ret
   %op1 = load <16 x i32>, <16 x i32>* %a
@@ -764,7 +771,8 @@ define void @sub_v8i64(<8 x i64>* %a) #0 {
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.d, vl8
 ; CHECK-NEXT:    ld1d { z0.d }, p0/z, [x0]
-; CHECK-NEXT:    sub z0.d, z0.d, #63 // =0x3f
+; CHECK-NEXT:    mov z1.d, #63 // =0x3f
+; CHECK-NEXT:    sub z0.d, p0/m, z0.d, z1.d
 ; CHECK-NEXT:    st1d { z0.d }, p0, [x0]
 ; CHECK-NEXT:    ret
   %op1 = load <8 x i64>, <8 x i64>* %a
@@ -783,8 +791,8 @@ define void @umax_v64i8(<64 x i8>* %a) #0 {
 ; CHECK-LABEL: umax_v64i8:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.b, vl64
-; CHECK-NEXT:    mov z1.b, #7 // =0x7
 ; CHECK-NEXT:    ld1b { z0.b }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.b, #7 // =0x7
 ; CHECK-NEXT:    umax z0.b, p0/m, z0.b, z1.b
 ; CHECK-NEXT:    st1b { z0.b }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -800,8 +808,8 @@ define void @umax_v32i16(<32 x i16>* %a) #0 {
 ; CHECK-LABEL: umax_v32i16:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.h, vl32
-; CHECK-NEXT:    mov z1.h, #15 // =0xf
 ; CHECK-NEXT:    ld1h { z0.h }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.h, #15 // =0xf
 ; CHECK-NEXT:    umax z0.h, p0/m, z0.h, z1.h
 ; CHECK-NEXT:    st1h { z0.h }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -817,8 +825,8 @@ define void @umax_v16i32(<16 x i32>* %a) #0 {
 ; CHECK-LABEL: umax_v16i32:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.s, vl16
-; CHECK-NEXT:    mov z1.s, #31 // =0x1f
 ; CHECK-NEXT:    ld1w { z0.s }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.s, #31 // =0x1f
 ; CHECK-NEXT:    umax z0.s, p0/m, z0.s, z1.s
 ; CHECK-NEXT:    st1w { z0.s }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -834,8 +842,8 @@ define void @umax_v8i64(<8 x i64>* %a) #0 {
 ; CHECK-LABEL: umax_v8i64:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.d, vl8
-; CHECK-NEXT:    mov z1.d, #63 // =0x3f
 ; CHECK-NEXT:    ld1d { z0.d }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.d, #63 // =0x3f
 ; CHECK-NEXT:    umax z0.d, p0/m, z0.d, z1.d
 ; CHECK-NEXT:    st1d { z0.d }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -855,8 +863,8 @@ define void @umin_v64i8(<64 x i8>* %a) #0 {
 ; CHECK-LABEL: umin_v64i8:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.b, vl64
-; CHECK-NEXT:    mov z1.b, #7 // =0x7
 ; CHECK-NEXT:    ld1b { z0.b }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.b, #7 // =0x7
 ; CHECK-NEXT:    umin z0.b, p0/m, z0.b, z1.b
 ; CHECK-NEXT:    st1b { z0.b }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -872,8 +880,8 @@ define void @umin_v32i16(<32 x i16>* %a) #0 {
 ; CHECK-LABEL: umin_v32i16:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.h, vl32
-; CHECK-NEXT:    mov z1.h, #15 // =0xf
 ; CHECK-NEXT:    ld1h { z0.h }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.h, #15 // =0xf
 ; CHECK-NEXT:    umin z0.h, p0/m, z0.h, z1.h
 ; CHECK-NEXT:    st1h { z0.h }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -889,8 +897,8 @@ define void @umin_v16i32(<16 x i32>* %a) #0 {
 ; CHECK-LABEL: umin_v16i32:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.s, vl16
-; CHECK-NEXT:    mov z1.s, #31 // =0x1f
 ; CHECK-NEXT:    ld1w { z0.s }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.s, #31 // =0x1f
 ; CHECK-NEXT:    umin z0.s, p0/m, z0.s, z1.s
 ; CHECK-NEXT:    st1w { z0.s }, p0, [x0]
 ; CHECK-NEXT:    ret
@@ -906,8 +914,8 @@ define void @umin_v8i64(<8 x i64>* %a) #0 {
 ; CHECK-LABEL: umin_v8i64:
 ; CHECK:       // %bb.0:
 ; CHECK-NEXT:    ptrue p0.d, vl8
-; CHECK-NEXT:    mov z1.d, #63 // =0x3f
 ; CHECK-NEXT:    ld1d { z0.d }, p0/z, [x0]
+; CHECK-NEXT:    mov z1.d, #63 // =0x3f
 ; CHECK-NEXT:    umin z0.d, p0/m, z0.d, z1.d
 ; CHECK-NEXT:    st1d { z0.d }, p0, [x0]
 ; CHECK-NEXT:    ret

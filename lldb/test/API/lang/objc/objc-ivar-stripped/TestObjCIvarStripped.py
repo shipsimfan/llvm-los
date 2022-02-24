@@ -62,5 +62,5 @@ class TestObjCIvarStripped(TestBase):
         ivar = frame.EvaluateExpression("(mc->_foo)")
         self.assertTrue(ivar, "Got result for mc->_foo")
         ivar_value = ivar.GetValueAsSigned(error)
-        self.assertSuccess(error)
+        self.assertTrue(error.Success())
         self.assertEquals(ivar_value, 3)

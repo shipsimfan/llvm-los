@@ -14,7 +14,7 @@
 #define LLVM_MC_MCSYMBOL_H
 
 #include "llvm/ADT/PointerIntPair.h"
-#include "llvm/ADT/StringMapEntry.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCFragment.h"
@@ -46,7 +46,6 @@ protected:
     SymbolKindUnset,
     SymbolKindCOFF,
     SymbolKindELF,
-    SymbolKindGOFF,
     SymbolKindMachO,
     SymbolKindWasm,
     SymbolKindXCOFF,
@@ -276,8 +275,6 @@ public:
   bool isELF() const { return Kind == SymbolKindELF; }
 
   bool isCOFF() const { return Kind == SymbolKindCOFF; }
-
-  bool isGOFF() const { return Kind == SymbolKindGOFF; }
 
   bool isMachO() const { return Kind == SymbolKindMachO; }
 

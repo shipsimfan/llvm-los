@@ -27,12 +27,12 @@ namespace mca {
 
 class InstructionTables final : public Stage {
   const MCSchedModel &SM;
-  SmallVector<ResourceUse, 4> UsedResources;
+  SmallVector<std::pair<ResourceRef, ResourceCycles>, 4> UsedResources;
   SmallVector<uint64_t, 8> Masks;
 
 public:
   InstructionTables(const MCSchedModel &Model)
-      : SM(Model), Masks(Model.getNumProcResourceKinds()) {
+      : Stage(), SM(Model), Masks(Model.getNumProcResourceKinds()) {
     computeProcResourceMasks(Model, Masks);
   }
 

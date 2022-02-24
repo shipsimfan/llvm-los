@@ -10,7 +10,7 @@
 #include "gmock/gmock.h"
 
 // DebugActionManager is only enabled in DEBUG mode.
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+#ifndef NDEBUG
 
 using namespace mlir;
 

@@ -79,7 +79,7 @@ public:
 
   StructuredData::ObjectSP
   CreateScriptedThreadPlan(const char *class_name,
-                           const StructuredDataImpl &args_data,
+                           StructuredDataImpl *args_data,
                            std::string &error_str,
                            lldb::ThreadPlanSP thread_plan) override;
 
@@ -99,7 +99,7 @@ public:
 
   StructuredData::GenericSP
   CreateScriptedBreakpointResolver(const char *class_name,
-                                   const StructuredDataImpl &args_data,
+                                   StructuredDataImpl *args_data,
                                    lldb::BreakpointSP &bkpt_sp) override;
   bool ScriptedBreakpointResolverSearchCallback(
       StructuredData::GenericSP implementor_sp,
@@ -110,8 +110,7 @@ public:
 
   StructuredData::GenericSP
   CreateScriptedStopHook(lldb::TargetSP target_sp, const char *class_name,
-                         const StructuredDataImpl &args_data,
-                         Status &error) override;
+                         StructuredDataImpl *args_data, Status &error) override;
 
   bool ScriptedStopHookHandleStop(StructuredData::GenericSP implementor_sp,
                                   ExecutionContext &exc_ctx,
@@ -235,8 +234,7 @@ public:
   bool RunScriptFormatKeyword(const char *impl_function, ValueObject *value,
                               std::string &output, Status &error) override;
 
-  bool LoadScriptingModule(const char *filename,
-                           const LoadScriptOptions &options,
+  bool LoadScriptingModule(const char *filename, bool init_session,
                            lldb_private::Status &error,
                            StructuredData::ObjectSP *module_sp = nullptr,
                            FileSpec extra_search_dir = {}) override;
@@ -246,7 +244,7 @@ public:
   std::unique_ptr<ScriptInterpreterLocker> AcquireInterpreterLock() override;
 
   void CollectDataForBreakpointCommandCallback(
-      std::vector<std::reference_wrapper<BreakpointOptions>> &bp_options_vec,
+      std::vector<BreakpointOptions *> &bp_options_vec,
       CommandReturnObject &result) override;
 
   void
@@ -254,19 +252,20 @@ public:
                                           CommandReturnObject &result) override;
 
   /// Set the callback body text into the callback for the breakpoint.
-  Status SetBreakpointCommandCallback(BreakpointOptions &bp_options,
+  Status SetBreakpointCommandCallback(BreakpointOptions *bp_options,
                                       const char *callback_body) override;
 
   Status SetBreakpointCommandCallbackFunction(
-      BreakpointOptions &bp_options, const char *function_name,
+      BreakpointOptions *bp_options,
+      const char *function_name,
       StructuredData::ObjectSP extra_args_sp) override;
 
   /// This one is for deserialization:
   Status SetBreakpointCommandCallback(
-      BreakpointOptions &bp_options,
+      BreakpointOptions *bp_options,
       std::unique_ptr<BreakpointOptions::CommandData> &data_up) override;
 
-  Status SetBreakpointCommandCallback(BreakpointOptions &bp_options,
+  Status SetBreakpointCommandCallback(BreakpointOptions *bp_options,
                                       const char *command_body_text,
                                       StructuredData::ObjectSP extra_args_sp,
                                       bool uses_extra_args);
@@ -293,7 +292,9 @@ public:
   static lldb::ScriptInterpreterSP CreateInstance(Debugger &debugger);
 
   // PluginInterface protocol
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  lldb_private::ConstString GetPluginName() override;
+
+  uint32_t GetPluginVersion() override;
 
   class Locker : public ScriptInterpreterLocker {
   public:
@@ -341,7 +342,7 @@ public:
   static bool WatchpointCallbackFunction(void *baton,
                                          StoppointCallbackContext *context,
                                          lldb::user_id_t watch_id);
-  static void Initialize();
+  static void InitializePrivate();
 
   class SynchronicityHandler {
   private:
@@ -418,7 +419,7 @@ public:
       : IOHandler(debugger, IOHandler::Type::PythonInterpreter),
         m_python(python) {}
 
-  ~IOHandlerPythonInterpreter() override = default;
+  ~IOHandlerPythonInterpreter() override {}
 
   ConstString GetControlSequence(char ch) override {
     if (ch == 'd')
@@ -431,12 +432,13 @@ public:
       int stdin_fd = GetInputFD();
       if (stdin_fd >= 0) {
         Terminal terminal(stdin_fd);
-        TerminalState terminal_state(terminal);
+        TerminalState terminal_state;
+        const bool is_a_tty = terminal.IsATerminal();
 
-        if (terminal.IsATerminal()) {
-          // FIXME: error handling?
-          llvm::consumeError(terminal.SetCanonical(false));
-          llvm::consumeError(terminal.SetEcho(true));
+        if (is_a_tty) {
+          terminal_state.Save(stdin_fd, false);
+          terminal.SetCanonical(false);
+          terminal.SetEcho(true);
         }
 
         ScriptInterpreterPythonImpl::Locker locker(
@@ -464,6 +466,9 @@ public:
         run_string.Printf("run_python_interpreter (%s)",
                           m_python->GetDictionaryName());
         PyRun_SimpleString(run_string.GetData());
+
+        if (is_a_tty)
+          terminal_state.Restore();
       }
     }
     SetIsDone(true);

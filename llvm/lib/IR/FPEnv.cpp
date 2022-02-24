@@ -17,7 +17,7 @@
 
 namespace llvm {
 
-Optional<RoundingMode> convertStrToRoundingMode(StringRef RoundingArg) {
+Optional<RoundingMode> StrToRoundingMode(StringRef RoundingArg) {
   // For dynamic rounding mode, we use round to nearest but we will set the
   // 'exact' SDNodeFlag so that the value will not be rounded.
   return StringSwitch<Optional<RoundingMode>>(RoundingArg)
@@ -30,7 +30,7 @@ Optional<RoundingMode> convertStrToRoundingMode(StringRef RoundingArg) {
       .Default(None);
 }
 
-Optional<StringRef> convertRoundingModeToStr(RoundingMode UseRounding) {
+Optional<StringRef> RoundingModeToStr(RoundingMode UseRounding) {
   Optional<StringRef> RoundingStr = None;
   switch (UseRounding) {
   case RoundingMode::Dynamic:
@@ -57,8 +57,7 @@ Optional<StringRef> convertRoundingModeToStr(RoundingMode UseRounding) {
   return RoundingStr;
 }
 
-Optional<fp::ExceptionBehavior>
-convertStrToExceptionBehavior(StringRef ExceptionArg) {
+Optional<fp::ExceptionBehavior> StrToExceptionBehavior(StringRef ExceptionArg) {
   return StringSwitch<Optional<fp::ExceptionBehavior>>(ExceptionArg)
       .Case("fpexcept.ignore", fp::ebIgnore)
       .Case("fpexcept.maytrap", fp::ebMayTrap)
@@ -66,8 +65,7 @@ convertStrToExceptionBehavior(StringRef ExceptionArg) {
       .Default(None);
 }
 
-Optional<StringRef>
-convertExceptionBehaviorToStr(fp::ExceptionBehavior UseExcept) {
+Optional<StringRef> ExceptionBehaviorToStr(fp::ExceptionBehavior UseExcept) {
   Optional<StringRef> ExceptStr = None;
   switch (UseExcept) {
   case fp::ebStrict:

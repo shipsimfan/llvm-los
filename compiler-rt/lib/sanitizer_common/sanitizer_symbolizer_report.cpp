@@ -88,16 +88,10 @@ void ReportErrorSummary(const char *error_type, const StackTrace *stack,
 #endif
 }
 
-void ReportMmapWriteExec(int prot, int flags) {
+void ReportMmapWriteExec(int prot) {
 #if SANITIZER_POSIX && (!SANITIZER_GO && !SANITIZER_ANDROID)
-  int pflags = (PROT_WRITE | PROT_EXEC);
-  if ((prot & pflags) != pflags)
+  if ((prot & (PROT_WRITE | PROT_EXEC)) != (PROT_WRITE | PROT_EXEC))
     return;
-
-#  if SANITIZER_MAC && defined(MAP_JIT)
-  if ((flags & MAP_JIT) == MAP_JIT)
-    return;
-#  endif
 
   ScopedErrorReportLock l;
   SanitizerCommonDecorator d;
@@ -126,7 +120,7 @@ void ReportMmapWriteExec(int prot, int flags) {
 #endif
 }
 
-#if !SANITIZER_FUCHSIA && !SANITIZER_GO
+#if !SANITIZER_FUCHSIA && !SANITIZER_RTEMS && !SANITIZER_GO
 void StartReportDeadlySignal() {
   // Write the first message using fd=2, just in case.
   // It may actually fail to write in case stderr is closed.
@@ -211,9 +205,9 @@ static void ReportDeadlySignalImpl(const SignalContext &sig, u32 tid,
     Report("Hint: pc points to the zero page.\n");
   if (sig.is_memory_access) {
     const char *access_type =
-        sig.write_flag == SignalContext::Write
+        sig.write_flag == SignalContext::WRITE
             ? "WRITE"
-            : (sig.write_flag == SignalContext::Read ? "READ" : "UNKNOWN");
+            : (sig.write_flag == SignalContext::READ ? "READ" : "UNKNOWN");
     Report("The signal is caused by a %s memory access.\n", access_type);
     if (!sig.is_true_faulting_addr)
       Report("Hint: this fault was caused by a dereference of a high value "
@@ -256,17 +250,17 @@ void HandleDeadlySignal(void *siginfo, void *context, u32 tid,
 
 #endif  // !SANITIZER_FUCHSIA && !SANITIZER_GO
 
-atomic_uintptr_t ScopedErrorReportLock::reporting_thread_ = {0};
-StaticSpinMutex ScopedErrorReportLock::mutex_;
+static atomic_uintptr_t reporting_thread = {0};
+static StaticSpinMutex CommonSanitizerReportMutex;
 
-void ScopedErrorReportLock::Lock() {
+ScopedErrorReportLock::ScopedErrorReportLock() {
   uptr current = GetThreadSelf();
   for (;;) {
     uptr expected = 0;
-    if (atomic_compare_exchange_strong(&reporting_thread_, &expected, current,
+    if (atomic_compare_exchange_strong(&reporting_thread, &expected, current,
                                        memory_order_relaxed)) {
       // We've claimed reporting_thread so proceed.
-      mutex_.Lock();
+      CommonSanitizerReportMutex.Lock();
       return;
     }
 
@@ -288,11 +282,13 @@ void ScopedErrorReportLock::Lock() {
   }
 }
 
-void ScopedErrorReportLock::Unlock() {
-  mutex_.Unlock();
-  atomic_store_relaxed(&reporting_thread_, 0);
+ScopedErrorReportLock::~ScopedErrorReportLock() {
+  CommonSanitizerReportMutex.Unlock();
+  atomic_store_relaxed(&reporting_thread, 0);
 }
 
-void ScopedErrorReportLock::CheckLocked() { mutex_.CheckLocked(); }
+void ScopedErrorReportLock::CheckLocked() {
+  CommonSanitizerReportMutex.CheckLocked();
+}
 
 }  // namespace __sanitizer

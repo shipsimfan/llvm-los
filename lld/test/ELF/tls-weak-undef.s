@@ -23,7 +23,7 @@
 # RUN: ld.lld -shared %tdef.o -o %tdef.so
 # RUN: not ld.lld %texec.o %tdef.so -o /dev/null 2>&1 | FileCheck --check-prefix=ERROR %s
 
-# ERROR: error: relocation R_X86_64_TPOFF32 cannot be used against symbol 'le'; recompile with -fPIC
+# ERROR: symbol 'le' has no type
 
 #--- ledef.s
 .tbss

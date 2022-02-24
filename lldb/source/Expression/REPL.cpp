@@ -39,11 +39,7 @@ lldb::REPLSP REPL::Create(Status &err, lldb::LanguageType language,
   lldb::REPLSP ret;
 
   while (REPLCreateInstance create_instance =
-             PluginManager::GetREPLCreateCallbackAtIndex(idx)) {
-    LanguageSet supported_languages =
-        PluginManager::GetREPLSupportedLanguagesAtIndex(idx++);
-    if (!supported_languages[language])
-      continue;
+             PluginManager::GetREPLCreateCallbackAtIndex(idx++)) {
     ret = (*create_instance)(err, language, debugger, target, repl_options);
     if (ret) {
       break;
@@ -449,7 +445,7 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
           if (!m_repl_source_path.empty()) {
             auto file = FileSystem::Instance().Open(
                 FileSpec(m_repl_source_path),
-                File::eOpenOptionWriteOnly | File::eOpenOptionTruncate |
+                File::eOpenOptionWrite | File::eOpenOptionTruncate |
                     File::eOpenOptionCanCreate,
                 lldb::eFilePermissionsFileDefault);
             if (file) {

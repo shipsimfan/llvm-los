@@ -3,7 +3,7 @@
 void I( void (^)(void));
 void (^noop)(void);
 
-void nothing(void);
+void nothing();
 int printf(const char*, ...);
 
 typedef void (^T) (void);
@@ -11,7 +11,7 @@ typedef void (^T) (void);
 void takeblock(T);
 int takeintint(int (^C)(int)) { return C(4); }
 
-T somefunction(void) {
+T somefunction() {
   if (^{ })
     nothing();
 
@@ -23,7 +23,7 @@ T somefunction(void) {
 
   return ^{printf("\nClosure\n"); };
 }
-void test2(void) {
+void test2() {
   int x = 4;
 
   takeblock(^{ printf("%d\n", x); });
@@ -46,20 +46,20 @@ void test2(void) {
 }
 
 
-void (^test3(void))(void) { 
+void (^test3())(void) { 
   return ^{};
 }
 
-void test4(void) {
+void test4() {
   void (^noop)(void) = ^{};
-  void (*noop2)(void) = 0;
+  void (*noop2)() = 0;
 }
 
 void myfunc(int (^block)(int)) {}
 
 void myfunc3(const int *x);
 
-void test5(void) {
+void test5() {
   int a;
 
   myfunc(^(int abcd) {
@@ -70,7 +70,7 @@ void test5(void) {
 
 void *X;
 
-void test_arguments(void) {
+void test_arguments() {
   int y;
   int (^c)(char);
   (1 ? c : 0)('x');

@@ -10,7 +10,7 @@
 
 
 #include "lldb/DataFormatters/FormattersHelpers.h"
-#include "lldb/Core/Module.h"
+
 #include "lldb/Target/StackFrame.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
@@ -131,17 +131,14 @@ size_t lldb_private::formatters::ExtractIndexFromString(const char *item_name) {
   return idx;
 }
 
-Address
+lldb::addr_t
 lldb_private::formatters::GetArrayAddressOrPointerValue(ValueObject &valobj) {
   lldb::addr_t data_addr = LLDB_INVALID_ADDRESS;
-  AddressType type;
 
   if (valobj.IsPointerType())
-    data_addr = valobj.GetPointerValue(&type);
+    data_addr = valobj.GetValueAsUnsigned(0);
   else if (valobj.IsArrayType())
-    data_addr = valobj.GetAddressOf(/*scalar_is_load_address=*/true, &type);
-  if (data_addr != LLDB_INVALID_ADDRESS && type == eAddressTypeFile)
-    return Address(data_addr, valobj.GetModule()->GetSectionList());
+    data_addr = valobj.GetAddressOf();
 
   return data_addr;
 }

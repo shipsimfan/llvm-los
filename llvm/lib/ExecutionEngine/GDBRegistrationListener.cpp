@@ -13,7 +13,6 @@
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Mutex.h"
 #include <mutex>
 
@@ -71,7 +70,7 @@ LLVM_ATTRIBUTE_USED void requiredSymbolDefinitionsFromOrcTargetProcess() {
 }
 
 struct RegisteredObjectInfo {
-  RegisteredObjectInfo() = default;
+  RegisteredObjectInfo() {}
 
   RegisteredObjectInfo(std::size_t Size, jit_code_entry *Entry,
                        OwningBinary<ObjectFile> Obj)
@@ -97,7 +96,7 @@ class GDBJITRegistrationListener : public JITEventListener {
 
 public:
   /// Instantiates the JIT service.
-  GDBJITRegistrationListener() = default;
+  GDBJITRegistrationListener() : ObjectBufferMap() {}
 
   /// Unregisters each object that was previously registered and releases all
   /// internal resources.

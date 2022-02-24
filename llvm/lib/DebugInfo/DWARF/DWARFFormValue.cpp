@@ -13,10 +13,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
-#include "llvm/DebugInfo/DWARF/DWARFDataExtractor.h"
-#include "llvm/DebugInfo/DWARF/DWARFDebugLine.h"
-#include "llvm/DebugInfo/DWARF/DWARFObject.h"
-#include "llvm/DebugInfo/DWARF/DWARFSection.h"
+#include "llvm/DebugInfo/DWARF/DWARFRelocMap.h"
 #include "llvm/DebugInfo/DWARF/DWARFUnit.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
@@ -335,7 +332,7 @@ bool DWARFFormValue::extractValue(const DWARFDataExtractor &Data,
       break;
     case DW_FORM_LLVM_addrx_offset:
       Value.uval = Data.getULEB128(OffsetPtr, &Err) << 32;
-      Value.uval |= Data.getU32(OffsetPtr, &Err);
+      Value.uval = Data.getU32(OffsetPtr, &Err);
       break;
     case DW_FORM_string:
       Value.cstr = Data.getCStr(OffsetPtr, &Err);
@@ -616,53 +613,50 @@ void DWARFFormValue::dump(raw_ostream &OS, DIDumpOptions DumpOpts) const {
 }
 
 void DWARFFormValue::dumpString(raw_ostream &OS) const {
-  if (auto DbgStr = dwarf::toString(*this)) {
+  Optional<const char *> DbgStr = getAsCString();
+  if (DbgStr.hasValue()) {
     auto COS = WithColor(OS, HighlightColor::String);
     COS.get() << '"';
-    COS.get().write_escaped(*DbgStr);
+    COS.get().write_escaped(DbgStr.getValue());
     COS.get() << '"';
   }
 }
 
-Expected<const char *> DWARFFormValue::getAsCString() const {
+Optional<const char *> DWARFFormValue::getAsCString() const {
   if (!isFormClass(FC_String))
-    return make_error<StringError>("Invalid form for string attribute",
-                                   inconvertibleErrorCode());
+    return None;
   if (Form == DW_FORM_string)
     return Value.cstr;
   // FIXME: Add support for DW_FORM_GNU_strp_alt
   if (Form == DW_FORM_GNU_strp_alt || C == nullptr)
-    return make_error<StringError>("Unsupported form for string attribute",
-                                   inconvertibleErrorCode());
+    return None;
   uint64_t Offset = Value.uval;
-  Optional<uint32_t> Index;
+  if (Form == DW_FORM_line_strp) {
+    // .debug_line_str is tracked in the Context.
+    if (const char *Str = C->getLineStringExtractor().getCStr(&Offset))
+      return Str;
+    return None;
+  }
   if (Form == DW_FORM_GNU_str_index || Form == DW_FORM_strx ||
       Form == DW_FORM_strx1 || Form == DW_FORM_strx2 || Form == DW_FORM_strx3 ||
       Form == DW_FORM_strx4) {
     if (!U)
-      return make_error<StringError>("API limitation - string extraction not "
-                                     "available without a DWARFUnit",
-                                     inconvertibleErrorCode());
-    Expected<uint64_t> StrOffset = U->getStringOffsetSectionItem(Offset);
-    Index = Offset;
+      return None;
+    Optional<uint64_t> StrOffset = U->getStringOffsetSectionItem(Offset);
     if (!StrOffset)
-      return StrOffset.takeError();
+      return None;
     Offset = *StrOffset;
   }
   // Prefer the Unit's string extractor, because for .dwo it will point to
   // .debug_str.dwo, while the Context's extractor always uses .debug_str.
-  DataExtractor StrData = Form == DW_FORM_line_strp
-                              ? C->getLineStringExtractor()
-                          : U ? U->getStringExtractor()
-                              : C->getStringExtractor();
-  if (const char *Str = StrData.getCStr(&Offset))
+  if (U) {
+    if (const char *Str = U->getStringExtractor().getCStr(&Offset))
+      return Str;
+    return None;
+  }
+  if (const char *Str = C->getStringExtractor().getCStr(&Offset))
     return Str;
-  std::string Msg = FormEncodingString(Form).str();
-  if (Index)
-    Msg += (" uses index " + Twine(*Index) + ", but the referenced string").str();
-  Msg += (" offset " + Twine(Offset) + " is beyond .debug_str bounds").str();
-  return make_error<StringError>(Msg,
-      inconvertibleErrorCode());
+  return None;
 }
 
 Optional<uint64_t> DWARFFormValue::getAsAddress() const {
@@ -696,7 +690,7 @@ Optional<uint64_t> DWARFFormValue::getAsReference() const {
     return R->Unit ? R->Unit->getOffset() + R->Offset : R->Offset;
   return None;
 }
-
+  
 Optional<DWARFFormValue::UnitOffset> DWARFFormValue::getAsRelativeReference() const {
   if (!isFormClass(FC_Reference))
     return None;
@@ -767,18 +761,4 @@ Optional<uint64_t> DWARFFormValue::getAsReferenceUVal() const {
   if (!isFormClass(FC_Reference))
     return None;
   return Value.uval;
-}
-
-Optional<std::string>
-DWARFFormValue::getAsFile(DILineInfoSpecifier::FileLineInfoKind Kind) const {
-  if (U == nullptr || !isFormClass(FC_Constant))
-    return None;
-  DWARFUnit *DLU = const_cast<DWARFUnit *>(U)->getLinkedUnit();
-  if (auto *LT = DLU->getContext().getLineTableForUnit(DLU)) {
-    std::string FileName;
-    if (LT->getFileNameByIndex(Value.uval, DLU->getCompilationDir(), Kind,
-                               FileName))
-      return FileName;
-  }
-  return None;
 }

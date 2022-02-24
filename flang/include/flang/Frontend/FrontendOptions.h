@@ -25,17 +25,11 @@ enum ActionKind {
   /// -test-io mode
   InputOutputTest,
 
-  /// -E mode
+  /// -E mode.
   PrintPreprocessedInput,
 
   /// -fsyntax-only
   ParseSyntaxOnly,
-
-  /// Emit a .mlir file
-  EmitMLIR,
-
-  /// Emit an .ll file
-  EmitLLVM,
 
   /// Emit a .o file.
   EmitObj,
@@ -57,9 +51,6 @@ enum ActionKind {
   /// Parse, run semantics and then output the parse tree
   DebugDumpParseTree,
 
-  /// Parse, run semantics and then output the parse tree and symbols
-  DebugDumpAll,
-
   /// Parse and then output the parse tree, skip the semantic checks
   DebugDumpParseTreeNoSema,
 
@@ -80,18 +71,19 @@ enum ActionKind {
   GetDefinition,
 
   /// Parse, run semantics and then dump symbol sources map
-  GetSymbolsSources,
+  GetSymbolsSources
 
-  /// Only execute frontend initialization
-  InitOnly,
-
-  /// Run a plugin action
-  PluginAction
+  /// TODO: RunPreprocessor, EmitLLVM, EmitLLVMOnly,
+  /// EmitCodeGenOnly, EmitAssembly, (...)
 };
 
 /// \param suffix The file extension
 /// \return True if the file extension should be processed as fixed form
 bool isFixedFormSuffix(llvm::StringRef suffix);
+
+// TODO: Find a more suitable location for this. Added for compability with
+// f18.cpp (this is equivalent to `asFortran` defined there).
+Fortran::parser::AnalyzedObjectsAsFortran getBasicAsFortran();
 
 /// \param suffix The file extension
 /// \return True if the file extension should be processed as free form
@@ -201,24 +193,21 @@ public:
 };
 
 /// FrontendOptions - Options for controlling the behavior of the frontend.
-struct FrontendOptions {
-  FrontendOptions()
-      : showHelp(false), showVersion(false), instrumentedParse(false),
-        needProvenanceRangeToCharBlockMappings(false) {}
-
+class FrontendOptions {
+public:
   /// Show the -help text.
-  unsigned showHelp : 1;
+  unsigned showHelp_ : 1;
 
   /// Show the -version text.
-  unsigned showVersion : 1;
+  unsigned showVersion_ : 1;
 
   /// Instrument the parse to get a more verbose log
-  unsigned instrumentedParse : 1;
+  unsigned instrumentedParse_ : 1;
 
   /// Enable Provenance to character-stream mapping. Allows e.g. IDEs to find
   /// symbols based on source-code location. This is not needed in regular
   /// compilation.
-  unsigned needProvenanceRangeToCharBlockMappings : 1;
+  unsigned needProvenanceRangeToCharBlockMappings_ : 1;
 
   /// Input values from `-fget-definition`
   struct GetDefinitionVals {
@@ -226,39 +215,38 @@ struct FrontendOptions {
     unsigned startColumn;
     unsigned endColumn;
   };
-  GetDefinitionVals getDefVals;
+  GetDefinitionVals getDefVals_;
 
   /// The input files and their types.
-  std::vector<FrontendInputFile> inputs;
+  std::vector<FrontendInputFile> inputs_;
 
   /// The output file, if any.
-  std::string outputFile;
+  std::string outputFile_;
 
   /// The frontend action to perform.
-  frontend::ActionKind programAction;
+  frontend::ActionKind programAction_;
 
   // The form to process files in, if specified.
-  FortranForm fortranForm = FortranForm::Unknown;
+  FortranForm fortranForm_ = FortranForm::Unknown;
 
   // The column after which characters are ignored in fixed form lines in the
   // source file.
-  int fixedFormColumns = 72;
+  int fixedFormColumns_ = 72;
 
   /// The input kind, either specified via -x argument or deduced from the input
   /// file name.
-  InputKind dashX;
+  InputKind dashX_;
 
   // Language features
-  common::LanguageFeatureControl features;
+  common::LanguageFeatureControl features_;
 
   // Source file encoding
-  Fortran::parser::Encoding encoding{Fortran::parser::Encoding::UTF_8};
+  Fortran::parser::Encoding encoding_{Fortran::parser::Encoding::UTF_8};
 
-  /// The list of plugins to load.
-  std::vector<std::string> plugins;
-
-  /// The name of the action to run when using a plugin action.
-  std::string ActionName;
+public:
+  FrontendOptions()
+      : showHelp_(false), showVersion_(false), instrumentedParse_(false),
+        needProvenanceRangeToCharBlockMappings_(false) {}
 
   // Return the appropriate input kind for a file extension. For example,
   /// "*.f" would return Language::Fortran.

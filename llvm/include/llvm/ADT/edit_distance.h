@@ -5,12 +5,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// This file defines a Levenshtein distance function that works for any two
-/// sequences, with each element of each sequence being analogous to a character
-/// in a string.
-///
+//
+// This file defines a Levenshtein distance function that works for any two
+// sequences, with each element of each sequence being analogous to a character
+// in a string.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_EDIT_DISTANCE_H

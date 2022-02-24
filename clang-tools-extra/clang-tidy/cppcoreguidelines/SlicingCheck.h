@@ -32,7 +32,7 @@ public:
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 
 private:
-  void diagnoseSlicedOverriddenMethods(const Expr &Call,
+  void DiagnoseSlicedOverriddenMethods(const Expr &call,
                                        const CXXRecordDecl &DerivedDecl,
                                        const CXXRecordDecl &BaseDecl);
 };

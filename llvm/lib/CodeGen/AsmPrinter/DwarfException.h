@@ -26,9 +26,9 @@ protected:
   DwarfCFIExceptionBase(AsmPrinter *A);
 
   /// Per-function flag to indicate if frame CFI info should be emitted.
-  bool shouldEmitCFI = false;
+  bool shouldEmitCFI;
   /// Per-module flag to indicate if .cfi_section has beeen emitted.
-  bool hasEmittedCFISections = false;
+  bool hasEmittedCFISections;
 
   void markFunctionEnd() override;
   void endFragment() override;
@@ -36,13 +36,13 @@ protected:
 
 class LLVM_LIBRARY_VISIBILITY DwarfCFIException : public DwarfCFIExceptionBase {
   /// Per-function flag to indicate if .cfi_personality should be emitted.
-  bool shouldEmitPersonality = false;
+  bool shouldEmitPersonality;
 
   /// Per-function flag to indicate if .cfi_personality must be emitted.
-  bool forceEmitPersonality = false;
+  bool forceEmitPersonality;
 
   /// Per-function flag to indicate if .cfi_lsda should be emitted.
-  bool shouldEmitLSDA = false;
+  bool shouldEmitLSDA;
 
 public:
   //===--------------------------------------------------------------------===//
@@ -97,8 +97,6 @@ class LLVM_LIBRARY_VISIBILITY AIXException : public DwarfCFIExceptionBase {
 
 public:
   AIXException(AsmPrinter *A);
-
-  void markFunctionEnd() override;
 
   void endModule() override {}
   void beginFunction(const MachineFunction *MF) override {}

@@ -129,16 +129,16 @@ Optional<std::string> Process::GetEnv(StringRef Name) {
   SmallVector<wchar_t, MAX_PATH> Buf;
   size_t Size = MAX_PATH;
   do {
-    Buf.resize_for_overwrite(Size);
+    Buf.reserve(Size);
     SetLastError(NO_ERROR);
     Size =
-      GetEnvironmentVariableW(NameUTF16.data(), Buf.data(), Buf.size());
+      GetEnvironmentVariableW(NameUTF16.data(), Buf.data(), Buf.capacity());
     if (Size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND)
       return None;
 
     // Try again with larger buffer.
-  } while (Size > Buf.size());
-  Buf.truncate(Size);
+  } while (Size > Buf.capacity());
+  Buf.set_size(Size);
 
   // Convert the result from UTF-16 to UTF-8.
   SmallVector<char, MAX_PATH> Res;
@@ -194,7 +194,7 @@ static std::error_code WildcardExpand(StringRef Arg,
 
     // Append FileName to Dir, and remove it afterwards.
     llvm::sys::path::append(Dir, FileName);
-    Args.push_back(Saver.save(Dir.str()).data());
+    Args.push_back(Saver.save(StringRef(Dir)).data());
     Dir.resize(DirSize);
   } while (FindNextFileW(FindHandle, &FileData));
 
@@ -261,7 +261,6 @@ windows::GetCommandLineArguments(SmallVectorImpl<const char *> &Args,
   EC = GetExecutableName(Filename);
   if (EC)
     return EC;
-  sys::path::make_preferred(Arg0);
   sys::path::append(Arg0, Filename);
   Args[0] = Saver.save(Arg0).data();
   return std::error_code();
@@ -503,9 +502,4 @@ llvm::VersionTuple llvm::GetWindowsOSVersion() {
 bool llvm::RunningWindows8OrGreater() {
   // Windows 8 is version 6.2, service pack 0.
   return GetWindowsOSVersion() >= llvm::VersionTuple(6, 2, 0, 0);
-}
-
-[[noreturn]] void Process::ExitNoCleanup(int RetCode) {
-  TerminateProcess(GetCurrentProcess(), RetCode);
-  llvm_unreachable("TerminateProcess doesn't return");
 }

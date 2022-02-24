@@ -29,7 +29,6 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/Analysis/LoopAccessAnalysis.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
-#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Support/TypeSize.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
 
@@ -97,20 +96,8 @@ public:
     FK_Enabled = 1,    ///< Forcing enabled.
   };
 
-  enum ScalableForceKind {
-    /// Not selected.
-    SK_Unspecified = -1,
-    /// Disables vectorization with scalable vectors.
-    SK_FixedWidthOnly = 0,
-    /// Vectorize loops using scalable vectors or fixed-width vectors, but favor
-    /// scalable vectors when the cost-model is inconclusive. This is the
-    /// default when the scalable.enable hint is enabled through a pragma.
-    SK_PreferScalable = 1
-  };
-
   LoopVectorizeHints(const Loop *L, bool InterleaveOnlyWhenForced,
-                     OptimizationRemarkEmitter &ORE,
-                     const TargetTransformInfo *TTI = nullptr);
+                     OptimizationRemarkEmitter &ORE);
 
   /// Mark the loop L as already vectorized by setting the width to 1.
   void setAlreadyVectorized();
@@ -122,10 +109,8 @@ public:
   void emitRemarkWithHints() const;
 
   ElementCount getWidth() const {
-    return ElementCount::get(Width.Value, (ScalableForceKind)Scalable.Value ==
-                                              SK_PreferScalable);
+    return ElementCount::get(Width.Value, isScalable());
   }
-
   unsigned getInterleave() const {
     if (Interleave.Value)
       return Interleave.Value;
@@ -144,21 +129,22 @@ public:
     return (ForceKind)Force.Value;
   }
 
-  /// \return true if scalable vectorization has been explicitly disabled.
-  bool isScalableVectorizationDisabled() const {
-    return (ScalableForceKind)Scalable.Value == SK_FixedWidthOnly;
-  }
+  bool isScalable() const { return Scalable.Value; }
 
   /// If hints are provided that force vectorization, use the AlwaysPrint
   /// pass name to force the frontend to print the diagnostic.
   const char *vectorizeAnalysisPassName() const;
 
-  /// When enabling loop hints are provided we allow the vectorizer to change
-  /// the order of operations that is given by the scalar loop. This is not
-  /// enabled by default because can be unsafe or inefficient. For example,
-  /// reordering floating-point operations will change the way round-off
-  /// error accumulates in the loop.
-  bool allowReordering() const;
+  bool allowReordering() const {
+    // When enabling loop hints are provided we allow the vectorizer to change
+    // the order of operations that is given by the scalar loop. This is not
+    // enabled by default because can be unsafe or inefficient. For example,
+    // reordering floating-point operations will change the way round-off
+    // error accumulates in the loop.
+    ElementCount EC = getWidth();
+    return getForce() == LoopVectorizeHints::FK_Enabled ||
+           EC.getKnownMinValue() > 1;
+  }
 
   bool isPotentiallyUnsafe() const {
     // Avoid FP vectorization if the target is unsure about proper support.
@@ -209,6 +195,9 @@ public:
 
 
   Instruction *getExactFPInst() { return ExactFPMathInst; }
+  bool canVectorizeFPMath(const LoopVectorizeHints &Hints) const {
+    return !ExactFPMathInst || Hints.allowReordering();
+  }
 
   unsigned getNumRuntimePointerChecks() const {
     return NumRuntimePointerChecks;
@@ -266,11 +255,6 @@ public:
   /// If false, good old LV code.
   bool canVectorize(bool UseVPlanNativePath);
 
-  /// Returns true if it is legal to vectorize the FP math operations in this
-  /// loop. Vectorizing is legal if we allow reordering of FP operations, or if
-  /// we can use in-order reductions.
-  bool canVectorizeFPMath(bool EnableStrictReductions);
-
   /// Return true if we can vectorize this loop while folding its tail by
   /// masking, and mark all respective loads/stores for masking.
   /// This object's state is only modified iff this function returns true.
@@ -280,46 +264,42 @@ public:
   PHINode *getPrimaryInduction() { return PrimaryInduction; }
 
   /// Returns the reduction variables found in the loop.
-  const ReductionList &getReductionVars() const { return Reductions; }
+  ReductionList &getReductionVars() { return Reductions; }
 
   /// Returns the induction variables found in the loop.
-  const InductionList &getInductionVars() const { return Inductions; }
+  InductionList &getInductionVars() { return Inductions; }
 
   /// Return the first-order recurrences found in the loop.
   RecurrenceSet &getFirstOrderRecurrences() { return FirstOrderRecurrences; }
 
   /// Return the set of instructions to sink to handle first-order recurrences.
-  MapVector<Instruction *, Instruction *> &getSinkAfter() { return SinkAfter; }
+  DenseMap<Instruction *, Instruction *> &getSinkAfter() { return SinkAfter; }
 
   /// Returns the widest induction type.
   Type *getWidestInductionType() { return WidestIndTy; }
 
   /// Returns True if V is a Phi node of an induction variable in this loop.
-  bool isInductionPhi(const Value *V) const;
-
-  /// Returns a pointer to the induction descriptor, if \p Phi is an integer or
-  /// floating point induction.
-  const InductionDescriptor *getIntOrFpInductionDescriptor(PHINode *Phi) const;
+  bool isInductionPhi(const Value *V);
 
   /// Returns True if V is a cast that is part of an induction def-use chain,
   /// and had been proven to be redundant under a runtime guard (in other
   /// words, the cast has the same SCEV expression as the induction phi).
-  bool isCastedInductionVariable(const Value *V) const;
+  bool isCastedInductionVariable(const Value *V);
 
   /// Returns True if V can be considered as an induction variable in this
   /// loop. V can be the induction phi, or some redundant cast in the def-use
   /// chain of the inducion phi.
-  bool isInductionVariable(const Value *V) const;
+  bool isInductionVariable(const Value *V);
 
   /// Returns True if PN is a reduction variable in this loop.
-  bool isReductionVariable(PHINode *PN) const { return Reductions.count(PN); }
+  bool isReductionVariable(PHINode *PN) { return Reductions.count(PN); }
 
   /// Returns True if Phi is a first-order recurrence in this loop.
-  bool isFirstOrderRecurrence(const PHINode *Phi) const;
+  bool isFirstOrderRecurrence(const PHINode *Phi);
 
   /// Return true if the block BB needs to be predicated in order for the loop
   /// to be vectorized.
-  bool blockNeedsPredication(BasicBlock *BB) const;
+  bool blockNeedsPredication(BasicBlock *BB);
 
   /// Check if this pointer is consecutive when vectorizing. This happens
   /// when the last index of the GEP is the induction variable, or that the
@@ -331,7 +311,7 @@ public:
   /// -1 - Address is consecutive, and decreasing.
   /// NOTE: This method must only be used before modifying the original scalar
   /// loop. Do not use after invoking 'createVectorizedLoopSkeleton' (PR34965).
-  int isConsecutivePtr(Type *AccessTy, Value *Ptr) const;
+  int isConsecutivePtr(Value *Ptr);
 
   /// Returns true if the value V is uniform within the loop.
   bool isUniform(Value *V);
@@ -370,9 +350,7 @@ public:
 
   /// Returns true if vector representation of the instruction \p I
   /// requires mask.
-  bool isMaskRequired(const Instruction *I) const {
-    return MaskedOp.contains(I);
-  }
+  bool isMaskRequired(const Instruction *I) { return MaskedOp.contains(I); }
 
   unsigned getNumStores() const { return LAI->getNumStores(); }
   unsigned getNumLoads() const { return LAI->getNumLoads(); }
@@ -426,17 +404,22 @@ private:
   bool canVectorizeOuterLoop();
 
   /// Return true if all of the instructions in the block can be speculatively
-  /// executed, and record the loads/stores that require masking.
+  /// executed, and record the loads/stores that require masking. If's that
+  /// guard loads can be ignored under "assume safety" unless \p PreserveGuards
+  /// is true. This can happen when we introduces guards for which the original
+  /// "unguarded-loads are safe" assumption does not hold. For example, the
+  /// vectorizer's fold-tail transformation changes the loop to execute beyond
+  /// its original trip-count, under a proper guard, which should be preserved.
   /// \p SafePtrs is a list of addresses that are known to be legal and we know
   /// that we can read from them without segfault.
   /// \p MaskedOp is a list of instructions that have to be transformed into
   /// calls to the appropriate masked intrinsic when the loop is vectorized.
   /// \p ConditionalAssumes is a list of assume instructions in predicated
   /// blocks that must be dropped if the CFG gets flattened.
-  bool blockCanBePredicated(
-      BasicBlock *BB, SmallPtrSetImpl<Value *> &SafePtrs,
-      SmallPtrSetImpl<const Instruction *> &MaskedOp,
-      SmallPtrSetImpl<Instruction *> &ConditionalAssumes) const;
+  bool blockCanBePredicated(BasicBlock *BB, SmallPtrSetImpl<Value *> &SafePtrs,
+                            SmallPtrSetImpl<const Instruction *> &MaskedOp,
+                            SmallPtrSetImpl<Instruction *> &ConditionalAssumes,
+                            bool PreserveGuards = false) const;
 
   /// Updates the vectorization state by adding \p Phi to the inductions list.
   /// This can set \p Phi as the main induction of the loop if \p Phi is a
@@ -446,7 +429,7 @@ private:
 
   /// If an access has a symbolic strides, this maps the pointer value to
   /// the stride symbol.
-  const ValueToValueMap *getSymbolicStrides() const {
+  const ValueToValueMap *getSymbolicStrides() {
     // FIXME: Currently, the set of symbolic strides is sometimes queried before
     // it's collected.  This happens from canVectorizeWithIfConvert, when the
     // pointer is checked to reference consecutive elements suitable for a
@@ -511,7 +494,7 @@ private:
 
   /// Holds instructions that need to sink past other instructions to handle
   /// first-order recurrences.
-  MapVector<Instruction *, Instruction *> SinkAfter;
+  DenseMap<Instruction *, Instruction *> SinkAfter;
 
   /// Holds the widest induction type encountered.
   Type *WidestIndTy = nullptr;

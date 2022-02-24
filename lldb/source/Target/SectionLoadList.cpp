@@ -13,7 +13,6 @@
 #include "lldb/Symbol/Block.h"
 #include "lldb/Symbol/Symbol.h"
 #include "lldb/Symbol/SymbolContext.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Stream.h"
 
@@ -64,7 +63,7 @@ SectionLoadList::GetSectionLoadAddress(const lldb::SectionSP &section) const {
 bool SectionLoadList::SetSectionLoadAddress(const lldb::SectionSP &section,
                                             addr_t load_addr,
                                             bool warn_multiple) {
-  Log *log = GetLog(LLDBLog::DynamicLoader);
+  Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
   ModuleSP module_sp(section->GetModule());
 
   if (module_sp) {
@@ -137,7 +136,7 @@ size_t SectionLoadList::SetSectionUnloaded(const lldb::SectionSP &section_sp) {
   size_t unload_count = 0;
 
   if (section_sp) {
-    Log *log = GetLog(LLDBLog::DynamicLoader);
+    Log *log(GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
 
     if (log && log->GetVerbose()) {
       ModuleSP module_sp = section_sp->GetModule();
@@ -172,7 +171,7 @@ size_t SectionLoadList::SetSectionUnloaded(const lldb::SectionSP &section_sp) {
 
 bool SectionLoadList::SetSectionUnloaded(const lldb::SectionSP &section_sp,
                                          addr_t load_addr) {
-  Log *log = GetLog(LLDBLog::DynamicLoader);
+  Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_DYNAMIC_LOADER));
 
   if (log && log->GetVerbose()) {
     ModuleSP module_sp = section_sp->GetModule();

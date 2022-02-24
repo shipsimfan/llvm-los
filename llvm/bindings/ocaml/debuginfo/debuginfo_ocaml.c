@@ -865,7 +865,7 @@ value llvm_instr_set_debug_loc(LLVMValueRef Inst, LLVMMetadataRef Loc) {
 LLVMMetadataRef llvm_dibuild_create_constant_value_expression(value Builder,
                                                               value Value) {
   return LLVMDIBuilderCreateConstantValueExpression(DIBuilder_val(Builder),
-                                                    (uint64_t)Int_val(Value));
+                                                    (int64_t)Int_val(Value));
 }
 
 LLVMMetadataRef llvm_dibuild_create_global_variable_expression_native(

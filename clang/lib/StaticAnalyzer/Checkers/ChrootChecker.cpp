@@ -14,7 +14,6 @@
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/CallDescription.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState.h"
@@ -64,11 +63,11 @@ private:
 } // end anonymous namespace
 
 bool ChrootChecker::evalCall(const CallEvent &Call, CheckerContext &C) const {
-  if (Chroot.matches(Call)) {
+  if (Call.isCalled(Chroot)) {
     evalChroot(Call, C);
     return true;
   }
-  if (Chdir.matches(Call)) {
+  if (Call.isCalled(Chdir)) {
     evalChdir(Call, C);
     return true;
   }
@@ -116,7 +115,7 @@ void ChrootChecker::evalChdir(const CallEvent &Call, CheckerContext &C) const {
 void ChrootChecker::checkPreCall(const CallEvent &Call,
                                  CheckerContext &C) const {
   // Ignore chroot and chdir.
-  if (matchesAny(Call, Chroot, Chdir))
+  if (Call.isCalled(Chroot) || Call.isCalled(Chdir))
     return;
 
   // If jail state is ROOT_CHANGED, generate BugReport.

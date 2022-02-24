@@ -1,3 +1,4 @@
+; RUN: opt -debugify -dce -S < %s | FileCheck %s
 ; RUN: opt -passes='module(debugify),function(dce)' -S < %s | FileCheck %s
 
 ; CHECK-LABEL: @test

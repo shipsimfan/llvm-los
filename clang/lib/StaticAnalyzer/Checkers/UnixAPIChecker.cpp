@@ -110,7 +110,7 @@ void UnixAPIMisuseChecker::checkPreStmt(const CallExpr *CE,
   // Don't treat functions in namespaces with the same name a Unix function
   // as a call to the Unix function.
   const DeclContext *NamespaceCtx = FD->getEnclosingNamespaceContext();
-  if (isa_and_nonnull<NamespaceDecl>(NamespaceCtx))
+  if (NamespaceCtx && isa<NamespaceDecl>(NamespaceCtx))
     return;
 
   StringRef FName = C.getCalleeName(FD);
@@ -182,7 +182,8 @@ void UnixAPIMisuseChecker::CheckOpenVariant(CheckerContext &C,
   ProgramStateRef state = C.getState();
 
   if (CE->getNumArgs() < MinArgCount) {
-    // The frontend should issue a warning for this case. Just return.
+    // The frontend should issue a warning for this case, so this is a sanity
+    // check.
     return;
   } else if (CE->getNumArgs() == MaxArgCount) {
     const Expr *Arg = CE->getArg(CreateModeArgIndex);
@@ -365,7 +366,7 @@ void UnixAPIPortabilityChecker::BasicAllocationCheck(CheckerContext &C,
                                                      const unsigned numArgs,
                                                      const unsigned sizeArg,
                                                      const char *fn) const {
-  // Check for the correct number of arguments.
+  // Sanity check for the correct number of arguments
   if (CE->getNumArgs() != numArgs)
     return;
 
@@ -465,7 +466,7 @@ void UnixAPIPortabilityChecker::checkPreStmt(const CallExpr *CE,
   // Don't treat functions in namespaces with the same name a Unix function
   // as a call to the Unix function.
   const DeclContext *NamespaceCtx = FD->getEnclosingNamespaceContext();
-  if (isa_and_nonnull<NamespaceDecl>(NamespaceCtx))
+  if (NamespaceCtx && isa<NamespaceDecl>(NamespaceCtx))
     return;
 
   StringRef FName = C.getCalleeName(FD);

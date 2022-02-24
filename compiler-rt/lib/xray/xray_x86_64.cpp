@@ -148,8 +148,7 @@ bool patchFunctionEntry(const bool Enable, const uint32_t FuncId,
   int64_t TrampolineOffset = reinterpret_cast<int64_t>(Trampoline) -
                              (static_cast<int64_t>(Address) + 11);
   if (TrampolineOffset < MinOffset || TrampolineOffset > MaxOffset) {
-    Report("XRay Entry trampoline (%p) too far from sled (%p)\n",
-           reinterpret_cast<void *>(Trampoline),
+    Report("XRay Entry trampoline (%p) too far from sled (%p)\n", Trampoline,
            reinterpret_cast<void *>(Address));
     return false;
   }
@@ -196,8 +195,7 @@ bool patchFunctionExit(const bool Enable, const uint32_t FuncId,
                              (static_cast<int64_t>(Address) + 11);
   if (TrampolineOffset < MinOffset || TrampolineOffset > MaxOffset) {
     Report("XRay Exit trampoline (%p) too far from sled (%p)\n",
-           reinterpret_cast<void *>(__xray_FunctionExit),
-           reinterpret_cast<void *>(Address));
+           __xray_FunctionExit, reinterpret_cast<void *>(Address));
     return false;
   }
   if (Enable) {
@@ -226,8 +224,7 @@ bool patchFunctionTailExit(const bool Enable, const uint32_t FuncId,
       (static_cast<int64_t>(Address) + 11);
   if (TrampolineOffset < MinOffset || TrampolineOffset > MaxOffset) {
     Report("XRay Tail Exit trampoline (%p) too far from sled (%p)\n",
-           reinterpret_cast<void *>(__xray_FunctionTailExit),
-           reinterpret_cast<void *>(Address));
+           __xray_FunctionTailExit, reinterpret_cast<void *>(Address));
     return false;
   }
   if (Enable) {

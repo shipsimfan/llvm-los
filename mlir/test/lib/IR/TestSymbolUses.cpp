@@ -17,10 +17,6 @@ namespace {
 /// provided by the symbol table along with erasing from the symbol table.
 struct SymbolUsesPass
     : public PassWrapper<SymbolUsesPass, OperationPass<ModuleOp>> {
-  StringRef getArgument() const final { return "test-symbol-uses"; }
-  StringRef getDescription() const final {
-    return "Test detection of symbol uses";
-  }
   WalkResult operateOnSymbol(Operation *symbol, ModuleOp module,
                              SmallVectorImpl<FuncOp> &deadFunctions) {
     // Test computing uses on a non symboltable op.
@@ -84,7 +80,7 @@ struct SymbolUsesPass
       table.erase(op);
       assert(!table.lookup(name) &&
              "expected erased operation to be unknown now");
-      module.emitRemark() << name.getValue() << " function successfully erased";
+      module.emitRemark() << name << " function successfully erased";
     }
   }
 };
@@ -93,10 +89,6 @@ struct SymbolUsesPass
 /// functionality provided by the symbol table.
 struct SymbolReplacementPass
     : public PassWrapper<SymbolReplacementPass, OperationPass<ModuleOp>> {
-  StringRef getArgument() const final { return "test-symbol-rauw"; }
-  StringRef getDescription() const final {
-    return "Test replacement of symbol uses";
-  }
   void runOnOperation() override {
     ModuleOp module = getOperation();
 
@@ -110,17 +102,19 @@ struct SymbolReplacementPass
       StringAttr newName = nestedOp->getAttrOfType<StringAttr>("sym.new_name");
       if (!newName)
         return;
-      symbolUsers.replaceAllUsesWith(nestedOp, newName);
-      SymbolTable::setSymbolName(nestedOp, newName);
+      symbolUsers.replaceAllUsesWith(nestedOp, newName.getValue());
+      SymbolTable::setSymbolName(nestedOp, newName.getValue());
     });
   }
 };
-} // namespace
+} // end anonymous namespace
 
 namespace mlir {
 void registerSymbolTestPasses() {
-  PassRegistration<SymbolUsesPass>();
+  PassRegistration<SymbolUsesPass>("test-symbol-uses",
+                                   "Test detection of symbol uses");
 
-  PassRegistration<SymbolReplacementPass>();
+  PassRegistration<SymbolReplacementPass>("test-symbol-rauw",
+                                          "Test replacement of symbol uses");
 }
 } // namespace mlir

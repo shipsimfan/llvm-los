@@ -17,7 +17,8 @@ namespace lldb_private {
 class OptionValueRegex : public Cloneable<OptionValueRegex, OptionValue> {
 public:
   OptionValueRegex(const char *value = nullptr)
-      : m_regex(value), m_default_regex_str(value) {}
+      : m_regex(llvm::StringRef::withNullAsEmpty(value)),
+        m_default_regex_str(llvm::StringRef::withNullAsEmpty(value).str()) {}
 
   ~OptionValueRegex() override = default;
 

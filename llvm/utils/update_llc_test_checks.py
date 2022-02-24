@@ -33,7 +33,7 @@ def main():
   parser.add_argument(
       '--no_x86_scrub_sp', action='store_false', dest='x86_scrub_sp')
   parser.add_argument(
-      '--x86_scrub_rip', action='store_true', default=False,
+      '--x86_scrub_rip', action='store_true', default=True,
       help='Use more regex for x86 rip matching to reduce diffs between various subtargets')
   parser.add_argument(
       '--no_x86_scrub_rip', action='store_false', dest='x86_scrub_rip')
@@ -108,15 +108,13 @@ def main():
       check_indent = ''
 
     builder = common.FunctionTestBuilder(
-        run_list=run_list,
+        run_list=run_list, 
         flags=type('', (object,), {
             'verbose': ti.args.verbose,
-            'filters': ti.args.filters,
             'function_signature': False,
             'check_attributes': False,
-            'replace_value_regex': []}),
-        scrubber_args=[ti.args],
-        path=ti.path)
+            'replace_function_regex': []}),
+        scrubber_args=[ti.args])
 
     for prefixes, llc_tool, llc_args, preprocess_cmd, triple_in_cmd, march_in_cmd in run_list:
       common.debug('Extracted LLC cmd:', llc_tool, llc_args)
@@ -130,7 +128,7 @@ def main():
         triple = asm.get_triple_from_march(march_in_cmd)
 
       scrubber, function_re = asm.get_run_handler(triple)
-      builder.process_run_line(function_re, scrubber, raw_tool_output, prefixes, True)
+      builder.process_run_line(function_re, scrubber, raw_tool_output, prefixes)
 
     func_dict = builder.finish_and_get_func_dict()
 
@@ -162,8 +160,7 @@ def main():
                                lambda my_output_lines, prefixes, func:
                                asm.add_asm_checks(my_output_lines,
                                                   check_indent + ';',
-                                                  prefixes, func_dict, func,
-                                                  is_filtered=builder.is_filtered()))
+                                                  prefixes, func_dict, func))
     else:
       for input_info in ti.iterlines(output_lines):
         input_line = input_info.line
@@ -178,9 +175,7 @@ def main():
               continue
 
           # Print out the various check lines here.
-          asm.add_asm_checks(output_lines, check_indent + ';', run_list,
-                             func_dict, func_name,
-                             is_filtered=builder.is_filtered())
+          asm.add_asm_checks(output_lines, check_indent + ';', run_list, func_dict, func_name)
           is_in_function_start = False
 
         if is_in_function:

@@ -182,7 +182,8 @@ void A15SDOptimizer::eraseInstrWithNoUses(MachineInstr *MI) {
   Front.push_back(MI);
 
   while (Front.size() != 0) {
-    MI = Front.pop_back_val();
+    MI = Front.back();
+    Front.pop_back();
 
     // MI is already known to be dead. We need to see
     // if other instructions can also be removed.
@@ -592,15 +593,16 @@ bool A15SDOptimizer::runOnInstruction(MachineInstr *MI) {
   SmallVector<unsigned, 8> Defs = getReadDPRs(MI);
   bool Modified = false;
 
-  for (unsigned I : Defs) {
+  for (SmallVectorImpl<unsigned>::iterator I = Defs.begin(), E = Defs.end();
+     I != E; ++I) {
     // Follow the def-use chain for this DPR through COPYs, and also through
     // PHIs (which are essentially multi-way COPYs). It is because of PHIs that
     // we can end up with multiple defs of this DPR.
 
     SmallVector<MachineInstr *, 8> DefSrcs;
-    if (!Register::isVirtualRegister(I))
+    if (!Register::isVirtualRegister(*I))
       continue;
-    MachineInstr *Def = MRI->getVRegDef(I);
+    MachineInstr *Def = MRI->getVRegDef(*I);
     if (!Def)
       continue;
 
@@ -619,25 +621,27 @@ bool A15SDOptimizer::runOnInstruction(MachineInstr *MI) {
       // Collect all the uses of this MI's DPR def for updating later.
       SmallVector<MachineOperand*, 8> Uses;
       Register DPRDefReg = MI->getOperand(0).getReg();
-      for (MachineOperand &MO : MRI->use_operands(DPRDefReg))
-        Uses.push_back(&MO);
+      for (MachineRegisterInfo::use_iterator I = MRI->use_begin(DPRDefReg),
+             E = MRI->use_end(); I != E; ++I)
+        Uses.push_back(&*I);
 
       // We can optimize this.
       unsigned NewReg = optimizeSDPattern(MI);
 
       if (NewReg != 0) {
         Modified = true;
-        for (MachineOperand *Use : Uses) {
+        for (SmallVectorImpl<MachineOperand *>::const_iterator I = Uses.begin(),
+               E = Uses.end(); I != E; ++I) {
           // Make sure to constrain the register class of the new register to
           // match what we're replacing. Otherwise we can optimize a DPR_VFP2
           // reference into a plain DPR, and that will end poorly. NewReg is
           // always virtual here, so there will always be a matching subclass
           // to find.
-          MRI->constrainRegClass(NewReg, MRI->getRegClass(Use->getReg()));
+          MRI->constrainRegClass(NewReg, MRI->getRegClass((*I)->getReg()));
 
-          LLVM_DEBUG(dbgs() << "Replacing operand " << *Use << " with "
+          LLVM_DEBUG(dbgs() << "Replacing operand " << **I << " with "
                             << printReg(NewReg) << "\n");
-          Use->substVirtReg(NewReg, 0, *TRI);
+          (*I)->substVirtReg(NewReg, 0, *TRI);
         }
       }
       Replacements[MI] = NewReg;

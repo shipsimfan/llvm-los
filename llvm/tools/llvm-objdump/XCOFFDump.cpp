@@ -46,48 +46,22 @@ Error objdump::getXCOFFRelocationValueString(const XCOFFObjectFile *Obj,
 Optional<XCOFF::StorageMappingClass>
 objdump::getXCOFFSymbolCsectSMC(const XCOFFObjectFile *Obj,
                                 const SymbolRef &Sym) {
-  const XCOFFSymbolRef SymRef = Obj->toSymbolRef(Sym.getRawDataRefImpl());
+  XCOFFSymbolRef SymRef(Sym.getRawDataRefImpl(), Obj);
 
-  if (!SymRef.isCsectSymbol())
-    return None;
+  if (SymRef.hasCsectAuxEnt())
+    return SymRef.getXCOFFCsectAuxEnt32()->StorageMappingClass;
 
-  auto CsectAuxEntOrErr = SymRef.getXCOFFCsectAuxRef();
-  if (!CsectAuxEntOrErr)
-    return None;
-
-  return CsectAuxEntOrErr.get().getStorageMappingClass();
-}
-
-Optional<object::SymbolRef>
-objdump::getXCOFFSymbolContainingSymbolRef(const XCOFFObjectFile *Obj,
-                                           const SymbolRef &Sym) {
-
-  const XCOFFSymbolRef SymRef = Obj->toSymbolRef(Sym.getRawDataRefImpl());
-  if (!SymRef.isCsectSymbol())
-    return None;
-
-  Expected<XCOFFCsectAuxRef> CsectAuxEntOrErr = SymRef.getXCOFFCsectAuxRef();
-  if (!CsectAuxEntOrErr || !CsectAuxEntOrErr.get().isLabel())
-    return None;
-  uint32_t Idx =
-      static_cast<uint32_t>(CsectAuxEntOrErr.get().getSectionOrLength());
-  DataRefImpl DRI;
-  DRI.p = Obj->getSymbolByIndex(Idx);
-  return SymbolRef(DRI, Obj);
+  return None;
 }
 
 bool objdump::isLabel(const XCOFFObjectFile *Obj, const SymbolRef &Sym) {
 
-  const XCOFFSymbolRef SymRef = Obj->toSymbolRef(Sym.getRawDataRefImpl());
+  XCOFFSymbolRef SymRef(Sym.getRawDataRefImpl(), Obj);
 
-  if (!SymRef.isCsectSymbol())
-    return false;
+  if (SymRef.hasCsectAuxEnt())
+    return SymRef.getXCOFFCsectAuxEnt32()->isLabel();
 
-  auto CsectAuxEntOrErr = SymRef.getXCOFFCsectAuxRef();
-  if (!CsectAuxEntOrErr)
-    return false;
-
-  return CsectAuxEntOrErr.get().isLabel();
+  return false;
 }
 
 std::string objdump::getXCOFFSymbolDescription(const SymbolInfoTy &SymbolInfo,

@@ -11,6 +11,8 @@
 // REQUIRES: locale.ru_RU.UTF-8
 // REQUIRES: locale.zh_CN.UTF-8
 
+// XFAIL: LIBCXX-WINDOWS-FIXME
+
 // <locale>
 
 // class time_get_byname<charT, InputIterator>
@@ -19,6 +21,9 @@
 // get_weekday(iter_type s, iter_type end, ios_base& str,
 //             ios_base::iostate& err, tm* t) const;
 
+// TODO: investigation needed
+// XFAIL: linux-gnu
+
 #include <locale>
 #include <cassert>
 #include "test_macros.h"
@@ -26,7 +31,7 @@
 
 #include "platform_support.h" // locale name macros
 
-typedef cpp17_input_iterator<const char*> I;
+typedef input_iterator<const char*> I;
 
 typedef std::time_get_byname<char, I> F;
 
@@ -65,13 +70,7 @@ int main(int, char**)
     }
     {
         const my_facet f(LOCALE_ru_RU_UTF_8, 1);
-        const char in[] =
-#ifdef TEST_HAS_GLIBC
-                          "\xD0\x9F" // Upper case
-#else
-                          "\xD0\xBF" // Lower case
-#endif
-                          "\xD0\xBE\xD0\xBD\xD0\xB5"
+        const char in[] = "\xD0\xBF\xD0\xBE\xD0\xBD\xD0\xB5"
                           "\xD0\xB4\xD0\xB5\xD0\xBB\xD1\x8C"
                           "\xD0\xBD\xD0\xB8\xD0\xBA";
         err = std::ios_base::goodbit;

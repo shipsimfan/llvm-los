@@ -231,7 +231,7 @@ public:
     assert(OS && "loaded module file after finishing rewrite action?");
 
     (*OS) << "#pragma clang module build ";
-    if (isValidAsciiIdentifier(MF->ModuleName))
+    if (isValidIdentifier(MF->ModuleName))
       (*OS) << MF->ModuleName;
     else {
       (*OS) << '"';

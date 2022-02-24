@@ -115,7 +115,6 @@ typedef unsigned int kmp_hwloc_depth_t;
 #include "kmp_debug.h"
 #include "kmp_lock.h"
 #include "kmp_version.h"
-#include "kmp_barrier.h"
 #if USE_DEBUGGER
 #include "kmp_debugger.h"
 #endif
@@ -137,10 +136,6 @@ typedef unsigned int kmp_hwloc_depth_t;
 
 #if OMPT_SUPPORT
 #include "ompt-internal.h"
-#endif
-
-#if OMPD_SUPPORT
-#include "ompd-specific.h"
 #endif
 
 #ifndef UNLIKELY
@@ -264,7 +259,6 @@ typedef union kmp_root kmp_root_p;
 
 template <bool C = false, bool S = true> class kmp_flag_32;
 template <bool C = false, bool S = true> class kmp_flag_64;
-template <bool C = false, bool S = true> class kmp_atomic_flag_64;
 class kmp_flag_oncore;
 
 #ifdef __cplusplus
@@ -603,11 +597,11 @@ typedef int PACKED_REDUCTION_METHOD_T;
 
 enum kmp_hw_t : int {
   KMP_HW_UNKNOWN = -1,
-  KMP_HW_SOCKET = 0,
+  KMP_HW_MACHINE = 0,
+  KMP_HW_SOCKET,
   KMP_HW_PROC_GROUP,
   KMP_HW_NUMA,
   KMP_HW_DIE,
-  KMP_HW_LLC,
   KMP_HW_L3,
   KMP_HW_TILE,
   KMP_HW_MODULE,
@@ -618,31 +612,14 @@ enum kmp_hw_t : int {
   KMP_HW_LAST
 };
 
-typedef enum kmp_hw_core_type_t {
-  KMP_HW_CORE_TYPE_UNKNOWN = 0x0,
-#if KMP_ARCH_X86 || KMP_ARCH_X86_64
-  KMP_HW_CORE_TYPE_ATOM = 0x20,
-  KMP_HW_CORE_TYPE_CORE = 0x40,
-  KMP_HW_MAX_NUM_CORE_TYPES = 3,
-#else
-  KMP_HW_MAX_NUM_CORE_TYPES = 1,
-#endif
-} kmp_hw_core_type_t;
-
-#define KMP_HW_MAX_NUM_CORE_EFFS 8
-
-#define KMP_DEBUG_ASSERT_VALID_HW_TYPE(type)                                   \
-  KMP_DEBUG_ASSERT(type >= (kmp_hw_t)0 && type < KMP_HW_LAST)
 #define KMP_ASSERT_VALID_HW_TYPE(type)                                         \
-  KMP_ASSERT(type >= (kmp_hw_t)0 && type < KMP_HW_LAST)
+  KMP_DEBUG_ASSERT(type >= (kmp_hw_t)0 && type < KMP_HW_LAST)
 
 #define KMP_FOREACH_HW_TYPE(type)                                              \
   for (kmp_hw_t type = (kmp_hw_t)0; type < KMP_HW_LAST;                        \
        type = (kmp_hw_t)((int)type + 1))
 
-const char *__kmp_hw_get_keyword(kmp_hw_t type, bool plural = false);
 const char *__kmp_hw_get_catalog_string(kmp_hw_t type, bool plural = false);
-const char *__kmp_hw_get_core_type_string(kmp_hw_core_type_t type);
 
 /* Only Linux* OS and Windows* OS support thread affinity. */
 #if KMP_AFFINITY_SUPPORTED
@@ -678,6 +655,8 @@ extern kmp_SetThreadGroupAffinity_t __kmp_SetThreadGroupAffinity;
 #if KMP_USE_HWLOC
 extern hwloc_topology_t __kmp_hwloc_topology;
 extern int __kmp_hwloc_error;
+extern int __kmp_numa_detected;
+extern int __kmp_tile_depth;
 #endif
 
 extern size_t __kmp_affin_mask_size;
@@ -805,6 +784,23 @@ enum affinity_type {
   affinity_default
 };
 
+enum affinity_gran {
+  affinity_gran_fine = 0,
+  affinity_gran_thread,
+  affinity_gran_core,
+  affinity_gran_tile,
+  affinity_gran_die,
+  affinity_gran_numa,
+  affinity_gran_package,
+  affinity_gran_node,
+#if KMP_GROUP_AFFINITY
+  // The "group" granularity isn't necesssarily coarser than all of the
+  // other levels, but we put it last in the enum.
+  affinity_gran_group,
+#endif /* KMP_GROUP_AFFINITY */
+  affinity_gran_default
+};
+
 enum affinity_top_method {
   affinity_top_method_all = 0, // try all (supported) methods, in order
 #if KMP_ARCH_X86 || KMP_ARCH_X86_64
@@ -826,7 +822,7 @@ enum affinity_top_method {
 #define affinity_respect_mask_default (-1)
 
 extern enum affinity_type __kmp_affinity_type; /* Affinity type */
-extern kmp_hw_t __kmp_affinity_gran; /* Affinity granularity */
+extern enum affinity_gran __kmp_affinity_gran; /* Affinity granularity */
 extern int __kmp_affinity_gran_levels; /* corresponding int value */
 extern int __kmp_affinity_dups; /* Affinity duplicate masks */
 extern enum affinity_top_method __kmp_affinity_top_method;
@@ -863,15 +859,10 @@ typedef struct kmp_nested_proc_bind_t {
 } kmp_nested_proc_bind_t;
 
 extern kmp_nested_proc_bind_t __kmp_nested_proc_bind;
-extern kmp_proc_bind_t __kmp_teams_proc_bind;
 
 extern int __kmp_display_affinity;
 extern char *__kmp_affinity_format;
 static const size_t KMP_AFFINITY_FORMAT_SIZE = 512;
-#if OMPT_SUPPORT
-extern int __kmp_tool;
-extern char *__kmp_tool_libraries;
-#endif // OMPT_SUPPORT
 
 #if KMP_AFFINITY_SUPPORTED
 #define KMP_PLACE_ALL (-1)
@@ -1004,7 +995,7 @@ typedef omp_memspace_handle_t kmp_memspace_t; // placeholder
 typedef struct kmp_allocator_t {
   omp_memspace_handle_t memspace;
   void **memkind; // pointer to memkind
-  size_t alignment;
+  int alignment;
   omp_alloctrait_value_t fb;
   kmp_allocator_t *fb_data;
   kmp_uint64 pool_size;
@@ -1018,25 +1009,13 @@ extern omp_allocator_handle_t __kmpc_init_allocator(int gtid,
 extern void __kmpc_destroy_allocator(int gtid, omp_allocator_handle_t al);
 extern void __kmpc_set_default_allocator(int gtid, omp_allocator_handle_t al);
 extern omp_allocator_handle_t __kmpc_get_default_allocator(int gtid);
-// external interfaces, may be used by compiler
 extern void *__kmpc_alloc(int gtid, size_t sz, omp_allocator_handle_t al);
-extern void *__kmpc_aligned_alloc(int gtid, size_t align, size_t sz,
-                                  omp_allocator_handle_t al);
 extern void *__kmpc_calloc(int gtid, size_t nmemb, size_t sz,
                            omp_allocator_handle_t al);
 extern void *__kmpc_realloc(int gtid, void *ptr, size_t sz,
                             omp_allocator_handle_t al,
                             omp_allocator_handle_t free_al);
 extern void __kmpc_free(int gtid, void *ptr, omp_allocator_handle_t al);
-// internal interfaces, contain real implementation
-extern void *__kmp_alloc(int gtid, size_t align, size_t sz,
-                         omp_allocator_handle_t al);
-extern void *__kmp_calloc(int gtid, size_t align, size_t nmemb, size_t sz,
-                          omp_allocator_handle_t al);
-extern void *__kmp_realloc(int gtid, void *ptr, size_t sz,
-                           omp_allocator_handle_t al,
-                           omp_allocator_handle_t free_al);
-extern void ___kmpc_free(int gtid, void *ptr, omp_allocator_handle_t al);
 
 extern void __kmp_init_memkind();
 extern void __kmp_fini_memkind();
@@ -1095,9 +1074,7 @@ extern void __kmp_init_target_mem();
 #define KMP_MIN_BLOCKTIME (0)
 #define KMP_MAX_BLOCKTIME                                                      \
   (INT_MAX) /* Must be this for "infinite" setting the work */
-
-/* __kmp_blocktime is in milliseconds */
-#define KMP_DEFAULT_BLOCKTIME (__kmp_is_hybrid_cpu() ? (0) : (200))
+#define KMP_DEFAULT_BLOCKTIME (200) /*  __kmp_blocktime is in milliseconds  */
 
 #if KMP_USE_MONITOR
 #define KMP_DEFAULT_MONITOR_STKSIZE ((size_t)(64 * 1024))
@@ -1124,7 +1101,7 @@ extern void __kmp_init_target_mem();
 #if KMP_OS_UNIX && (KMP_ARCH_X86 || KMP_ARCH_X86_64)
 // HW TSC is used to reduce overhead (clock tick instead of nanosecond).
 extern kmp_uint64 __kmp_ticks_per_msec;
-#if KMP_COMPILER_ICC || KMP_COMPILER_ICX
+#if KMP_COMPILER_ICC
 #define KMP_NOW() ((kmp_uint64)_rdtsc())
 #else
 #define KMP_NOW() __kmp_hardware_timestamp()
@@ -1235,13 +1212,6 @@ typedef struct kmp_cpuid {
   kmp_uint32 edx;
 } kmp_cpuid_t;
 
-typedef struct kmp_cpuinfo_flags_t {
-  unsigned sse2 : 1; // 0 if SSE2 instructions are not supported, 1 otherwise.
-  unsigned rtm : 1; // 0 if RTM instructions are not supported, 1 otherwise.
-  unsigned hybrid : 1;
-  unsigned reserved : 29; // Ensure size of 32 bits
-} kmp_cpuinfo_flags_t;
-
 typedef struct kmp_cpuinfo {
   int initialized; // If 0, other fields are not initialized.
   int signature; // CPUID(1).EAX
@@ -1249,7 +1219,8 @@ typedef struct kmp_cpuinfo {
   int model; // ( CPUID(1).EAX[19:16] << 4 ) + CPUID(1).EAX[7:4] ( ( Extended
   // Model << 4 ) + Model)
   int stepping; // CPUID(1).EAX[3:0] ( Stepping )
-  kmp_cpuinfo_flags_t flags;
+  int sse2; // 0 if SSE2 instructions are not supported, 1 otherwise.
+  int rtm; // 0 if RTM instructions are not supported, 1 otherwise.
   int apic_id;
   int physical_id;
   int logical_id;
@@ -1315,6 +1286,86 @@ static inline void __kmp_store_mxcsr(kmp_uint32 *p) { *p = _mm_getcsr(); }
 
 #define KMP_X86_MXCSR_MASK 0xffffffc0 /* ignore status flags (6 lsb) */
 
+#if KMP_ARCH_X86
+extern void __kmp_x86_pause(void);
+#elif KMP_MIC
+// Performance testing on KNC (C0QS-7120 P/A/X/D, 61-core, 16 GB Memory) showed
+// regression after removal of extra PAUSE from spin loops. Changing
+// the delay from 100 to 300 showed even better performance than double PAUSE
+// on Spec OMP2001 and LCPC tasking tests, no regressions on EPCC.
+static inline void __kmp_x86_pause(void) { _mm_delay_32(300); }
+#else
+static inline void __kmp_x86_pause(void) { _mm_pause(); }
+#endif
+#define KMP_CPU_PAUSE() __kmp_x86_pause()
+#elif KMP_ARCH_PPC64
+#define KMP_PPC64_PRI_LOW() __asm__ volatile("or 1, 1, 1")
+#define KMP_PPC64_PRI_MED() __asm__ volatile("or 2, 2, 2")
+#define KMP_PPC64_PRI_LOC_MB() __asm__ volatile("" : : : "memory")
+#define KMP_CPU_PAUSE()                                                        \
+  do {                                                                         \
+    KMP_PPC64_PRI_LOW();                                                       \
+    KMP_PPC64_PRI_MED();                                                       \
+    KMP_PPC64_PRI_LOC_MB();                                                    \
+  } while (0)
+#else
+#define KMP_CPU_PAUSE() /* nothing to do */
+#endif
+
+#define KMP_INIT_YIELD(count)                                                  \
+  { (count) = __kmp_yield_init; }
+
+#define KMP_OVERSUBSCRIBED                                                     \
+  (TCR_4(__kmp_nth) > (__kmp_avail_proc ? __kmp_avail_proc : __kmp_xproc))
+
+#define KMP_TRY_YIELD                                                          \
+  ((__kmp_use_yield == 1) || (__kmp_use_yield == 2 && (KMP_OVERSUBSCRIBED)))
+
+#define KMP_TRY_YIELD_OVERSUB                                                  \
+  ((__kmp_use_yield == 1 || __kmp_use_yield == 2) && (KMP_OVERSUBSCRIBED))
+
+#define KMP_YIELD(cond)                                                        \
+  {                                                                            \
+    KMP_CPU_PAUSE();                                                           \
+    if ((cond) && (KMP_TRY_YIELD))                                             \
+      __kmp_yield();                                                           \
+  }
+
+#define KMP_YIELD_OVERSUB()                                                    \
+  {                                                                            \
+    KMP_CPU_PAUSE();                                                           \
+    if ((KMP_TRY_YIELD_OVERSUB))                                               \
+      __kmp_yield();                                                           \
+  }
+
+// Note the decrement of 2 in the following Macros. With KMP_LIBRARY=turnaround,
+// there should be no yielding since initial value from KMP_INIT_YIELD() is odd.
+#define KMP_YIELD_SPIN(count)                                                  \
+  {                                                                            \
+    KMP_CPU_PAUSE();                                                           \
+    if (KMP_TRY_YIELD) {                                                       \
+      (count) -= 2;                                                            \
+      if (!(count)) {                                                          \
+        __kmp_yield();                                                         \
+        (count) = __kmp_yield_next;                                            \
+      }                                                                        \
+    }                                                                          \
+  }
+
+#define KMP_YIELD_OVERSUB_ELSE_SPIN(count)                                     \
+  {                                                                            \
+    KMP_CPU_PAUSE();                                                           \
+    if ((KMP_TRY_YIELD_OVERSUB))                                               \
+      __kmp_yield();                                                           \
+    else if (__kmp_use_yield == 1) {                                           \
+      (count) -= 2;                                                            \
+      if (!(count)) {                                                          \
+        __kmp_yield();                                                         \
+        (count) = __kmp_yield_next;                                            \
+      }                                                                        \
+    }                                                                          \
+  }
+
 // User-level Monitor/Mwait
 #if KMP_HAVE_UMWAIT
 // We always try for UMWAIT first
@@ -1325,7 +1376,6 @@ static inline void __kmp_store_mxcsr(kmp_uint32 *p) { *p = _mm_getcsr(); }
 #include <intrin.h>
 #endif
 #endif // KMP_HAVE_WAITPKG_INTRINSICS
-
 KMP_ATTRIBUTE_TARGET_WAITPKG
 static inline int __kmp_tpause(uint32_t hint, uint64_t counter) {
 #if !KMP_HAVE_WAITPKG_INTRINSICS
@@ -1391,125 +1441,10 @@ __kmp_mm_mwait(unsigned extensions, unsigned hints) {
 }
 #endif // KMP_HAVE_UMWAIT
 
-#if KMP_ARCH_X86
-extern void __kmp_x86_pause(void);
-#elif KMP_MIC
-// Performance testing on KNC (C0QS-7120 P/A/X/D, 61-core, 16 GB Memory) showed
-// regression after removal of extra PAUSE from spin loops. Changing
-// the delay from 100 to 300 showed even better performance than double PAUSE
-// on Spec OMP2001 and LCPC tasking tests, no regressions on EPCC.
-static inline void __kmp_x86_pause(void) { _mm_delay_32(300); }
-#else
-static inline void __kmp_x86_pause(void) { _mm_pause(); }
-#endif
-#define KMP_CPU_PAUSE() __kmp_x86_pause()
-#elif KMP_ARCH_PPC64
-#define KMP_PPC64_PRI_LOW() __asm__ volatile("or 1, 1, 1")
-#define KMP_PPC64_PRI_MED() __asm__ volatile("or 2, 2, 2")
-#define KMP_PPC64_PRI_LOC_MB() __asm__ volatile("" : : : "memory")
-#define KMP_CPU_PAUSE()                                                        \
-  do {                                                                         \
-    KMP_PPC64_PRI_LOW();                                                       \
-    KMP_PPC64_PRI_MED();                                                       \
-    KMP_PPC64_PRI_LOC_MB();                                                    \
-  } while (0)
-#else
-#define KMP_CPU_PAUSE() /* nothing to do */
-#endif
-
-#define KMP_INIT_YIELD(count)                                                  \
-  { (count) = __kmp_yield_init; }
-
-#define KMP_INIT_BACKOFF(time)                                                 \
-  { (time) = __kmp_pause_init; }
-
-#define KMP_OVERSUBSCRIBED                                                     \
-  (TCR_4(__kmp_nth) > (__kmp_avail_proc ? __kmp_avail_proc : __kmp_xproc))
-
-#define KMP_TRY_YIELD                                                          \
-  ((__kmp_use_yield == 1) || (__kmp_use_yield == 2 && (KMP_OVERSUBSCRIBED)))
-
-#define KMP_TRY_YIELD_OVERSUB                                                  \
-  ((__kmp_use_yield == 1 || __kmp_use_yield == 2) && (KMP_OVERSUBSCRIBED))
-
-#define KMP_YIELD(cond)                                                        \
-  {                                                                            \
-    KMP_CPU_PAUSE();                                                           \
-    if ((cond) && (KMP_TRY_YIELD))                                             \
-      __kmp_yield();                                                           \
-  }
-
-#define KMP_YIELD_OVERSUB()                                                    \
-  {                                                                            \
-    KMP_CPU_PAUSE();                                                           \
-    if ((KMP_TRY_YIELD_OVERSUB))                                               \
-      __kmp_yield();                                                           \
-  }
-
-// Note the decrement of 2 in the following Macros. With KMP_LIBRARY=turnaround,
-// there should be no yielding since initial value from KMP_INIT_YIELD() is odd.
-#define KMP_YIELD_SPIN(count)                                                  \
-  {                                                                            \
-    KMP_CPU_PAUSE();                                                           \
-    if (KMP_TRY_YIELD) {                                                       \
-      (count) -= 2;                                                            \
-      if (!(count)) {                                                          \
-        __kmp_yield();                                                         \
-        (count) = __kmp_yield_next;                                            \
-      }                                                                        \
-    }                                                                          \
-  }
-
-// If TPAUSE is available & enabled, use it. If oversubscribed, use the slower
-// (C0.2) state, which improves performance of other SMT threads on the same
-// core, otherwise, use the fast (C0.1) default state, or whatever the user has
-// requested. Uses a timed TPAUSE, and exponential backoff. If TPAUSE isn't
-// available, fall back to the regular CPU pause and yield combination.
-#if KMP_HAVE_UMWAIT
-#define KMP_YIELD_OVERSUB_ELSE_SPIN(count, time)                               \
-  {                                                                            \
-    if (__kmp_tpause_enabled) {                                                \
-      if (KMP_OVERSUBSCRIBED) {                                                \
-        __kmp_tpause(0, (time));                                               \
-      } else {                                                                 \
-        __kmp_tpause(__kmp_tpause_hint, (time));                               \
-      }                                                                        \
-      (time) *= 2;                                                             \
-    } else {                                                                   \
-      KMP_CPU_PAUSE();                                                         \
-      if ((KMP_TRY_YIELD_OVERSUB)) {                                           \
-        __kmp_yield();                                                         \
-      } else if (__kmp_use_yield == 1) {                                       \
-        (count) -= 2;                                                          \
-        if (!(count)) {                                                        \
-          __kmp_yield();                                                       \
-          (count) = __kmp_yield_next;                                          \
-        }                                                                      \
-      }                                                                        \
-    }                                                                          \
-  }
-#else
-#define KMP_YIELD_OVERSUB_ELSE_SPIN(count, time)                               \
-  {                                                                            \
-    KMP_CPU_PAUSE();                                                           \
-    if ((KMP_TRY_YIELD_OVERSUB))                                               \
-      __kmp_yield();                                                           \
-    else if (__kmp_use_yield == 1) {                                           \
-      (count) -= 2;                                                            \
-      if (!(count)) {                                                          \
-        __kmp_yield();                                                         \
-        (count) = __kmp_yield_next;                                            \
-      }                                                                        \
-    }                                                                          \
-  }
-#endif // KMP_HAVE_UMWAIT
-
 /* ------------------------------------------------------------------------ */
 /* Support datatypes for the orphaned construct nesting checks.             */
 /* ------------------------------------------------------------------------ */
 
-/* When adding to this enum, add its corresponding string in cons_text_c[]
- * array in kmp_error.cpp */
 enum cons_type {
   ct_none,
   ct_parallel,
@@ -1746,12 +1681,14 @@ typedef struct KMP_ALIGN_CACHE dispatch_private_info32 {
   kmp_int32 lb;
   kmp_int32 st;
   kmp_int32 tc;
-  kmp_lock_t *steal_lock; // lock used for chunk stealing
-  // KMP_ALIGN(32) ensures (if the KMP_ALIGN macro is turned on)
+  kmp_int32 static_steal_counter; /* for static_steal only; maybe better to put
+                                     after ub */
+  kmp_lock_t *th_steal_lock; // lock used for chunk stealing
+  // KMP_ALIGN( 16 ) ensures ( if the KMP_ALIGN macro is turned on )
   //    a) parm3 is properly aligned and
-  //    b) all parm1-4 are on the same cache line.
+  //    b) all parm1-4 are in the same cache line.
   // Because of parm1-4 are used together, performance seems to be better
-  // if they are on the same cache line (not measured though).
+  // if they are in the same line (not measured though).
 
   struct KMP_ALIGN(32) { // AC: changed 16 to 32 in order to simplify template
     kmp_int32 parm1; //     structures in kmp_dispatch.cpp. This should
@@ -1763,6 +1700,9 @@ typedef struct KMP_ALIGN_CACHE dispatch_private_info32 {
   kmp_uint32 ordered_lower;
   kmp_uint32 ordered_upper;
 #if KMP_OS_WINDOWS
+  // This var can be placed in the hole between 'tc' and 'parm1', instead of
+  // 'static_steal_counter'. It would be nice to measure execution times.
+  // Conditional if/endif can be removed at all.
   kmp_int32 last_upper;
 #endif /* KMP_OS_WINDOWS */
 } dispatch_private_info32_t;
@@ -1774,7 +1714,9 @@ typedef struct KMP_ALIGN_CACHE dispatch_private_info64 {
   kmp_int64 lb; /* lower-bound */
   kmp_int64 st; /* stride */
   kmp_int64 tc; /* trip count (number of iterations) */
-  kmp_lock_t *steal_lock; // lock used for chunk stealing
+  kmp_int64 static_steal_counter; /* for static_steal only; maybe better to put
+                                     after ub */
+  kmp_lock_t *th_steal_lock; // lock used for chunk stealing
   /* parm[1-4] are used in different ways by different scheduling algorithms */
 
   // KMP_ALIGN( 32 ) ensures ( if the KMP_ALIGN macro is turned on )
@@ -1793,6 +1735,9 @@ typedef struct KMP_ALIGN_CACHE dispatch_private_info64 {
   kmp_uint64 ordered_lower;
   kmp_uint64 ordered_upper;
 #if KMP_OS_WINDOWS
+  // This var can be placed in the hole between 'tc' and 'parm1', instead of
+  // 'static_steal_counter'. It would be nice to measure execution times.
+  // Conditional if/endif can be removed at all.
   kmp_int64 last_upper;
 #endif /* KMP_OS_WINDOWS */
 } dispatch_private_info64_t;
@@ -1846,8 +1791,9 @@ typedef struct KMP_ALIGN_CACHE dispatch_private_info {
   } u;
   enum sched_type schedule; /* scheduling algorithm */
   kmp_sched_flags_t flags; /* flags (e.g., ordered, nomerge, etc.) */
-  std::atomic<kmp_uint32> steal_flag; // static_steal only, state of a buffer
   kmp_int32 ordered_bumped;
+  // To retain the structure size after making ordered_iteration scalar
+  kmp_int32 ordered_dummy[KMP_MAX_ORDERED - 3];
   // Stack of buffers for nest of serial regions
   struct dispatch_private_info *next;
   kmp_int32 type_size; /* the size of types in private_info */
@@ -1862,7 +1808,7 @@ typedef struct dispatch_shared_info32 {
   /* chunk index under dynamic, number of idle threads under static-steal;
      iteration index otherwise */
   volatile kmp_uint32 iteration;
-  volatile kmp_int32 num_done;
+  volatile kmp_uint32 num_done;
   volatile kmp_uint32 ordered_iteration;
   // Dummy to retain the structure size after making ordered_iteration scalar
   kmp_int32 ordered_dummy[KMP_MAX_ORDERED - 1];
@@ -1872,7 +1818,7 @@ typedef struct dispatch_shared_info64 {
   /* chunk index under dynamic, number of idle threads under static-steal;
      iteration index otherwise */
   volatile kmp_uint64 iteration;
-  volatile kmp_int64 num_done;
+  volatile kmp_uint64 num_done;
   volatile kmp_uint64 ordered_iteration;
   // Dummy to retain the structure size after making ordered_iteration scalar
   kmp_int64 ordered_dummy[KMP_MAX_ORDERED - 3];
@@ -1908,7 +1854,7 @@ typedef struct kmp_disp {
   dispatch_private_info_t *th_dispatch_pr_current;
 
   dispatch_private_info_t *th_disp_buffer;
-  kmp_uint32 th_disp_index;
+  kmp_int32 th_disp_index;
   kmp_int32 th_doacross_buf_idx; // thread's doacross buffer index
   volatile kmp_uint32 *th_doacross_flags; // pointer to shared array of flags
   kmp_int64 *th_doacross_info; // info on loop bounds
@@ -1952,15 +1898,6 @@ typedef struct kmp_disp {
   0 // Thread th_reap_state: not safe to reap (tasking)
 #define KMP_SAFE_TO_REAP 1 // Thread th_reap_state: safe to reap (not tasking)
 
-// The flag_type describes the storage used for the flag.
-enum flag_type {
-  flag32, /**< atomic 32 bit flags */
-  flag64, /**< 64 bit flags */
-  atomic_flag64, /**< atomic 64 bit flags */
-  flag_oncore, /**< special 64-bit flag for on-core barrier (hierarchical) */
-  flag_unset
-};
-
 enum barrier_type {
   bs_plain_barrier = 0, /* 0, All non-fork/join barriers (except reduction
                            barriers if enabled) */
@@ -1984,7 +1921,6 @@ typedef enum kmp_bar_pat { /* Barrier communication patterns */
                            bp_hyper_bar = 2, /* Hypercube-embedded tree with min
                                                 branching factor 2^n */
                            bp_hierarchical_bar = 3, /* Machine hierarchy tree */
-                           bp_dist_bar = 4, /* Distributed barrier */
                            bp_last_bar /* Placeholder to mark the end */
 } kmp_bar_pat_e;
 
@@ -2324,28 +2260,15 @@ typedef union kmp_depnode kmp_depnode_t;
 typedef struct kmp_depnode_list kmp_depnode_list_t;
 typedef struct kmp_dephash_entry kmp_dephash_entry_t;
 
-// macros for checking dep flag as an integer
-#define KMP_DEP_IN 0x1
-#define KMP_DEP_OUT 0x2
-#define KMP_DEP_INOUT 0x3
-#define KMP_DEP_MTX 0x4
-#define KMP_DEP_SET 0x8
-#define KMP_DEP_ALL 0x80
 // Compiler sends us this info:
 typedef struct kmp_depend_info {
   kmp_intptr_t base_addr;
   size_t len;
-  union {
-    kmp_uint8 flag; // flag as an unsigned char
-    struct { // flag as a set of 8 bits
-      unsigned in : 1;
-      unsigned out : 1;
-      unsigned mtx : 1;
-      unsigned set : 1;
-      unsigned unused : 3;
-      unsigned all : 1;
-    } flags;
-  };
+  struct {
+    bool in : 1;
+    bool out : 1;
+    bool mtx : 1;
+  } flags;
 } kmp_depend_info_t;
 
 // Internal structures to work with task dependencies:
@@ -2379,9 +2302,9 @@ union KMP_ALIGN_CACHE kmp_depnode {
 struct kmp_dephash_entry {
   kmp_intptr_t addr;
   kmp_depnode_t *last_out;
-  kmp_depnode_list_t *last_set;
-  kmp_depnode_list_t *prev_set;
-  kmp_uint8 last_flag;
+  kmp_depnode_list_t *last_ins;
+  kmp_depnode_list_t *last_mtxs;
+  kmp_int32 last_flag;
   kmp_lock_t *mtx_lock; /* is referenced by depnodes w/mutexinoutset dep */
   kmp_dephash_entry_t *next_in_bucket;
 };
@@ -2389,7 +2312,6 @@ struct kmp_dephash_entry {
 typedef struct kmp_dephash {
   kmp_dephash_entry_t **buckets;
   size_t size;
-  kmp_depnode_t *last_all;
   size_t generation;
   kmp_uint32 nelements;
   kmp_uint32 nconflicts;
@@ -2497,6 +2419,13 @@ struct kmp_taskdata { /* aligned during dynamic allocation       */
   kmp_depnode_t
       *td_depnode; // Pointer to graph node if this task has dependencies
   kmp_task_team_t *td_task_team;
+  // The global thread id of the encountering thread. We need it because when a
+  // regular task depends on a hidden helper task, and the hidden helper task
+  // is finished on a hidden helper thread, it will call __kmp_release_deps to
+  // release all dependences. If now the task is a regular task, we need to pass
+  // the encountering gtid such that the task will be picked up and executed by
+  // its encountering team instead of hidden helper team.
+  kmp_int32 encountering_gtid;
   size_t td_size_alloc; // Size of task structure, including shareds etc.
 #if defined(KMP_GOMP_COMPAT)
   // 4 or 8 byte integers for the loop bounds in GOMP_taskloop
@@ -2707,7 +2636,6 @@ typedef struct KMP_ALIGN_CACHE kmp_base_info {
   /* while awaiting queuing lock acquire */
 
   volatile void *th_sleep_loc; // this points at a kmp_flag<T>
-  flag_type th_sleep_loc_type; // enum type of flag stored in th_sleep_loc
 
   ident_t *th_ident;
   unsigned th_x; // Random number generator data
@@ -2728,9 +2656,6 @@ typedef struct KMP_ALIGN_CACHE kmp_base_info {
      written by the worker thread) */
   kmp_uint8 th_active_in_pool; // included in count of #active threads in pool
   int th_active; // ! sleeping; 32 bits for TCR/TCW
-  std::atomic<kmp_uint32> th_used_in_team; // Flag indicating use in team
-  // 0 = not used in team; 1 = used in team;
-  // 2 = transitioning to not used in team; 3 = transitioning to used in team
   struct cons_header *th_cons; // used for consistency check
 #if KMP_USE_HIER_SCHED
   // used for hierarchical scheduling
@@ -2910,7 +2835,6 @@ typedef struct KMP_ALIGN_CACHE kmp_base_team {
 #if USE_ITT_BUILD
   void *t_stack_id; // team specific stack stitching id (for ittnotify)
 #endif /* USE_ITT_BUILD */
-  distributedBarrier *b; // Distributed barrier data associated with team
 } kmp_base_team_t;
 
 union KMP_ALIGN_CACHE kmp_team {
@@ -2958,9 +2882,6 @@ typedef struct kmp_base_root {
   kmp_lock_t r_begin_lock;
   volatile int r_begin;
   int r_blocktime; /* blocktime for this root and descendants */
-#if KMP_AFFINITY_SUPPORTED
-  int r_affinity_assigned;
-#endif // KMP_AFFINITY_SUPPORTED
 } kmp_base_root_t;
 
 typedef union KMP_ALIGN_CACHE kmp_root {
@@ -3035,9 +2956,6 @@ extern int __kmp_storage_map_verbose_specified;
 
 #if KMP_ARCH_X86 || KMP_ARCH_X86_64
 extern kmp_cpuinfo_t __kmp_cpuinfo;
-static inline bool __kmp_is_hybrid_cpu() { return __kmp_cpuinfo.flags.hybrid; }
-#else
-static inline bool __kmp_is_hybrid_cpu() { return false; }
 #endif
 
 extern volatile int __kmp_init_serial;
@@ -3122,7 +3040,6 @@ extern kmp_int32 __kmp_use_yield;
 extern kmp_int32 __kmp_use_yield_exp_set;
 extern kmp_uint32 __kmp_yield_init;
 extern kmp_uint32 __kmp_yield_next;
-extern kmp_uint64 __kmp_pause_init;
 
 /* ------------------------------------------------------------------------- */
 extern int __kmp_allThreadsSpecified;
@@ -3323,13 +3240,6 @@ extern int __kmp_user_level_mwait; // TRUE or FALSE; from KMP_USER_LEVEL_MWAIT
 extern int __kmp_umwait_enabled; // Runtime check if user-level mwait enabled
 extern int __kmp_mwait_enabled; // Runtime check if ring3 mwait is enabled
 extern int __kmp_mwait_hints; // Hints to pass in to mwait
-#endif
-
-#if KMP_HAVE_UMWAIT
-extern int __kmp_waitpkg_enabled; // Runtime check if waitpkg exists
-extern int __kmp_tpause_state; // 0 (default), 1=C0.1, 2=C0.2; from KMP_TPAUSE
-extern int __kmp_tpause_hint; // 1=C0.1 (default), 0=C0.2; from KMP_TPAUSE
-extern int __kmp_tpause_enabled; // 0 (default), 1 (KMP_TPAUSE is non-zero)
 #endif
 
 /* ------------------------------------------------------------------------- */
@@ -3563,7 +3473,7 @@ extern void __kmp_check_stack_overlap(kmp_info_t *thr);
 extern void __kmp_expand_host_name(char *buffer, size_t size);
 extern void __kmp_expand_file_name(char *result, size_t rlen, char *pattern);
 
-#if KMP_ARCH_X86 || KMP_ARCH_X86_64 || (KMP_OS_WINDOWS && KMP_ARCH_AARCH64)
+#if KMP_ARCH_X86 || KMP_ARCH_X86_64
 extern void
 __kmp_initialize_system_tick(void); /* Initialize timer tick value */
 #endif
@@ -3593,16 +3503,6 @@ extern void __kmp_balanced_affinity(kmp_info_t *th, int team_size);
 #if KMP_OS_LINUX || KMP_OS_FREEBSD
 extern int kmp_set_thread_affinity_mask_initial(void);
 #endif
-static inline void __kmp_assign_root_init_mask() {
-  int gtid = __kmp_entry_gtid();
-  kmp_root_t *r = __kmp_threads[gtid]->th.th_root;
-  if (r->r.r_uber_thread == __kmp_threads[gtid] && !r->r.r_affinity_assigned) {
-    __kmp_affinity_set_init_mask(gtid, TRUE);
-    r->r.r_affinity_assigned = TRUE;
-  }
-}
-#else /* KMP_AFFINITY_SUPPORTED */
-#define __kmp_assign_root_init_mask() /* Nothing */
 #endif /* KMP_AFFINITY_SUPPORTED */
 // No need for KMP_AFFINITY_SUPPORTED guard as only one field in the
 // format string is for affinity, so platforms that do not support
@@ -4107,11 +4007,6 @@ KMP_EXPORT void KMPC_CONVENTION kmpc_set_stacksize_s(size_t);
 KMP_EXPORT void KMPC_CONVENTION kmpc_set_library(int);
 KMP_EXPORT void KMPC_CONVENTION kmpc_set_defaults(char const *);
 KMP_EXPORT void KMPC_CONVENTION kmpc_set_disp_num_buffers(int);
-void KMP_EXPAND_NAME(ompc_set_affinity_format)(char const *format);
-size_t KMP_EXPAND_NAME(ompc_get_affinity_format)(char *buffer, size_t size);
-void KMP_EXPAND_NAME(ompc_display_affinity)(char const *format);
-size_t KMP_EXPAND_NAME(ompc_capture_affinity)(char *buffer, size_t buf_size,
-                                              char const *format);
 
 enum kmp_target_offload_kind {
   tgt_disabled = 0,
@@ -4188,25 +4083,10 @@ extern void __kmp_hidden_helper_main_thread_release();
 #define KMP_HIDDEN_HELPER_WORKER_THREAD(gtid)                                  \
   ((gtid) > 1 && (gtid) <= __kmp_hidden_helper_threads_num)
 
-#define KMP_HIDDEN_HELPER_TEAM(team)                                           \
-  (team->t.t_threads[0] == __kmp_hidden_helper_main_thread)
-
 // Map a gtid to a hidden helper thread. The first hidden helper thread, a.k.a
 // main thread, is skipped.
 #define KMP_GTID_TO_SHADOW_GTID(gtid)                                          \
   ((gtid) % (__kmp_hidden_helper_threads_num - 1) + 2)
-
-// Return the adjusted gtid value by subtracting from gtid the number
-// of hidden helper threads. This adjusted value is the gtid the thread would
-// have received if there were no hidden helper threads.
-static inline int __kmp_adjust_gtid_for_hidden_helpers(int gtid) {
-  int adjusted_gtid = gtid;
-  if (__kmp_hidden_helper_threads_num > 0 && gtid > 0 &&
-      gtid - __kmp_hidden_helper_threads_num >= 0) {
-    adjusted_gtid -= __kmp_hidden_helper_threads_num;
-  }
-  return adjusted_gtid;
-}
 
 // Support for error directive
 typedef enum kmp_severity_t {
@@ -4214,10 +4094,6 @@ typedef enum kmp_severity_t {
   severity_fatal = 2
 } kmp_severity_t;
 extern void __kmpc_error(ident_t *loc, int severity, const char *message);
-
-// Support for scope directive
-KMP_EXPORT void __kmpc_scope(ident_t *loc, kmp_int32 gtid, void *reserved);
-KMP_EXPORT void __kmpc_end_scope(ident_t *loc, kmp_int32 gtid, void *reserved);
 
 #ifdef __cplusplus
 }
@@ -4227,26 +4103,18 @@ template <bool C, bool S>
 extern void __kmp_suspend_32(int th_gtid, kmp_flag_32<C, S> *flag);
 template <bool C, bool S>
 extern void __kmp_suspend_64(int th_gtid, kmp_flag_64<C, S> *flag);
-template <bool C, bool S>
-extern void __kmp_atomic_suspend_64(int th_gtid,
-                                    kmp_atomic_flag_64<C, S> *flag);
 extern void __kmp_suspend_oncore(int th_gtid, kmp_flag_oncore *flag);
 #if KMP_HAVE_MWAIT || KMP_HAVE_UMWAIT
 template <bool C, bool S>
 extern void __kmp_mwait_32(int th_gtid, kmp_flag_32<C, S> *flag);
 template <bool C, bool S>
 extern void __kmp_mwait_64(int th_gtid, kmp_flag_64<C, S> *flag);
-template <bool C, bool S>
-extern void __kmp_atomic_mwait_64(int th_gtid, kmp_atomic_flag_64<C, S> *flag);
 extern void __kmp_mwait_oncore(int th_gtid, kmp_flag_oncore *flag);
 #endif
 template <bool C, bool S>
 extern void __kmp_resume_32(int target_gtid, kmp_flag_32<C, S> *flag);
 template <bool C, bool S>
 extern void __kmp_resume_64(int target_gtid, kmp_flag_64<C, S> *flag);
-template <bool C, bool S>
-extern void __kmp_atomic_resume_64(int target_gtid,
-                                   kmp_atomic_flag_64<C, S> *flag);
 extern void __kmp_resume_oncore(int target_gtid, kmp_flag_oncore *flag);
 
 template <bool C, bool S>
@@ -4265,14 +4133,6 @@ int __kmp_execute_tasks_64(kmp_info_t *thread, kmp_int32 gtid,
                            void *itt_sync_obj,
 #endif /* USE_ITT_BUILD */
                            kmp_int32 is_constrained);
-template <bool C, bool S>
-int __kmp_atomic_execute_tasks_64(kmp_info_t *thread, kmp_int32 gtid,
-                                  kmp_atomic_flag_64<C, S> *flag,
-                                  int final_spin, int *thread_finished,
-#if USE_ITT_BUILD
-                                  void *itt_sync_obj,
-#endif /* USE_ITT_BUILD */
-                                  kmp_int32 is_constrained);
 int __kmp_execute_tasks_oncore(kmp_info_t *thread, kmp_int32 gtid,
                                kmp_flag_oncore *flag, int final_spin,
                                int *thread_finished,
@@ -4280,12 +4140,6 @@ int __kmp_execute_tasks_oncore(kmp_info_t *thread, kmp_int32 gtid,
                                void *itt_sync_obj,
 #endif /* USE_ITT_BUILD */
                                kmp_int32 is_constrained);
-
-extern int __kmp_nesting_mode;
-extern int __kmp_nesting_mode_nlevels;
-extern int *__kmp_nesting_nth_level;
-extern void __kmp_init_nesting_mode();
-extern void __kmp_set_nesting_mode_threads();
 
 /// This class safely opens and closes a C-style FILE* object using RAII
 /// semantics. There are also methods which allow using stdout or stderr as
@@ -4329,15 +4183,6 @@ public:
                     __kmp_msg_null);
       }
     }
-  }
-  /// Instead of erroring out, return non-zero when
-  /// unsuccessful fopen() for any reason
-  int try_open(const char *filename, const char *mode) {
-    KMP_ASSERT(!f);
-    f = fopen(filename, mode);
-    if (!f)
-      return errno;
-    return 0;
   }
   /// Set the FILE* object to stdout and output there
   /// No open call should happen before this call.

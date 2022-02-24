@@ -82,8 +82,9 @@ ParseResult Parser::parseFusedLocation(LocationAttr &loc) {
     return success();
   };
 
-  if (parseCommaSeparatedList(Delimiter::Square, parseElt,
-                              " in fused location"))
+  if (parseToken(Token::l_square, "expected '[' in fused location") ||
+      parseCommaSeparatedList(parseElt) ||
+      parseToken(Token::r_square, "expected ']' in fused location"))
     return failure();
 
   // Return the fused location.
@@ -126,19 +127,25 @@ ParseResult Parser::parseNameOrFileLineColLocation(LocationAttr &loc) {
 
   // Check for a child location.
   if (consumeIf(Token::l_paren)) {
+    auto childSourceLoc = getToken().getLoc();
+
     // Parse the child location.
     LocationAttr childLoc;
     if (parseLocationInstance(childLoc))
       return failure();
 
-    loc = NameLoc::get(StringAttr::get(ctx, str), childLoc);
+    // The child must not be another NameLoc.
+    if (childLoc.isa<NameLoc>())
+      return emitError(childSourceLoc,
+                       "child of NameLoc cannot be another NameLoc");
+    loc = NameLoc::get(Identifier::get(str, ctx), childLoc);
 
     // Parse the closing ')'.
     if (parseToken(Token::r_paren,
                    "expected ')' after child location of NameLoc"))
       return failure();
   } else {
-    loc = NameLoc::get(StringAttr::get(ctx, str));
+    loc = NameLoc::get(Identifier::get(str, ctx));
   }
 
   return success();

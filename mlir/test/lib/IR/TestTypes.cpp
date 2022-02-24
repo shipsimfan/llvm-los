@@ -11,19 +11,15 @@
 #include "mlir/Pass/Pass.h"
 
 using namespace mlir;
-using namespace test;
+using namespace mlir::test;
 
 namespace {
 struct TestRecursiveTypesPass
-    : public PassWrapper<TestRecursiveTypesPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestRecursiveTypesPass, FunctionPass> {
   LogicalResult createIRWithTypes();
 
-  StringRef getArgument() const final { return "test-recursive-types"; }
-  StringRef getDescription() const final {
-    return "Test support for recursive types";
-  }
-  void runOnOperation() override {
-    FuncOp func = getOperation();
+  void runOnFunction() override {
+    FuncOp func = getFunction();
 
     // Just make sure recursive types are printed and parsed.
     if (func.getName() == "roundtrip")
@@ -45,7 +41,7 @@ struct TestRecursiveTypesPass
 
 LogicalResult TestRecursiveTypesPass::createIRWithTypes() {
   MLIRContext *ctx = &getContext();
-  FuncOp func = getOperation();
+  FuncOp func = getFunction();
   auto type = TestRecursiveType::get(ctx, "some_long_and_unique_name");
   if (failed(type.setBody(type)))
     return func.emitError("expected to be able to set the type body");
@@ -77,7 +73,8 @@ namespace mlir {
 namespace test {
 
 void registerTestRecursiveTypesPass() {
-  PassRegistration<TestRecursiveTypesPass>();
+  PassRegistration<TestRecursiveTypesPass> reg(
+      "test-recursive-types", "Test support for recursive types");
 }
 
 } // namespace test

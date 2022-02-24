@@ -12,8 +12,6 @@
 #include "mlir/Pass/Pass.h"
 #include "gtest/gtest.h"
 
-#include <memory>
-
 using namespace mlir;
 using namespace mlir::detail;
 
@@ -31,6 +29,7 @@ struct OpSpecificAnalysis {
 };
 
 /// Simple pass to annotate a FuncOp with the results of analysis.
+/// Note: not using FunctionPass as it skip external functions.
 struct AnnotateFunctionPass
     : public PassWrapper<AnnotateFunctionPass, OperationPass<FuncOp>> {
   void runOnOperation() override {
@@ -50,7 +49,7 @@ TEST(PassManagerTest, OpSpecificAnalysis) {
   Builder builder(&context);
 
   // Create a module with 2 functions.
-  OwningOpRef<ModuleOp> module(ModuleOp::create(UnknownLoc::get(&context)));
+  OwningModuleRef module(ModuleOp::create(UnknownLoc::get(&context)));
   for (StringRef name : {"secret", "not_secret"}) {
     FuncOp func =
         FuncOp::create(builder.getUnknownLoc(), name,
@@ -88,14 +87,13 @@ struct InvalidPass : Pass {
         *static_cast<const InvalidPass *>(this));
   }
 };
-} // namespace
+} // anonymous namespace
 
 TEST(PassManagerTest, InvalidPass) {
   MLIRContext context;
-  context.allowUnregisteredDialects();
 
   // Create a module
-  OwningOpRef<ModuleOp> module(ModuleOp::create(UnknownLoc::get(&context)));
+  OwningModuleRef module(ModuleOp::create(UnknownLoc::get(&context)));
 
   // Add a single "invalid_op" operation
   OpBuilder builder(&module->getBodyRegion());
@@ -106,7 +104,7 @@ TEST(PassManagerTest, InvalidPass) {
   // check it later.
   std::unique_ptr<Diagnostic> diagnostic;
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
-    diagnostic = std::make_unique<Diagnostic>(std::move(diag));
+    diagnostic.reset(new Diagnostic(std::move(diag)));
   });
 
   // Instantiate and run our pass.
@@ -119,13 +117,8 @@ TEST(PassManagerTest, InvalidPass) {
       diagnostic->str(),
       "'invalid_op' op trying to schedule a pass on an unregistered operation");
 
-  // Check that clearing the pass manager effectively removed the pass.
-  pm.clear();
-  result = pm.run(module.get());
-  EXPECT_TRUE(succeeded(result));
-
   // Check that adding the pass at the top-level triggers a fatal error.
   ASSERT_DEATH(pm.addPass(std::make_unique<InvalidPass>()), "");
 }
 
-} // namespace
+} // end namespace

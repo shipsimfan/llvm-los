@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MLIR_IR_TYPESUPPORT_H
-#define MLIR_IR_TYPESUPPORT_H
+#ifndef MLIR_IR_TYPE_SUPPORT_H
+#define MLIR_IR_TYPE_SUPPORT_H
 
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/StorageUniquerSupport.h"
@@ -29,18 +29,14 @@ class MLIRContext;
 /// a registered Type.
 class AbstractType {
 public:
-  using HasTraitFn = llvm::unique_function<bool(TypeID) const>;
-
   /// Look up the specified abstract type in the MLIRContext and return a
   /// reference to it.
   static const AbstractType &lookup(TypeID typeID, MLIRContext *context);
 
   /// This method is used by Dialect objects when they register the list of
   /// types they contain.
-  template <typename T>
-  static AbstractType get(Dialect &dialect) {
-    return AbstractType(dialect, T::getInterfaceMap(), T::getHasTraitFn(),
-                        T::getTypeID());
+  template <typename T> static AbstractType get(Dialect &dialect) {
+    return AbstractType(dialect, T::getInterfaceMap(), T::getTypeID());
   }
 
   /// This method is used by Dialect objects to register types with
@@ -48,9 +44,8 @@ public:
   /// The use of this method is in general discouraged in favor of
   /// 'get<CustomType>(dialect)';
   static AbstractType get(Dialect &dialect, detail::InterfaceMap &&interfaceMap,
-                          HasTraitFn &&hasTrait, TypeID typeID) {
-    return AbstractType(dialect, std::move(interfaceMap), std::move(hasTrait),
-                        typeID);
+                          TypeID typeID) {
+    return AbstractType(dialect, std::move(interfaceMap), typeID);
   }
 
   /// Return the dialect this type was registered to.
@@ -63,50 +58,23 @@ public:
     return interfaceMap.lookup<T>();
   }
 
-  /// Returns true if the type has the interface with the given ID.
-  bool hasInterface(TypeID interfaceID) const {
-    return interfaceMap.contains(interfaceID);
-  }
-
-  /// Returns true if the type has a particular trait.
-  template <template <typename T> class Trait>
-  bool hasTrait() const {
-    return hasTraitFn(TypeID::get<Trait>());
-  }
-
-  /// Returns true if the type has a particular trait.
-  bool hasTrait(TypeID traitID) const { return hasTraitFn(traitID); }
-
   /// Return the unique identifier representing the concrete type class.
   TypeID getTypeID() const { return typeID; }
 
 private:
   AbstractType(Dialect &dialect, detail::InterfaceMap &&interfaceMap,
-               HasTraitFn &&hasTrait, TypeID typeID)
+               TypeID typeID)
       : dialect(dialect), interfaceMap(std::move(interfaceMap)),
-        hasTraitFn(std::move(hasTrait)), typeID(typeID) {}
-
-  /// Give StorageUserBase access to the mutable lookup.
-  template <typename ConcreteT, typename BaseT, typename StorageT,
-            typename UniquerT, template <typename T> class... Traits>
-  friend class detail::StorageUserBase;
-
-  /// Look up the specified abstract type in the MLIRContext and return a
-  /// (mutable) pointer to it. Return a null pointer if the type could not
-  /// be found in the context.
-  static AbstractType *lookupMutable(TypeID typeID, MLIRContext *context);
+        typeID(typeID) {}
 
   /// This is the dialect that this type was registered to.
-  const Dialect &dialect;
+  Dialect &dialect;
 
   /// This is a collection of the interfaces registered to this type.
   detail::InterfaceMap interfaceMap;
 
-  /// Function to check if the type has a particular trait.
-  HasTraitFn hasTraitFn;
-
   /// The unique identifier of the derived Type class.
-  const TypeID typeID;
+  TypeID typeID;
 };
 
 //===----------------------------------------------------------------------===//
@@ -115,7 +83,7 @@ private:
 
 namespace detail {
 struct TypeUniquer;
-} // namespace detail
+} // end namespace detail
 
 /// Base storage class appearing in a Type.
 class TypeStorage : public StorageUniquer::BaseStorage {
@@ -131,17 +99,17 @@ public:
 
 protected:
   /// This constructor is used by derived classes as part of the TypeUniquer.
-  TypeStorage() {}
+  TypeStorage() : abstractType(nullptr) {}
 
 private:
   /// Set the abstract type for this storage instance. This is used by the
   /// TypeUniquer when initializing a newly constructed type storage object.
   void initialize(const AbstractType &abstractTy) {
-    abstractType = const_cast<AbstractType *>(&abstractTy);
+    abstractType = &abstractTy;
   }
 
   /// The abstract description for this type.
-  AbstractType *abstractType{nullptr};
+  const AbstractType *abstractType;
 };
 
 /// Default storage type for types that require no additional initialization or
@@ -170,11 +138,10 @@ struct TypeUniquer {
   get(MLIRContext *ctx, Args &&...args) {
 #ifndef NDEBUG
     if (!ctx->getTypeUniquer().isParametricStorageInitialized(T::getTypeID()))
-      llvm::report_fatal_error(
-          llvm::Twine("can't create type '") + llvm::getTypeName<T>() +
-          "' because storage uniquer isn't initialized: the dialect was likely "
-          "not loaded, or the type wasn't added with addTypes<...>() "
-          "in the Dialect::initialize() method.");
+      llvm::report_fatal_error(llvm::Twine("can't create type '") +
+                               llvm::getTypeName<T>() +
+                               "' because storage uniquer isn't initialized: "
+                               "the dialect was likely not loaded.");
 #endif
     return ctx->getTypeUniquer().get<typename T::ImplType>(
         [&](TypeStorage *storage) {
@@ -189,11 +156,10 @@ struct TypeUniquer {
   get(MLIRContext *ctx) {
 #ifndef NDEBUG
     if (!ctx->getTypeUniquer().isSingletonStorageInitialized(T::getTypeID()))
-      llvm::report_fatal_error(
-          llvm::Twine("can't create type '") + llvm::getTypeName<T>() +
-          "' because storage uniquer isn't initialized: the dialect was likely "
-          "not loaded, or the type wasn't added with addTypes<...>() "
-          "in the Dialect::initialize() method.");
+      llvm::report_fatal_error(llvm::Twine("can't create type '") +
+                               llvm::getTypeName<T>() +
+                               "' because storage uniquer isn't initialized: "
+                               "the dialect was likely not loaded.");
 #endif
     return ctx->getTypeUniquer().get<typename T::ImplType>(T::getTypeID());
   }
@@ -229,6 +195,6 @@ struct TypeUniquer {
 };
 } // namespace detail
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif

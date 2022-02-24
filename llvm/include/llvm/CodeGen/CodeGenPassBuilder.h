@@ -159,7 +159,7 @@ protected:
   class AddIRPass {
   public:
     AddIRPass(ModulePassManager &MPM, bool DebugPM, bool Check = true)
-        : MPM(MPM) {
+        : MPM(MPM), FPM(DebugPM) {
       if (Check)
         AddingFunctionPasses = false;
     }
@@ -868,8 +868,6 @@ Error CodeGenPassBuilder<Derived>::addMachinePasses(
 
   // Run post-ra passes.
   derived().addPostRegAlloc(addPass);
-
-  addPass(RemoveRedundantDebugValuesPass());
 
   // Insert prolog/epilog code.  Eliminate abstract frame index references...
   if (getOptLevel() != CodeGenOpt::None) {

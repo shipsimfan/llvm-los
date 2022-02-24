@@ -17,15 +17,16 @@
 #include "min_allocator.h"
 
 template <class S>
-TEST_CONSTEXPR_CXX20 void
+void
 test(S s)
 {
     s.clear();
     assert(s.size() == 0);
 }
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     typedef std::string S;
     S s;
     test(s);
@@ -37,9 +38,9 @@ bool test() {
     s.assign(100, 'a');
     s.erase(50);
     test(s);
-  }
+    }
 #if TEST_STD_VER >= 11
-  {
+    {
     typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
     S s;
     test(s);
@@ -51,17 +52,7 @@ bool test() {
     s.assign(100, 'a');
     s.erase(50);
     test(s);
-  }
-#endif
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
+    }
 #endif
 
   return 0;

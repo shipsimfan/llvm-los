@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <limits>
 #include <vector>
 
 int main(int argc, char *argv[]) {

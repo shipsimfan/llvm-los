@@ -11,12 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "sanitizer_common.h"
-
 #include "sanitizer_allocator_interface.h"
 #include "sanitizer_allocator_internal.h"
 #include "sanitizer_atomic.h"
 #include "sanitizer_flags.h"
-#include "sanitizer_interface_internal.h"
 #include "sanitizer_libc.h"
 #include "sanitizer_placement_new.h"
 
@@ -39,9 +37,10 @@ void NORETURN ReportMmapFailureAndDie(uptr size, const char *mem_type,
                                       const char *mmap_type, error_t err,
                                       bool raw_report) {
   static int recursion_count;
-  if (raw_report || recursion_count) {
-    // If raw report is requested or we went into recursion just die.  The
-    // Report() and CHECK calls below may call mmap recursively and fail.
+  if (SANITIZER_RTEMS || raw_report || recursion_count) {
+    // If we are on RTEMS or raw report is requested or we went into recursion,
+    // just die.  The Report() and CHECK calls below may call mmap recursively
+    // and fail.
     RawWrite("ERROR: Failed to mmap\n");
     Die();
   }
@@ -140,15 +139,7 @@ void LoadedModule::set(const char *module_name, uptr base_address,
   set(module_name, base_address);
   arch_ = arch;
   internal_memcpy(uuid_, uuid, sizeof(uuid_));
-  uuid_size_ = kModuleUUIDSize;
   instrumented_ = instrumented;
-}
-
-void LoadedModule::setUuid(const char *uuid, uptr size) {
-  if (size > kModuleUUIDSize)
-    size = kModuleUUIDSize;
-  internal_memcpy(uuid_, uuid, size);
-  uuid_size_ = size;
 }
 
 void LoadedModule::clear() {
@@ -339,14 +330,6 @@ static int InstallMallocFreeHooks(void (*malloc_hook)(const void *, uptr),
   }
   return 0;
 }
-
-void internal_sleep(unsigned seconds) {
-  internal_usleep((u64)seconds * 1000 * 1000);
-}
-void SleepForSeconds(unsigned seconds) {
-  internal_usleep((u64)seconds * 1000 * 1000);
-}
-void SleepForMillis(unsigned millis) { internal_usleep((u64)millis * 1000); }
 
 } // namespace __sanitizer
 

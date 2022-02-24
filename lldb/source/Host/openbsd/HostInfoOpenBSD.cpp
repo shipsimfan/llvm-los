@@ -8,8 +8,8 @@
 
 #include "lldb/Host/openbsd/HostInfoOpenBSD.h"
 
-#include <cstdio>
-#include <cstring>
+#include <stdio.h>
+#include <string.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
@@ -29,16 +29,34 @@ llvm::VersionTuple HostInfoOpenBSD::GetOSVersion() {
   return llvm::VersionTuple();
 }
 
-llvm::Optional<std::string> HostInfoOpenBSD::GetOSBuildString() {
+bool HostInfoOpenBSD::GetOSBuildString(std::string &s) {
   int mib[2] = {CTL_KERN, KERN_OSREV};
   char osrev_str[12];
   uint32_t osrev = 0;
   size_t osrev_len = sizeof(osrev);
 
-  if (::sysctl(mib, 2, &osrev, &osrev_len, NULL, 0) == 0)
-    return llvm::formatv("{0,8:8}", osrev).str();
+  if (::sysctl(mib, 2, &osrev, &osrev_len, NULL, 0) == 0) {
+    ::snprintf(osrev_str, sizeof(osrev_str), "%-8.8u", osrev);
+    s.assign(osrev_str);
+    return true;
+  }
 
-  return llvm::None;
+  s.clear();
+  return false;
+}
+
+bool HostInfoOpenBSD::GetOSKernelDescription(std::string &s) {
+  struct utsname un;
+
+  ::memset(&un, 0, sizeof(utsname));
+  s.clear();
+
+  if (uname(&un) < 0)
+    return false;
+
+  s.assign(un.version);
+
+  return true;
 }
 
 FileSpec HostInfoOpenBSD::GetProgramFileSpec() {

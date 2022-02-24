@@ -194,7 +194,7 @@ Args &Args::operator=(const Args &rhs) {
 }
 
 // Destructor
-Args::~Args() = default;
+Args::~Args() {}
 
 void Args::Dump(Stream &s, const char *label_name) const {
   if (!label_name)
@@ -386,7 +386,6 @@ std::string Args::GetShellSafeArgument(const FileSpec &shell,
 
   static ShellDescriptor g_Shells[] = {{ConstString("bash"), " '\"<>()&"},
                                        {ConstString("tcsh"), " '\"<>()&$"},
-                                       {ConstString("zsh"), " '\"<>()&;\\|"},
                                        {ConstString("sh"), " '\"<>()&"}};
 
   // safe minimal set

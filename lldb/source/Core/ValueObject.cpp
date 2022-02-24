@@ -9,7 +9,6 @@
 #include "lldb/Core/ValueObject.h"
 
 #include "lldb/Core/Address.h"
-#include "lldb/Core/Declaration.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ValueObjectCast.h"
 #include "lldb/Core/ValueObjectChild.h"
@@ -28,6 +27,7 @@
 #include "lldb/Host/Config.h"
 #include "lldb/Symbol/CompileUnit.h"
 #include "lldb/Symbol/CompilerType.h"
+#include "lldb/Symbol/Declaration.h"
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Symbol/Type.h"
 #include "lldb/Symbol/Variable.h"
@@ -42,8 +42,8 @@
 #include "lldb/Utility/DataBuffer.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/Flags.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
+#include "lldb/Utility/Logging.h"
 #include "lldb/Utility/Scalar.h"
 #include "lldb/Utility/Stream.h"
 #include "lldb/Utility/StreamString.h"
@@ -57,10 +57,10 @@
 #include <memory>
 #include <tuple>
 
-#include <cassert>
-#include <cinttypes>
-#include <cstdio>
-#include <cstring>
+#include <assert.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <string.h>
 
 #include <lldb/Core/ValueObject.h>
 
@@ -106,7 +106,7 @@ ValueObject::ValueObject(ExecutionContextScope *exe_scope,
 }
 
 // Destructor
-ValueObject::~ValueObject() = default;
+ValueObject::~ValueObject() {}
 
 bool ValueObject::UpdateValueIfNeeded(bool update_format) {
 
@@ -200,7 +200,7 @@ bool ValueObject::UpdateValueIfNeeded(bool update_format) {
 }
 
 bool ValueObject::UpdateFormatsIfNeeded() {
-  Log *log = GetLog(LLDBLog::DataFormatters);
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_DATAFORMATTERS));
   LLDB_LOGF(log,
             "[%s %p] checking for FormatManager revisions. ValueObject "
             "rev: %d - Global rev: %d",
@@ -849,10 +849,8 @@ bool ValueObject::SetData(DataExtractor &data, Status &error) {
 
 static bool CopyStringDataToBufferSP(const StreamString &source,
                                      lldb::DataBufferSP &destination) {
-  llvm::StringRef src = source.GetString();
-  src.consume_back(llvm::StringRef("\0", 1));
-  destination = std::make_shared<DataBufferHeap>(src.size(), 0);
-  memcpy(destination->GetBytes(), src.data(), src.size());
+  destination = std::make_shared<DataBufferHeap>(source.GetSize() + 1, 0);
+  memcpy(destination->GetBytes(), source.GetString().data(), source.GetSize());
   return true;
 }
 
@@ -914,8 +912,8 @@ ValueObject::ReadPointedString(lldb::DataBufferSP &buffer_sp, Status &error,
           CopyStringDataToBufferSP(s, buffer_sp);
           return {0, was_capped};
         }
-        s << llvm::StringRef(cstr, cstr_len);
-        CopyStringDataToBufferSP(s, buffer_sp);
+        buffer_sp = std::make_shared<DataBufferHeap>(cstr_len, 0);
+        memcpy(buffer_sp->GetBytes(), cstr, cstr_len);
         return {cstr_len, was_capped};
       } else {
         s << "<invalid address>";
@@ -1198,7 +1196,6 @@ bool ValueObject::DumpPrintableRepresentation(
         options.SetQuote('"');
         options.SetSourceSize(buffer_sp->GetByteSize());
         options.SetIsTruncated(read_string.second);
-        options.SetBinaryZeroIsTerminator(custom_format != eFormatVectorOfChar);
         formatters::StringPrinter::ReadBufferAndDumpToStream<
             lldb_private::formatters::StringPrinter::StringElementType::ASCII>(
             options);
@@ -1580,7 +1577,7 @@ bool ValueObject::IsRuntimeSupportValue() {
   if (!process)
     return false;
 
-  // We trust that the compiler did the right thing and marked runtime support
+  // We trust the the compiler did the right thing and marked runtime support
   // values as artificial.
   if (!GetVariable() || !GetVariable()->IsArtificial())
     return false;
@@ -2799,7 +2796,8 @@ ValueObjectSP ValueObject::CastPointerType(const char *name, TypeSP &type_sp) {
   return valobj_sp;
 }
 
-ValueObject::EvaluationPoint::EvaluationPoint() : m_mod_id(), m_exe_ctx_ref() {}
+ValueObject::EvaluationPoint::EvaluationPoint()
+    : m_mod_id(), m_exe_ctx_ref(), m_needs_update(true) {}
 
 ValueObject::EvaluationPoint::EvaluationPoint(ExecutionContextScope *exe_scope,
                                               bool use_selected)
@@ -2842,7 +2840,7 @@ ValueObject::EvaluationPoint::EvaluationPoint(
     const ValueObject::EvaluationPoint &rhs)
     : m_mod_id(), m_exe_ctx_ref(rhs.m_exe_ctx_ref), m_needs_update(true) {}
 
-ValueObject::EvaluationPoint::~EvaluationPoint() = default;
+ValueObject::EvaluationPoint::~EvaluationPoint() {}
 
 // This function checks the EvaluationPoint against the current process state.
 // If the current state matches the evaluation point, or the evaluation point

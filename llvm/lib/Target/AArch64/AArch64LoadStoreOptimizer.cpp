@@ -923,7 +923,6 @@ AArch64LoadStoreOpt::mergePairedInsns(MachineBasicBlock::iterator I,
       assert(all_of(MI.operands(),
                     [this, &RenameReg](const MachineOperand &MOP) {
                       return !MOP.isReg() || MOP.isDebug() || !MOP.getReg() ||
-                             MOP.isUndef() ||
                              !TRI->regsOverlap(MOP.getReg(), *RenameReg);
                     }) &&
              "Rename register used between paired instruction, trashing the "
@@ -1140,7 +1139,7 @@ AArch64LoadStoreOpt::promoteLoadFromStore(MachineBasicBlock::iterator LoadI,
                                ? getLdStOffsetOp(*StoreI).getImm()
                                : getLdStOffsetOp(*StoreI).getImm() * StoreSize;
     int Width = LoadSize * 8;
-    Register DestReg =
+    unsigned DestReg =
         IsStoreXReg ? Register(TRI->getMatchingSuperReg(
                           LdRt, AArch64::sub_32, &AArch64::GPR64RegClass))
                     : LdRt;
@@ -1611,13 +1610,7 @@ AArch64LoadStoreOpt::findMatchingInsn(MachineBasicBlock::iterator I,
               !UsedRegUnits.available(getLdStBaseOp(MI).getReg());
           bool IsBaseRegModified =
               !ModifiedRegUnits.available(getLdStBaseOp(MI).getReg());
-          // If the stored value and the address of the second instruction is
-          // the same, it needs to be using the updated register and therefore
-          // it must not be folded.
-          bool IsMIRegTheSame = TRI->regsOverlap(getLdStRegOp(MI).getReg(),
-                                                 getLdStBaseOp(MI).getReg());
-          if (IsOutOfBounds || IsBaseRegUsed || IsBaseRegModified ||
-              IsMIRegTheSame) {
+          if (IsOutOfBounds || IsBaseRegUsed || IsBaseRegModified) {
             LiveRegUnits::accumulateUsedDefed(MI, ModifiedRegUnits,
                                               UsedRegUnits, TRI);
             MemInsns.push_back(&MI);

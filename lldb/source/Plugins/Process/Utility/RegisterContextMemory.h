@@ -11,16 +11,17 @@
 
 #include <vector>
 
-#include "lldb/Target/DynamicRegisterInfo.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Utility/DataExtractor.h"
 #include "lldb/lldb-private.h"
+
+class DynamicRegisterInfo;
 
 class RegisterContextMemory : public lldb_private::RegisterContext {
 public:
   RegisterContextMemory(lldb_private::Thread &thread,
                         uint32_t concrete_frame_idx,
-                        lldb_private::DynamicRegisterInfo &reg_info,
+                        DynamicRegisterInfo &reg_info,
                         lldb::addr_t reg_data_addr);
 
   ~RegisterContextMemory() override;
@@ -59,7 +60,7 @@ public:
 protected:
   void SetAllRegisterValid(bool b);
 
-  lldb_private::DynamicRegisterInfo &m_reg_infos;
+  DynamicRegisterInfo &m_reg_infos;
   std::vector<bool> m_reg_valid;
   lldb_private::DataExtractor m_reg_data;
   lldb::addr_t m_reg_data_addr; // If this is valid, then we have a register

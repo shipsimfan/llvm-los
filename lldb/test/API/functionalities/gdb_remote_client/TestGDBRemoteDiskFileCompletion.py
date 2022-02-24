@@ -1,9 +1,6 @@
-from lldbsuite.test.gdbclientutils import *
-from lldbsuite.test.lldbgdbclient import GDBPlatformClientTestBase
+from gdbclientutils import *
 
-class TestGDBRemoteDiskFileCompletion(GDBPlatformClientTestBase):
-
-    mydir = GDBPlatformClientTestBase.compute_mydir(__file__)
+class TestGDBRemoteDiskFileCompletion(GDBRemoteTestBase):
 
     def test_autocomplete_request(self):
         """Test remote disk completion on remote-gdb-server plugin"""
@@ -17,8 +14,16 @@ class TestGDBRemoteDiskFileCompletion(GDBPlatformClientTestBase):
 
         self.server.responder = Responder()
 
-        self.complete_from_to('platform get-size ', ['test', '123'])
-        self.complete_from_to('platform get-file ', ['test', '123'])
-        self.complete_from_to('platform put-file foo ', ['test', '123'])
-        self.complete_from_to('platform file open ', ['test', '123'])
-        self.complete_from_to('platform settings -w ', ['test', '123'])
+        try:
+            self.runCmd("platform select remote-gdb-server")
+            self.runCmd("platform connect connect://" +
+                        self.server.get_connect_address())
+            self.assertTrue(self.dbg.GetSelectedPlatform().IsConnected())
+
+            self.complete_from_to('platform get-size ', ['test', '123'])
+            self.complete_from_to('platform get-file ', ['test', '123'])
+            self.complete_from_to('platform put-file foo ', ['test', '123'])
+            self.complete_from_to('platform file open ', ['test', '123'])
+            self.complete_from_to('platform settings -w ', ['test', '123'])
+        finally:
+            self.dbg.GetSelectedPlatform().DisconnectRemote()

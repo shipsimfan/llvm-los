@@ -2,7 +2,7 @@
 
 struct X { int *XX; int Y;};
 
-void foo(void) {
+void foo() {
   // CHECK: @foo.nate = internal global i32 0
   static int nate = 0;
   struct X bob = { &nate, 14 };

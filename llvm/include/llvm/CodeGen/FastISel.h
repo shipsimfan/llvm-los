@@ -217,12 +217,12 @@ protected:
   /// for use in the current block. It resets to EmitStartPt when it makes sense
   /// (for example, it's usually profitable to avoid function calls between the
   /// definition and the use)
-  MachineInstr *LastLocalValue = nullptr;
+  MachineInstr *LastLocalValue;
 
   /// The top most instruction in the current block that is allowed for
   /// emitting local variables. LastLocalValue resets to EmitStartPt when it
   /// makes sense (for example, on function calls)
-  MachineInstr *EmitStartPt = nullptr;
+  MachineInstr *EmitStartPt;
 
 public:
   virtual ~FastISel();

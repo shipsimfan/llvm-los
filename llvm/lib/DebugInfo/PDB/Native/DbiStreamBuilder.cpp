@@ -14,6 +14,7 @@
 #include "llvm/DebugInfo/MSF/MSFBuilder.h"
 #include "llvm/DebugInfo/MSF/MappedBlockStream.h"
 #include "llvm/DebugInfo/PDB/Native/DbiModuleDescriptorBuilder.h"
+#include "llvm/DebugInfo/PDB/Native/DbiStream.h"
 #include "llvm/DebugInfo/PDB/Native/RawError.h"
 #include "llvm/Object/COFF.h"
 #include "llvm/Support/BinaryStreamWriter.h"
@@ -29,7 +30,7 @@ DbiStreamBuilder::DbiStreamBuilder(msf::MSFBuilder &Msf)
       PdbDllVersion(0), PdbDllRbld(0), Flags(0), MachineType(PDB_Machine::x86),
       Header(nullptr) {}
 
-DbiStreamBuilder::~DbiStreamBuilder() = default;
+DbiStreamBuilder::~DbiStreamBuilder() {}
 
 void DbiStreamBuilder::setVersionHeader(PdbRaw_DbiVer V) { VerHeader = V; }
 
@@ -331,6 +332,8 @@ static uint16_t toSecMapFlags(uint32_t Flags) {
     Ret |= static_cast<uint16_t>(OMFSegDescFlags::Read);
   if (Flags & COFF::IMAGE_SCN_MEM_WRITE)
     Ret |= static_cast<uint16_t>(OMFSegDescFlags::Write);
+  if (Flags & COFF::IMAGE_SCN_MEM_EXECUTE)
+    Ret |= static_cast<uint16_t>(OMFSegDescFlags::Execute);
   if (Flags & COFF::IMAGE_SCN_MEM_EXECUTE)
     Ret |= static_cast<uint16_t>(OMFSegDescFlags::Execute);
   if (!(Flags & COFF::IMAGE_SCN_MEM_16BIT))

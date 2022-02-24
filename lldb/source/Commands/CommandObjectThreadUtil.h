@@ -93,7 +93,7 @@ protected:
   /// \return
   ///     A boolean result similar to the one expected from \a DoExecute.
   virtual bool DoExecuteOnThreads(Args &command, CommandReturnObject &result,
-                                  llvm::ArrayRef<lldb::tid_t> tids) = 0;
+                                  const std::vector<lldb::tid_t> &tids) = 0;
 };
 
 } // namespace lldb_private

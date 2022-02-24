@@ -137,8 +137,6 @@ private:
   /// Machine instruction info used throughout the class.
   const X86InstrInfo *TII = nullptr;
 
-  const TargetRegisterInfo *TRI = nullptr;
-
   /// Local member for function's OptForSize attribute.
   bool OptForSize = false;
 
@@ -164,7 +162,6 @@ bool FixupBWInstPass::runOnMachineFunction(MachineFunction &MF) {
 
   this->MF = &MF;
   TII = MF.getSubtarget<X86Subtarget>().getInstrInfo();
-  TRI = MF.getRegInfo().getTargetRegisterInfo();
   MLI = &getAnalysis<MachineLoopInfo>();
   PSI = &getAnalysis<ProfileSummaryInfoWrapperPass>().getPSI();
   MBFI = (PSI && PSI->hasProfileSummary()) ?
@@ -306,14 +303,6 @@ MachineInstr *FixupBWInstPass::tryReplaceLoad(unsigned New32BitOpcode,
 
   MIB.setMemRefs(MI->memoperands());
 
-  // If it was debug tracked, record a substitution.
-  if (unsigned OldInstrNum = MI->peekDebugInstrNum()) {
-    unsigned Subreg = TRI->getSubRegIndex(MIB->getOperand(0).getReg(),
-                                          MI->getOperand(0).getReg());
-    unsigned NewInstrNum = MIB->getDebugInstrNum(*MF);
-    MF->makeDebugValueSubstitution({OldInstrNum, 0}, {NewInstrNum, 0}, Subreg);
-  }
-
   return MIB;
 }
 
@@ -376,13 +365,6 @@ MachineInstr *FixupBWInstPass::tryReplaceExtend(unsigned New32BitOpcode,
     MIB.add(MI->getOperand(i));
 
   MIB.setMemRefs(MI->memoperands());
-
-  if (unsigned OldInstrNum = MI->peekDebugInstrNum()) {
-    unsigned Subreg = TRI->getSubRegIndex(MIB->getOperand(0).getReg(),
-                                          MI->getOperand(0).getReg());
-    unsigned NewInstrNum = MIB->getDebugInstrNum(*MF);
-    MF->makeDebugValueSubstitution({OldInstrNum, 0}, {NewInstrNum, 0}, Subreg);
-  }
 
   return MIB;
 }
@@ -457,12 +439,14 @@ void FixupBWInstPass::processBasicBlock(MachineFunction &MF,
   OptForSize = MF.getFunction().hasOptSize() ||
                llvm::shouldOptimizeForSize(&MBB, PSI, MBFI);
 
-  for (MachineInstr &MI : llvm::reverse(MBB)) {
-    if (MachineInstr *NewMI = tryReplaceInstr(&MI, MBB))
-      MIReplacements.push_back(std::make_pair(&MI, NewMI));
+  for (auto I = MBB.rbegin(); I != MBB.rend(); ++I) {
+    MachineInstr *MI = &*I;
+
+    if (MachineInstr *NewMI = tryReplaceInstr(MI, MBB))
+      MIReplacements.push_back(std::make_pair(MI, NewMI));
 
     // We're done with this instruction, update liveness for the next one.
-    LiveRegs.stepBackward(MI);
+    LiveRegs.stepBackward(*MI);
   }
 
   while (!MIReplacements.empty()) {

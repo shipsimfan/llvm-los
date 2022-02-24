@@ -323,14 +323,15 @@ static bool sinkLoopInvariantInstructions(Loop &L, AAResults &AA, LoopInfo &LI,
   // Traverse preheader's instructions in reverse order becaue if A depends
   // on B (A appears after B), A needs to be sinked first before B can be
   // sinked.
-  for (Instruction &I : llvm::make_early_inc_range(llvm::reverse(*Preheader))) {
+  for (auto II = Preheader->rbegin(), E = Preheader->rend(); II != E;) {
+    Instruction *I = &*II++;
     // No need to check for instruction's operands are loop invariant.
-    assert(L.hasLoopInvariantOperands(&I) &&
+    assert(L.hasLoopInvariantOperands(I) &&
            "Insts in a loop's preheader should have loop invariant operands!");
-    if (!canSinkOrHoistInst(I, &AA, &DT, &L, CurAST, MSSAU.get(), false,
+    if (!canSinkOrHoistInst(*I, &AA, &DT, &L, CurAST, MSSAU.get(), false,
                             LICMFlags.get()))
       continue;
-    if (sinkInstruction(L, I, ColdLoopBBs, LoopBlockNumber, LI, DT, BFI,
+    if (sinkInstruction(L, *I, ColdLoopBBs, LoopBlockNumber, LI, DT, BFI,
                         MSSAU.get()))
       Changed = true;
   }

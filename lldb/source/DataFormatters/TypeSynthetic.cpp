@@ -143,7 +143,7 @@ ScriptedSyntheticChildren::FrontEnd::FrontEnd(std::string pclass,
         m_python_class.c_str(), backend.GetSP());
 }
 
-ScriptedSyntheticChildren::FrontEnd::~FrontEnd() = default;
+ScriptedSyntheticChildren::FrontEnd::~FrontEnd() {}
 
 lldb::ValueObjectSP
 ScriptedSyntheticChildren::FrontEnd::GetChildAtIndex(size_t idx) {

@@ -40,7 +40,11 @@ public:
     if (!Group.diagnostics().empty())
       return false;
 
-    return llvm::all_of(Group.subgroups(), unimplemented);
+    for (const GroupRecord &GR : Group.subgroups())
+      if (!unimplemented(GR))
+        return false;
+
+    return true;
   }
 
   static bool enabledByDefault(const GroupRecord &Group) {

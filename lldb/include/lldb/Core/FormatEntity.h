@@ -12,8 +12,8 @@
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-types.h"
 #include <algorithm>
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <string>
 #include <vector>
@@ -128,7 +128,7 @@ public:
 
       constexpr Definition(const char *name, const FormatEntity::Entry::Type t,
                            const uint64_t data)
-          : name(name), type(t), data(data) {}
+          : name(name), string(nullptr), type(t), data(data) {}
 
       constexpr Definition(const char *name, const FormatEntity::Entry::Type t,
                            const uint64_t num_children,
@@ -148,7 +148,8 @@ public:
 
     Entry(Type t = Type::Invalid, const char *s = nullptr,
           const char *f = nullptr)
-        : string(s ? s : ""), printf_format(f ? f : ""), type(t) {}
+        : string(s ? s : ""), printf_format(f ? f : ""), children(), type(t),
+          fmt(lldb::eFormatDefault), number(0), deref(false) {}
 
     Entry(llvm::StringRef s);
     Entry(char ch);
@@ -201,9 +202,9 @@ public:
     std::string printf_format;
     std::vector<Entry> children;
     Type type;
-    lldb::Format fmt = lldb::eFormatDefault;
-    lldb::addr_t number = 0;
-    bool deref = false;
+    lldb::Format fmt;
+    lldb::addr_t number;
+    bool deref;
   };
 
   static bool Format(const Entry &entry, Stream &s, const SymbolContext *sc,

@@ -106,6 +106,9 @@ void WebAssemblyMCCodeEmitter::encodeInstruction(
           encodeSLEB128(int64_t(MO.getImm()), OS);
           break;
         case WebAssembly::OPERAND_SIGNATURE:
+        case WebAssembly::OPERAND_HEAPTYPE:
+          OS << uint8_t(MO.getImm());
+          break;
         case WebAssembly::OPERAND_VEC_I8IMM:
           support::endian::write<uint8_t>(OS, MO.getImm(), support::little);
           break;
@@ -151,7 +154,7 @@ void WebAssemblyMCCodeEmitter::encodeInstruction(
       case WebAssembly::OPERAND_SIGNATURE:
       case WebAssembly::OPERAND_TYPEINDEX:
       case WebAssembly::OPERAND_GLOBAL:
-      case WebAssembly::OPERAND_TAG:
+      case WebAssembly::OPERAND_EVENT:
         FixupKind = MCFixupKind(WebAssembly::fixup_uleb128_i32);
         break;
       case WebAssembly::OPERAND_OFFSET64:

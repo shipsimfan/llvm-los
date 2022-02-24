@@ -17,6 +17,7 @@
 
 namespace llvm {
 class DIMacroFile;
+class DIMacroNode;
 }
 namespace clang {
 class Preprocessor;

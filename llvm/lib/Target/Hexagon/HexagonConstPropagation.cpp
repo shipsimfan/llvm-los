@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#define DEBUG_TYPE "hcp"
+
 #include "HexagonInstrInfo.h"
 #include "HexagonRegisterInfo.h"
 #include "HexagonSubtarget.h"
@@ -42,8 +44,6 @@
 #include <set>
 #include <utility>
 #include <vector>
-
-#define DEBUG_TYPE "hcp"
 
 using namespace llvm;
 
@@ -125,8 +125,8 @@ namespace {
     };
 
     LatticeCell() : Kind(Top), Size(0), IsSpecial(false) {
-      for (const Constant *&Value : Values)
-        Value = nullptr;
+      for (unsigned i = 0; i < MaxCellSize; ++i)
+        Values[i] = nullptr;
     }
 
     bool meet(const LatticeCell &L);
@@ -863,13 +863,14 @@ void MachineConstPropagator::removeCFGEdge(MachineBasicBlock *From,
   // First, remove the CFG successor/predecessor information.
   From->removeSuccessor(To);
   // Remove all corresponding PHI operands in the To block.
-  for (MachineInstr &PN : To->phis()) {
+  for (auto I = To->begin(), E = To->getFirstNonPHI(); I != E; ++I) {
+    MachineInstr *PN = &*I;
     // reg0 = PHI reg1, bb2, reg3, bb4, ...
-    int N = PN.getNumOperands() - 2;
+    int N = PN->getNumOperands()-2;
     while (N > 0) {
-      if (PN.getOperand(N + 1).getMBB() == From) {
-        PN.RemoveOperand(N + 1);
-        PN.RemoveOperand(N);
+      if (PN->getOperand(N+1).getMBB() == From) {
+        PN->RemoveOperand(N+1);
+        PN->RemoveOperand(N);
       }
       N -= 2;
     }
@@ -995,7 +996,8 @@ bool MachineConstPropagator::rewrite(MachineFunction &MF) {
     bool HaveTargets = computeBlockSuccessors(B, Targets);
     // Rewrite the executable instructions. Skip branches if we don't
     // have block successor information.
-    for (MachineInstr &MI : llvm::reverse(*B)) {
+    for (auto I = B->rbegin(), E = B->rend(); I != E; ++I) {
+      MachineInstr &MI = *I;
       if (InstrExec.count(&MI)) {
         if (MI.isBranch() && !HaveTargets)
           continue;
@@ -1029,8 +1031,8 @@ bool MachineConstPropagator::rewrite(MachineFunction &MF) {
           ToRemove.push_back(const_cast<MachineBasicBlock*>(SB));
         Targets.remove(SB);
       }
-      for (MachineBasicBlock *MBB : ToRemove)
-        removeCFGEdge(B, MBB);
+      for (unsigned i = 0, n = ToRemove.size(); i < n; ++i)
+        removeCFGEdge(B, ToRemove[i]);
       // If there are any blocks left in the computed targets, it means that
       // we think that the block could go somewhere, but the CFG does not.
       // This could legitimately happen in blocks that have non-returning
@@ -1044,9 +1046,13 @@ bool MachineConstPropagator::rewrite(MachineFunction &MF) {
   // erase instructions during rewriting, so this needs to be delayed until
   // now.
   for (MachineBasicBlock &B : MF) {
-    for (MachineInstr &MI : llvm::make_early_inc_range(B))
-      if (MI.isBranch() && !InstrExec.count(&MI))
-        B.erase(&MI);
+    MachineBasicBlock::iterator I = B.begin(), E = B.end();
+    while (I != E) {
+      auto Next = std::next(I);
+      if (I->isBranch() && !InstrExec.count(&*I))
+        B.erase(I);
+      I = Next;
+    }
   }
   return Changed;
 }
@@ -3127,9 +3133,11 @@ void HexagonConstEvaluator::replaceAllRegUsesWith(Register FromReg,
                                                   Register ToReg) {
   assert(FromReg.isVirtual());
   assert(ToReg.isVirtual());
-  for (MachineOperand &O :
-       llvm::make_early_inc_range(MRI->use_operands(FromReg)))
+  for (auto I = MRI->use_begin(FromReg), E = MRI->use_end(); I != E;) {
+    MachineOperand &O = *I;
+    ++I;
     O.setReg(ToReg);
+  }
 }
 
 bool HexagonConstEvaluator::rewriteHexBranch(MachineInstr &BrI,

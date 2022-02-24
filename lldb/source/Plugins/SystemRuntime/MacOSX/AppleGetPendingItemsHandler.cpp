@@ -20,7 +20,6 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
 
@@ -103,7 +102,7 @@ AppleGetPendingItemsHandler::AppleGetPendingItemsHandler(Process *process)
       m_get_pending_items_return_buffer_addr(LLDB_INVALID_ADDRESS),
       m_get_pending_items_retbuffer_mutex() {}
 
-AppleGetPendingItemsHandler::~AppleGetPendingItemsHandler() = default;
+AppleGetPendingItemsHandler::~AppleGetPendingItemsHandler() {}
 
 void AppleGetPendingItemsHandler::Detach() {
   if (m_process && m_process->IsAlive() &&
@@ -134,7 +133,7 @@ lldb::addr_t AppleGetPendingItemsHandler::SetupGetPendingItemsFunction(
   ThreadSP thread_sp(thread.shared_from_this());
   ExecutionContext exe_ctx(thread_sp);
   DiagnosticManager diagnostics;
-  Log *log = GetLog(LLDBLog::SystemRuntime);
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_SYSTEM_RUNTIME));
 
   lldb::addr_t args_addr = LLDB_INVALID_ADDRESS;
   FunctionCaller *get_pending_items_caller = nullptr;
@@ -218,7 +217,7 @@ AppleGetPendingItemsHandler::GetPendingItems(Thread &thread, addr_t queue,
   TargetSP target_sp(thread.CalculateTarget());
   TypeSystemClang *clang_ast_context =
       ScratchTypeSystemClang::GetForTarget(*target_sp);
-  Log *log = GetLog(LLDBLog::SystemRuntime);
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_SYSTEM_RUNTIME));
 
   GetPendingItemsReturnInfo return_value;
   return_value.items_buffer_ptr = LLDB_INVALID_ADDRESS;

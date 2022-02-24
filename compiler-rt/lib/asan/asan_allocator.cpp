@@ -102,18 +102,19 @@ class ChunkHeader {
 
  public:
   uptr UsedSize() const {
-    static_assert(sizeof(user_requested_size_lo) == 4,
-                  "Expression below requires this");
-    return FIRST_32_SECOND_64(0, ((uptr)user_requested_size_hi << 32)) +
-           user_requested_size_lo;
+    uptr R = user_requested_size_lo;
+    if (sizeof(uptr) > sizeof(user_requested_size_lo))
+      R += (uptr)user_requested_size_hi << (8 * sizeof(user_requested_size_lo));
+    return R;
   }
 
   void SetUsedSize(uptr size) {
     user_requested_size_lo = size;
-    static_assert(sizeof(user_requested_size_lo) == 4,
-                  "Expression below requires this");
-    user_requested_size_hi = FIRST_32_SECOND_64(0, size >> 32);
-    CHECK_EQ(UsedSize(), size);
+    if (sizeof(uptr) > sizeof(user_requested_size_lo)) {
+      size >>= (8 * sizeof(user_requested_size_lo));
+      user_requested_size_hi = size;
+      CHECK_EQ(user_requested_size_hi, size);
+    }
   }
 
   void SetAllocContext(u32 tid, u32 stack) {
@@ -210,7 +211,8 @@ struct QuarantineCallback {
       CHECK_EQ(old_chunk_state, CHUNK_QUARANTINE);
     }
 
-    PoisonShadow(m->Beg(), RoundUpTo(m->UsedSize(), ASAN_SHADOW_GRANULARITY),
+    PoisonShadow(m->Beg(),
+                 RoundUpTo(m->UsedSize(), SHADOW_GRANULARITY),
                  kAsanHeapLeftRedzoneMagic);
 
     // Statistics.
@@ -304,6 +306,7 @@ struct Allocator {
   QuarantineCache fallback_quarantine_cache;
 
   uptr max_user_defined_malloc_size;
+  atomic_uint8_t rss_limit_exceeded;
 
   // ------------------- Options --------------------------
   atomic_uint16_t min_redzone;
@@ -343,6 +346,14 @@ struct Allocator {
                                        : kMaxAllowedMallocSize;
   }
 
+  bool RssLimitExceeded() {
+    return atomic_load(&rss_limit_exceeded, memory_order_relaxed);
+  }
+
+  void SetRssLimitExceeded(bool limit_exceeded) {
+    atomic_store(&rss_limit_exceeded, limit_exceeded, memory_order_relaxed);
+  }
+
   void RePoisonChunk(uptr chunk) {
     // This could be a user-facing chunk (with redzones), or some internal
     // housekeeping chunk, like TransferBatch. Start by assuming the former.
@@ -356,7 +367,7 @@ struct Allocator {
       if (chunk < beg && beg < end && end <= chunk_end) {
         // Looks like a valid AsanChunk in use, poison redzones only.
         PoisonShadow(chunk, beg - chunk, kAsanHeapLeftRedzoneMagic);
-        uptr end_aligned_down = RoundDownTo(end, ASAN_SHADOW_GRANULARITY);
+        uptr end_aligned_down = RoundDownTo(end, SHADOW_GRANULARITY);
         FastPoisonShadowPartialRightRedzone(
             end_aligned_down, end - end_aligned_down,
             chunk_end - end_aligned_down, kAsanHeapLeftRedzoneMagic);
@@ -474,14 +485,14 @@ struct Allocator {
                  AllocType alloc_type, bool can_fill) {
     if (UNLIKELY(!asan_inited))
       AsanInitFromRtl();
-    if (UNLIKELY(IsRssLimitExceeded())) {
+    if (RssLimitExceeded()) {
       if (AllocatorMayReturnNull())
         return nullptr;
       ReportRssLimitExceeded(stack);
     }
     Flags &fl = *flags();
     CHECK(stack);
-    const uptr min_alignment = ASAN_SHADOW_GRANULARITY;
+    const uptr min_alignment = SHADOW_GRANULARITY;
     const uptr user_requested_alignment_log =
         ComputeUserRequestedAlignmentLog(alignment);
     if (alignment < min_alignment)
@@ -511,7 +522,7 @@ struct Allocator {
         size > max_user_defined_malloc_size) {
       if (AllocatorMayReturnNull()) {
         Report("WARNING: AddressSanitizer failed to allocate 0x%zx bytes\n",
-               size);
+               (void*)size);
         return nullptr;
       }
       uptr malloc_limit =
@@ -562,7 +573,7 @@ struct Allocator {
     m->SetAllocContext(t ? t->tid() : kMainTid, StackDepotPut(*stack));
 
     uptr size_rounded_down_to_granularity =
-        RoundDownTo(size, ASAN_SHADOW_GRANULARITY);
+        RoundDownTo(size, SHADOW_GRANULARITY);
     // Unpoison the bulk of the memory region.
     if (size_rounded_down_to_granularity)
       PoisonShadow(user_beg, size_rounded_down_to_granularity, 0);
@@ -570,7 +581,7 @@ struct Allocator {
     if (size != size_rounded_down_to_granularity && CanPoisonMemory()) {
       u8 *shadow =
           (u8 *)MemToShadow(user_beg + size_rounded_down_to_granularity);
-      *shadow = fl.poison_partial ? (size & (ASAN_SHADOW_GRANULARITY - 1)) : 0;
+      *shadow = fl.poison_partial ? (size & (SHADOW_GRANULARITY - 1)) : 0;
     }
 
     AsanStats &thread_stats = GetCurrentThreadStats();
@@ -640,7 +651,8 @@ struct Allocator {
     }
 
     // Poison the region.
-    PoisonShadow(m->Beg(), RoundUpTo(m->UsedSize(), ASAN_SHADOW_GRANULARITY),
+    PoisonShadow(m->Beg(),
+                 RoundUpTo(m->UsedSize(), SHADOW_GRANULARITY),
                  kAsanHeapFreeMagic);
 
     AsanStats &thread_stats = GetCurrentThreadStats();
@@ -840,12 +852,12 @@ struct Allocator {
     quarantine.PrintStats();
   }
 
-  void ForceLock() SANITIZER_ACQUIRE(fallback_mutex) {
+  void ForceLock() {
     allocator.ForceLock();
     fallback_mutex.Lock();
   }
 
-  void ForceUnlock() SANITIZER_RELEASE(fallback_mutex) {
+  void ForceUnlock() {
     fallback_mutex.Unlock();
     allocator.ForceUnlock();
   }
@@ -896,6 +908,13 @@ AllocType AsanChunkView::GetAllocType() const {
   return (AllocType)chunk_->alloc_type;
 }
 
+static StackTrace GetStackTraceFromId(u32 id) {
+  CHECK(id);
+  StackTrace res = StackDepotGet(id);
+  CHECK(res.trace);
+  return res;
+}
+
 u32 AsanChunkView::GetAllocStackId() const {
   u32 tid = 0;
   u32 stack = 0;
@@ -910,6 +929,14 @@ u32 AsanChunkView::GetFreeStackId() const {
   u32 stack = 0;
   chunk_->GetFreeContext(tid, stack);
   return stack;
+}
+
+StackTrace AsanChunkView::GetAllocStack() const {
+  return GetStackTraceFromId(GetAllocStackId());
+}
+
+StackTrace AsanChunkView::GetFreeStack() const {
+  return GetStackTraceFromId(GetFreeStackId());
 }
 
 void InitializeAllocator(const AllocatorOptions &options) {
@@ -1054,12 +1081,16 @@ uptr asan_mz_size(const void *ptr) {
   return instance.AllocationSize(reinterpret_cast<uptr>(ptr));
 }
 
-void asan_mz_force_lock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
+void asan_mz_force_lock() {
   instance.ForceLock();
 }
 
-void asan_mz_force_unlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
+void asan_mz_force_unlock() {
   instance.ForceUnlock();
+}
+
+void AsanSoftRssLimitExceededCallback(bool limit_exceeded) {
+  instance.SetRssLimitExceeded(limit_exceeded);
 }
 
 }  // namespace __asan

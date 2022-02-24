@@ -20,10 +20,8 @@
 
 namespace mlir {
 class AsmState;
-class Block;
 class BlockArgument;
 class Operation;
-class OpOperand;
 class OpResult;
 class Region;
 class Value;
@@ -83,10 +81,11 @@ protected:
 /// an Operation(in the case of an OpResult).
 class Value {
 public:
-  constexpr Value(detail::ValueImpl *impl = nullptr) : impl(impl) {}
+  Value(detail::ValueImpl *impl = nullptr) : impl(impl) {}
+  Value(const Value &) = default;
+  Value &operator=(const Value &) = default;
 
-  template <typename U>
-  bool isa() const {
+  template <typename U> bool isa() const {
     assert(*this && "isa<> used on a null type.");
     return U::classof(*this);
   }
@@ -95,16 +94,13 @@ public:
   bool isa() const {
     return isa<First>() || isa<Second, Rest...>();
   }
-  template <typename U>
-  U dyn_cast() const {
+  template <typename U> U dyn_cast() const {
     return isa<U>() ? U(impl) : U(nullptr);
   }
-  template <typename U>
-  U dyn_cast_or_null() const {
+  template <typename U> U dyn_cast_or_null() const {
     return (*this && isa<U>()) ? U(impl) : U(nullptr);
   }
-  template <typename U>
-  U cast() const {
+  template <typename U> U cast() const {
     assert(isa<U>());
     return U(impl);
   }
@@ -138,9 +134,9 @@ public:
     return llvm::dyn_cast_or_null<OpTy>(getDefiningOp());
   }
 
-  /// Return the location of this value.
+  /// If this value is the result of an operation, use it as a location,
+  /// otherwise return an unknown location.
   Location getLoc() const;
-  void setLoc(Location loc);
 
   /// Return the Region in which this Value is defined.
   Region *getParentRegion();
@@ -152,15 +148,16 @@ public:
   // UseLists
   //===--------------------------------------------------------------------===//
 
+  /// Provide the use list that is attached to this value.
+  IRObjectWithUseList<OpOperand> *getUseList() const { return impl; }
+
   /// Drop all uses of this object from their respective owners.
-  void dropAllUses() const { return impl->dropAllUses(); }
+  void dropAllUses() const { return getUseList()->dropAllUses(); }
 
   /// Replace all uses of 'this' value with the new value, updating anything in
   /// the IR that uses 'this' to use the other value instead.  When this returns
   /// there are zero uses of 'this'.
-  void replaceAllUsesWith(Value newValue) const {
-    impl->replaceAllUsesWith(newValue);
-  }
+  void replaceAllUsesWith(Value newValue) const;
 
   /// Replace all uses of 'this' value with 'newValue', updating anything in the
   /// IR that uses 'this' to use the other value instead except if the user is
@@ -168,11 +165,6 @@ public:
   void
   replaceAllUsesExcept(Value newValue,
                        const SmallPtrSetImpl<Operation *> &exceptions) const;
-
-  /// Replace all uses of 'this' value with 'newValue', updating anything in the
-  /// IR that uses 'this' to use the other value instead except if the user is
-  /// 'exceptedUser'.
-  void replaceAllUsesExcept(Value newValue, Operation *exceptedUser) const;
 
   /// Replace all uses of 'this' value with 'newValue' if the given callback
   /// returns true.
@@ -189,17 +181,17 @@ public:
   using use_iterator = ValueUseIterator<OpOperand>;
   using use_range = iterator_range<use_iterator>;
 
-  use_iterator use_begin() const { return impl->use_begin(); }
+  use_iterator use_begin() const { return getUseList()->use_begin(); }
   use_iterator use_end() const { return use_iterator(); }
 
   /// Returns a range of all uses, which is useful for iterating over all uses.
   use_range getUses() const { return {use_begin(), use_end()}; }
 
   /// Returns true if this value has exactly one use.
-  bool hasOneUse() const { return impl->hasOneUse(); }
+  bool hasOneUse() const { return getUseList()->hasOneUse(); }
 
   /// Returns true if this value has no uses.
-  bool use_empty() const { return impl->use_empty(); }
+  bool use_empty() const { return getUseList()->use_empty(); }
 
   //===--------------------------------------------------------------------===//
   // Users
@@ -241,29 +233,6 @@ inline raw_ostream &operator<<(raw_ostream &os, Value value) {
 }
 
 //===----------------------------------------------------------------------===//
-// OpOperand
-//===----------------------------------------------------------------------===//
-
-/// This class represents an operand of an operation. Instances of this class
-/// contain a reference to a specific `Value`.
-class OpOperand : public IROperand<OpOperand, Value> {
-public:
-  /// Provide the use list that is attached to the given value.
-  static IRObjectWithUseList<OpOperand> *getUseList(Value value) {
-    return value.getImpl();
-  }
-
-  /// Return which operand this is in the OpOperand list of the Operation.
-  unsigned getOperandNumber();
-
-private:
-  /// Keep the constructor private and accessible to the OperandStorage class
-  /// only to avoid hard-to-debug typo/programming mistakes.
-  friend class OperandStorage;
-  using IROperand<OpOperand, Value>::IROperand;
-};
-
-//===----------------------------------------------------------------------===//
 // BlockArgument
 //===----------------------------------------------------------------------===//
 
@@ -276,9 +245,8 @@ public:
   }
 
 private:
-  BlockArgumentImpl(Type type, Block *owner, int64_t index, Location loc)
-      : ValueImpl(type, Kind::BlockArgument), owner(owner), index(index),
-        loc(loc) {}
+  BlockArgumentImpl(Type type, Block *owner, int64_t index)
+      : ValueImpl(type, Kind::BlockArgument), owner(owner), index(index) {}
 
   /// The owner of this argument.
   Block *owner;
@@ -286,13 +254,10 @@ private:
   /// The position in the argument list.
   int64_t index;
 
-  /// The source location of this argument.
-  Location loc;
-
   /// Allow access to owner and constructor.
   friend BlockArgument;
 };
-} // namespace detail
+} // end namespace detail
 
 /// This class represents an argument of a Block.
 class BlockArgument : public Value {
@@ -309,15 +274,10 @@ public:
   /// Returns the number of this argument.
   unsigned getArgNumber() const { return getImpl()->index; }
 
-  /// Return the location for this argument.
-  Location getLoc() const { return getImpl()->loc; }
-  void setLoc(Location loc) { getImpl()->loc = loc; }
-
 private:
   /// Allocate a new argument with the given type and owner.
-  static BlockArgument create(Type type, Block *owner, int64_t index,
-                              Location loc) {
-    return new detail::BlockArgumentImpl(type, owner, index, loc);
+  static BlockArgument create(Type type, Block *owner, int64_t index) {
+    return new detail::BlockArgumentImpl(type, owner, index);
   }
 
   /// Destroy and deallocate this argument.
@@ -417,7 +377,7 @@ inline unsigned OpResultImpl::getResultNumber() const {
   return cast<InlineOpResult>(this)->getResultNumber();
 }
 
-} // namespace detail
+} // end namespace detail
 
 /// This is a value defined by a result of an operation.
 class OpResult : public Value {
@@ -461,8 +421,7 @@ inline ::llvm::hash_code hash_value(Value arg) {
 
 namespace llvm {
 
-template <>
-struct DenseMapInfo<mlir::Value> {
+template <> struct DenseMapInfo<mlir::Value> {
   static mlir::Value getEmptyKey() {
     void *pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
     return mlir::Value::getFromOpaquePointer(pointer);
@@ -487,21 +446,9 @@ struct DenseMapInfo<mlir::BlockArgument> : public DenseMapInfo<mlir::Value> {
     return reinterpret_cast<mlir::detail::BlockArgumentImpl *>(pointer);
   }
 };
-template <>
-struct DenseMapInfo<mlir::OpResult> : public DenseMapInfo<mlir::Value> {
-  static mlir::OpResult getEmptyKey() {
-    void *pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
-    return reinterpret_cast<mlir::detail::OpResultImpl *>(pointer);
-  }
-  static mlir::OpResult getTombstoneKey() {
-    void *pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
-    return reinterpret_cast<mlir::detail::OpResultImpl *>(pointer);
-  }
-};
 
 /// Allow stealing the low bits of a value.
-template <>
-struct PointerLikeTypeTraits<mlir::Value> {
+template <> struct PointerLikeTypeTraits<mlir::Value> {
 public:
   static inline void *getAsVoidPointer(mlir::Value value) {
     return const_cast<void *>(value.getAsOpaquePointer());
@@ -522,15 +469,7 @@ public:
     return reinterpret_cast<mlir::detail::BlockArgumentImpl *>(pointer);
   }
 };
-template <>
-struct PointerLikeTypeTraits<mlir::OpResult>
-    : public PointerLikeTypeTraits<mlir::Value> {
-public:
-  static inline mlir::OpResult getFromVoidPointer(void *pointer) {
-    return reinterpret_cast<mlir::detail::OpResultImpl *>(pointer);
-  }
-};
 
-} // namespace llvm
+} // end namespace llvm
 
 #endif

@@ -3,7 +3,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <errno.h>
-#include <future>
 #include <inttypes.h>
 #include <memory>
 #include <mutex>
@@ -17,7 +16,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <string>
 #include <thread>
 #include <time.h>
 #include <vector>
@@ -138,29 +136,12 @@ static void swap_chars() {
 #endif
 }
 
-static void trap() {
-#if defined(__x86_64__) || defined(__i386__)
-  asm volatile("int3");
-#elif defined(__aarch64__)
-  asm volatile("brk #0xf000");
-#elif defined(__arm__)
-  asm volatile("udf #254");
-#elif defined(__powerpc__)
-  asm volatile("trap");
-#elif __has_builtin(__builtin_debugtrap())
-  __builtin_debugtrap();
-#else
-#warning Don't know how to generate a trap. Some tests may fail.
-#endif
-}
-
 static void hello() {
   std::lock_guard<std::mutex> lock(g_print_mutex);
   printf("hello, world\n");
 }
 
-static void *thread_func(std::promise<void> ready) {
-  ready.set_value();
+static void *thread_func(void *arg) {
   static std::atomic<int> s_thread_index(1);
   const int this_thread_index = s_thread_index++;
   if (g_print_thread_ids) {
@@ -330,10 +311,7 @@ int main(int argc, char **argv) {
         _exit(0);
 #endif
     } else if (consume_front(arg, "thread:new")) {
-      std::promise<void> promise;
-      std::future<void> ready = promise.get_future();
-      threads.push_back(std::thread(thread_func, std::move(promise)));
-      ready.wait();
+        threads.push_back(std::thread(thread_func, nullptr));
     } else if (consume_front(arg, "thread:print-ids")) {
       // Turn on thread id announcing.
       g_print_thread_ids = true;
@@ -347,12 +325,6 @@ int main(int argc, char **argv) {
       g_threads_do_segfault = true;
     } else if (consume_front(arg, "print-pid")) {
       print_pid();
-    } else if (consume_front(arg, "print-env:")) {
-      // Print the value of specified envvar to stdout.
-      const char *value = getenv(arg.c_str());
-      printf("%s\n", value ? value : "__unset__");
-    } else if (consume_front(arg, "trap")) {
-      trap();
     } else {
       // Treat the argument as text for stdout.
       printf("%s\n", argv[i]);

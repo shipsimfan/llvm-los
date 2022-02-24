@@ -124,7 +124,7 @@ void UniqueptrResetReleaseCheck::check(const MatchFinder::MatchResult &Result) {
     AssignmentText = " = std::move(*";
     TrailingText = ")";
     NeedsUtilityInclude = true;
-  } else if (!Right->isPRValue()) {
+  } else if (!Right->isRValue()) {
     AssignmentText = " = std::move(";
     TrailingText = ")";
     NeedsUtilityInclude = true;

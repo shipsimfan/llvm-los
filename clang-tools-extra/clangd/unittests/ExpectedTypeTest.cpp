@@ -41,7 +41,7 @@ protected:
   /// An overload for convenience.
   llvm::Optional<OpaqueType> fromCompletionResult(const NamedDecl *D) {
     return OpaqueType::fromCompletionResult(
-        astCtx(), CodeCompletionResult(D, CCP_Declaration));
+        ASTCtx(), CodeCompletionResult(D, CCP_Declaration));
   }
 
   /// A set of DeclNames whose type match each other computed by
@@ -49,7 +49,7 @@ protected:
   using EquivClass = std::set<std::string>;
 
   Matcher<std::map<std::string, EquivClass>>
-  classesAre(llvm::ArrayRef<EquivClass> Classes) {
+  ClassesAre(llvm::ArrayRef<EquivClass> Classes) {
     using MapEntry = std::map<std::string, EquivClass>::value_type;
 
     std::vector<Matcher<MapEntry>> Elements;
@@ -65,13 +65,13 @@ protected:
   buildEquivClasses(llvm::ArrayRef<llvm::StringRef> DeclNames) {
     std::map<std::string, EquivClass> Classes;
     for (llvm::StringRef Name : DeclNames) {
-      auto Type = OpaqueType::fromType(astCtx(), typeOf(Name));
+      auto Type = OpaqueType::fromType(ASTCtx(), typeOf(Name));
       Classes[std::string(Type->raw())].insert(std::string(Name));
     }
     return Classes;
   }
 
-  ASTContext &astCtx() { return AST->getASTContext(); }
+  ASTContext &ASTCtx() { return AST->getASTContext(); }
 
 private:
   // Set after calling build().
@@ -101,7 +101,7 @@ TEST_F(ExpectedTypeConversionTest, BasicTypes) {
 
   EXPECT_THAT(buildEquivClasses({"b", "i", "ui", "ll", "f", "d", "iptr", "bptr",
                                  "user_type"}),
-              classesAre({{"b"},
+              ClassesAre({{"b"},
                           {"i", "ui", "ll"},
                           {"f", "d"},
                           {"iptr"},
@@ -140,10 +140,10 @@ TEST_F(ExpectedTypeConversionTest, FunctionReturns) {
      int* int_ptr;
   )cpp");
 
-  OpaqueType IntTy = *OpaqueType::fromType(astCtx(), typeOf("int_"));
+  OpaqueType IntTy = *OpaqueType::fromType(ASTCtx(), typeOf("int_"));
   EXPECT_EQ(fromCompletionResult(decl("returns_int")), IntTy);
 
-  OpaqueType IntPtrTy = *OpaqueType::fromType(astCtx(), typeOf("int_ptr"));
+  OpaqueType IntPtrTy = *OpaqueType::fromType(ASTCtx(), typeOf("int_ptr"));
   EXPECT_EQ(fromCompletionResult(decl("returns_ptr")), IntPtrTy);
 }
 
@@ -162,7 +162,7 @@ T* var_dependent = nullptr;
 int* int_ptr_;
   )cpp");
 
-  auto IntPtrTy = *OpaqueType::fromType(astCtx(), typeOf("int_ptr_"));
+  auto IntPtrTy = *OpaqueType::fromType(ASTCtx(), typeOf("int_ptr_"));
   EXPECT_EQ(fromCompletionResult(decl("returns_not_dependent")), IntPtrTy);
   EXPECT_EQ(fromCompletionResult(decl("returns_dependent")), llvm::None);
 

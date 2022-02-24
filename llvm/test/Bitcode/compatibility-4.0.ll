@@ -22,8 +22,8 @@ $comdat.exactmatch = comdat exactmatch
 ; CHECK: $comdat.exactmatch = comdat exactmatch
 $comdat.largest = comdat largest
 ; CHECK: $comdat.largest = comdat largest
-$comdat.noduplicates = comdat nodeduplicate
-; CHECK: $comdat.noduplicates = comdat nodeduplicate
+$comdat.noduplicates = comdat noduplicates
+; CHECK: $comdat.noduplicates = comdat noduplicates
 $comdat.samesize = comdat samesize
 ; CHECK: $comdat.samesize = comdat samesize
 
@@ -256,19 +256,19 @@ declare void @g.f1()
 
 ; IFunc -- Linkage
 @ifunc.external = external ifunc void (), i8* ()* @ifunc_resolver
-; CHECK: @ifunc.external = ifunc void (), bitcast (i8* ()* @ifunc_resolver to void ()* ()*)
+; CHECK: @ifunc.external = ifunc void (), i8* ()* @ifunc_resolver
 @ifunc.private = private ifunc void (), i8* ()* @ifunc_resolver
-; CHECK: @ifunc.private = private ifunc void (), bitcast (i8* ()* @ifunc_resolver to void ()* ()*)
+; CHECK: @ifunc.private = private ifunc void (), i8* ()* @ifunc_resolver
 @ifunc.internal = internal ifunc void (), i8* ()* @ifunc_resolver
-; CHECK: @ifunc.internal = internal ifunc void (), bitcast (i8* ()* @ifunc_resolver to void ()* ()*)
+; CHECK: @ifunc.internal = internal ifunc void (), i8* ()* @ifunc_resolver
 
 ; IFunc -- Visibility
 @ifunc.default = default ifunc void (), i8* ()* @ifunc_resolver
-; CHECK: @ifunc.default = ifunc void (), bitcast (i8* ()* @ifunc_resolver to void ()* ()*)
+; CHECK: @ifunc.default = ifunc void (), i8* ()* @ifunc_resolver
 @ifunc.hidden = hidden ifunc void (), i8* ()* @ifunc_resolver
-; CHECK: @ifunc.hidden = hidden ifunc void (), bitcast (i8* ()* @ifunc_resolver to void ()* ()*)
+; CHECK: @ifunc.hidden = hidden ifunc void (), i8* ()* @ifunc_resolver
 @ifunc.protected = protected ifunc void (), i8* ()* @ifunc_resolver
-; CHECK: @ifunc.protected = protected ifunc void (), bitcast (i8* ()* @ifunc_resolver to void ()* ()*)
+; CHECK: @ifunc.protected = protected ifunc void (), i8* ()* @ifunc_resolver
 
 define i8* @ifunc_resolver() {
 entry:

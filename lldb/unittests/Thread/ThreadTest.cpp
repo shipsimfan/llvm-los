@@ -55,7 +55,8 @@ public:
                           ThreadList &new_thread_list) override {
     return false;
   }
-  llvm::StringRef GetPluginName() override { return "Dummy"; }
+  ConstString GetPluginName() override { return ConstString("Dummy"); }
+  uint32_t GetPluginVersion() override { return 0; }
 
   ProcessModID &GetModIDNonConstRef() { return m_mod_id; }
 };

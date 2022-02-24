@@ -13,7 +13,6 @@
 
 #include "llvm/Remarks/BitstreamRemarkParser.h"
 #include "BitstreamRemarkParser.h"
-#include "llvm/Remarks/Remark.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 

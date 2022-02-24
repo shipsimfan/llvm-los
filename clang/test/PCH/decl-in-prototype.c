@@ -20,7 +20,7 @@ static inline __attribute__((always_inline)) f(enum { x, y } p) {
 
 #else
 
-int main(void) {
+int main() {
   return f(0);
 }
 

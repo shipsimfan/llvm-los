@@ -56,8 +56,10 @@ class WorkListMaintainer : public GISelChangeObserver {
   SmallPtrSet<const MachineInstr *, 4> CreatedInstrs;
 
 public:
-  WorkListMaintainer(WorkListTy &WorkList) : WorkList(WorkList) {}
-  virtual ~WorkListMaintainer() = default;
+  WorkListMaintainer(WorkListTy &WorkList)
+      : GISelChangeObserver(), WorkList(WorkList) {}
+  virtual ~WorkListMaintainer() {
+  }
 
   void erasingInstr(MachineInstr &MI) override {
     LLVM_DEBUG(dbgs() << "Erasing: " << MI << "\n");
@@ -128,15 +130,16 @@ bool Combiner::combineMachineInstrs(MachineFunction &MF,
       WrapperObserver.addObserver(CSEInfo);
     RAIIDelegateInstaller DelInstall(MF, &WrapperObserver);
     for (MachineBasicBlock *MBB : post_order(&MF)) {
-      for (MachineInstr &CurMI :
-           llvm::make_early_inc_range(llvm::reverse(*MBB))) {
+      for (auto MII = MBB->rbegin(), MIE = MBB->rend(); MII != MIE;) {
+        MachineInstr *CurMI = &*MII;
+        ++MII;
         // Erase dead insts before even adding to the list.
-        if (isTriviallyDead(CurMI, *MRI)) {
-          LLVM_DEBUG(dbgs() << CurMI << "Is dead; erasing.\n");
-          CurMI.eraseFromParent();
+        if (isTriviallyDead(*CurMI, *MRI)) {
+          LLVM_DEBUG(dbgs() << *CurMI << "Is dead; erasing.\n");
+          CurMI->eraseFromParentAndMarkDBGValuesForRemoval();
           continue;
         }
-        WorkList.deferred_insert(&CurMI);
+        WorkList.deferred_insert(CurMI);
       }
     }
     WorkList.finalize();
@@ -150,14 +153,8 @@ bool Combiner::combineMachineInstrs(MachineFunction &MF,
     MFChanged |= Changed;
   } while (Changed);
 
-#ifndef NDEBUG
-  if (CSEInfo) {
-    if (auto E = CSEInfo->verify()) {
-      errs() << E << '\n';
-      assert(false && "CSEInfo is not consistent. Likely missing calls to "
-                      "observer on mutations.");
-    }
-  }
-#endif
+  assert(!CSEInfo || (!errorToBool(CSEInfo->verify()) &&
+                         "CSEInfo is not consistent. Likely missing calls to "
+                         "observer on mutations"));
   return MFChanged;
 }

@@ -17,7 +17,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/WithColor.h"
 
 #include <algorithm>
 #include <array>
@@ -229,6 +229,7 @@ public:
   bool isZero() const { return !Value; }
   bool isNonZero() const { return !isZero(); }
   explicit operator bool() const { return isNonZero(); }
+  ScalarTy getValue() const { return Value; }
   ScalarTy getValue(unsigned Dim) const {
     return Dim == UnivariateDim ? Value : 0;
   }
@@ -249,7 +250,7 @@ public:
 
 //===----------------------------------------------------------------------===//
 // LinearPolySize - base class for fixed- or scalable sizes.
-//  ^  ^
+//  ^  ^ 
 //  |  |
 //  |  +----- ElementCount - Leaf class to represent an element count
 //  |                        (vscale x unsigned)
@@ -293,7 +294,7 @@ public:
   static LeafTy getNull() { return get(0, false); }
 
   /// Returns the minimum value this size can represent.
-  ScalarTy getKnownMinValue() const { return this->Value; }
+  ScalarTy getKnownMinValue() const { return this->getValue(); }
   /// Returns whether the size is scaled by a runtime quantity (vscale).
   bool isScalable() const { return this->UnivariateDim == ScalableDim; }
   /// A return value of true indicates we know at compile time that the number
@@ -499,7 +500,8 @@ inline raw_ostream &operator<<(raw_ostream &OS,
   return OS;
 }
 
-template <> struct DenseMapInfo<ElementCount, void> {
+template <typename T> struct DenseMapInfo;
+template <> struct DenseMapInfo<ElementCount> {
   static inline ElementCount getEmptyKey() {
     return ElementCount::getScalable(~0U);
   }

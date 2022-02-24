@@ -38,7 +38,6 @@ class HashTableIterator
     : public iterator_facade_base<HashTableIterator<ValueT>,
                                   std::forward_iterator_tag,
                                   const std::pair<uint32_t, ValueT>> {
-  using BaseT = typename HashTableIterator::iterator_facade_base;
   friend HashTable<ValueT>;
 
   HashTableIterator(const HashTable<ValueT> &Map, uint32_t Index,
@@ -77,7 +76,9 @@ public:
 
   // Implement postfix op++ in terms of prefix op++ by using the superclass
   // implementation.
-  using BaseT::operator++;
+  using iterator_facade_base<HashTableIterator<ValueT>,
+                             std::forward_iterator_tag,
+                             const std::pair<uint32_t, ValueT>>::operator++;
   HashTableIterator &operator++() {
     while (Index < Map->Buckets.size()) {
       ++Index;

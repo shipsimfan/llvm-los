@@ -296,7 +296,7 @@ static NestedNameSpecifier *createNestedNameSpecifierForScopeOf(
     } else if (const auto *TD = dyn_cast<TagDecl>(Outer)) {
       return createNestedNameSpecifier(
           Ctx, TD, FullyQualified, WithGlobalNsPrefix);
-    } else if (isa<TranslationUnitDecl>(Outer)) {
+    } else if (dyn_cast<TranslationUnitDecl>(Outer)) {
       // Context is the TU. Nothing needs to be done.
       return nullptr;
     } else {
@@ -356,19 +356,11 @@ NestedNameSpecifier *createNestedNameSpecifier(const ASTContext &Ctx,
                                                const TypeDecl *TD,
                                                bool FullyQualify,
                                                bool WithGlobalNsPrefix) {
-  const Type *TypePtr = TD->getTypeForDecl();
-  if (isa<const TemplateSpecializationType>(TypePtr) ||
-      isa<const RecordType>(TypePtr)) {
-    // We are asked to fully qualify and we have a Record Type (which
-    // may point to a template specialization) or Template
-    // Specialization Type. We need to fully qualify their arguments.
-
-    TypePtr = getFullyQualifiedTemplateType(Ctx, TypePtr, WithGlobalNsPrefix);
-  }
-
   return NestedNameSpecifier::Create(
-      Ctx, createOuterNNS(Ctx, TD, FullyQualify, WithGlobalNsPrefix),
-      false /*No TemplateKeyword*/, TypePtr);
+      Ctx,
+      createOuterNNS(Ctx, TD, FullyQualify, WithGlobalNsPrefix),
+      false /*No TemplateKeyword*/,
+      TD->getTypeForDecl());
 }
 
 /// Return the fully qualified type, including fully-qualified
@@ -416,13 +408,6 @@ QualType getFullyQualifiedType(QualType QT, const ASTContext &Ctx,
     // Add back the qualifiers.
     QT = Ctx.getQualifiedType(QT, Quals);
     return QT;
-  }
-
-  // We don't consider the alias introduced by `using a::X` as a new type.
-  // The qualified name is still a::X.
-  if (isa<UsingType>(QT.getTypePtr())) {
-    return getFullyQualifiedType(QT.getSingleStepDesugaredType(Ctx), Ctx,
-                                 WithGlobalNsPrefix);
   }
 
   // Remove the part of the type related to the type being a template

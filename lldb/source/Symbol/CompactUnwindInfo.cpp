@@ -15,7 +15,6 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
 
@@ -168,7 +167,7 @@ CompactUnwindInfo::CompactUnwindInfo(ObjectFile &objfile, SectionSP &section_sp)
 
 // destructor
 
-CompactUnwindInfo::~CompactUnwindInfo() = default;
+CompactUnwindInfo::~CompactUnwindInfo() {}
 
 bool CompactUnwindInfo::GetUnwindPlan(Target &target, Address addr,
                                       UnwindPlan &unwind_plan) {
@@ -183,7 +182,7 @@ bool CompactUnwindInfo::GetUnwindPlan(Target &target, Address addr,
 
     if (ArchSpec arch = m_objfile.GetArchitecture()) {
 
-      Log *log = GetLog(LLDBLog::Unwind);
+      Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
       if (log && log->GetVerbose()) {
         StreamString strm;
         addr.Dump(
@@ -252,7 +251,7 @@ void CompactUnwindInfo::ScanIndex(const ProcessSP &process_sp) {
     return;
   }
 
-  Log *log = GetLog(LLDBLog::Unwind);
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
   if (log)
     m_objfile.GetModule()->LogMessage(
         log, "Reading compact unwind first-level indexes");

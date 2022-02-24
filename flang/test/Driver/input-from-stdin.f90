@@ -1,5 +1,7 @@
 ! Verify that reading from stdin works as expected
 
+! REQUIRES: new-flang-driver
+
 !--------------------------
 ! FLANG DRIVER (flang)
 !--------------------------
@@ -28,8 +30,8 @@
 !-------------------------
 ! EXPECTED OUTPUT for `-E`
 !-------------------------
-! PP-NOT-DEFINED: Program B
-! PP-DEFINED: Program A
+! PP-NOT-DEFINED: program b
+! PP-DEFINED: program a
 
 !-------------------------------
 ! EXPECTED OUTPUT for `-test-io`

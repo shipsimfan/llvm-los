@@ -1,4 +1,4 @@
-//===----------------------------------------------------------------------===//
+//===------------------------- __libunwind_config.h -----------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -23,7 +23,6 @@
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_OR1K      32
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_MIPS      65
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_SPARC     31
-#define _LIBUNWIND_HIGHEST_DWARF_REGISTER_SPARC64   31
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_HEXAGON   34
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_RISCV     64
 #define _LIBUNWIND_HIGHEST_DWARF_REGISTER_VE        143
@@ -56,7 +55,7 @@
 #  define _LIBUNWIND_CONTEXT_SIZE 167
 #  define _LIBUNWIND_CURSOR_SIZE 179
 #  define _LIBUNWIND_HIGHEST_DWARF_REGISTER _LIBUNWIND_HIGHEST_DWARF_REGISTER_PPC64
-# elif defined(__powerpc__)
+# elif defined(__ppc__)
 #  define _LIBUNWIND_TARGET_PPC 1
 #  define _LIBUNWIND_CONTEXT_SIZE 117
 #  define _LIBUNWIND_CURSOR_SIZE 124
@@ -126,12 +125,6 @@
 #    error "Unsupported MIPS ABI and/or environment"
 #  endif
 #  define _LIBUNWIND_HIGHEST_DWARF_REGISTER _LIBUNWIND_HIGHEST_DWARF_REGISTER_MIPS
-#elif defined(__sparc__) && defined(__arch64__)
-#define _LIBUNWIND_TARGET_SPARC64 1
-#define _LIBUNWIND_HIGHEST_DWARF_REGISTER                                      \
-  _LIBUNWIND_HIGHEST_DWARF_REGISTER_SPARC64
-#define _LIBUNWIND_CONTEXT_SIZE 33
-#define _LIBUNWIND_CURSOR_SIZE 45
 # elif defined(__sparc__)
   #define _LIBUNWIND_TARGET_SPARC 1
   #define _LIBUNWIND_HIGHEST_DWARF_REGISTER _LIBUNWIND_HIGHEST_DWARF_REGISTER_SPARC
@@ -172,7 +165,6 @@
 # define _LIBUNWIND_TARGET_MIPS_O32 1
 # define _LIBUNWIND_TARGET_MIPS_NEWABI 1
 # define _LIBUNWIND_TARGET_SPARC 1
-# define _LIBUNWIND_TARGET_SPARC64 1
 # define _LIBUNWIND_TARGET_HEXAGON 1
 # define _LIBUNWIND_TARGET_RISCV 1
 # define _LIBUNWIND_TARGET_VE 1

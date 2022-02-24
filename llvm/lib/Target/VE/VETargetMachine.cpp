@@ -17,7 +17,7 @@
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/LegacyPassManager.h"
-#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/TargetRegistry.h"
 
 using namespace llvm;
 
@@ -90,7 +90,7 @@ VETargetMachine::VETargetMachine(const Target &T, const Triple &TT,
   initAsmInfo();
 }
 
-VETargetMachine::~VETargetMachine() = default;
+VETargetMachine::~VETargetMachine() {}
 
 TargetTransformInfo VETargetMachine::getTargetTransformInfo(const Function &F) {
   return TargetTransformInfo(VETTIImpl(this, F));

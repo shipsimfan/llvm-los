@@ -23,6 +23,7 @@ add_lldb_library(lldbExpression
     lldbSymbol
     lldbTarget
     lldbUtility
+    lldbPluginCPlusPlusLanguage
     lldbPluginObjectFileJIT
 
   LINK_COMPONENTS

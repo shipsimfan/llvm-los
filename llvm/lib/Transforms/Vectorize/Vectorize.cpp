@@ -18,7 +18,6 @@
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/InitializePasses.h"
-#include "llvm/PassRegistry.h"
 
 using namespace llvm;
 

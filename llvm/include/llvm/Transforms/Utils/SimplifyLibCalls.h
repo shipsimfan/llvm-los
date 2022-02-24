@@ -105,7 +105,7 @@ private:
   OptimizationRemarkEmitter &ORE;
   BlockFrequencyInfo *BFI;
   ProfileSummaryInfo *PSI;
-  bool UnsafeFPShrink = false;
+  bool UnsafeFPShrink;
   function_ref<void(Instruction *, Value *)> Replacer;
   function_ref<void(Instruction *)> Eraser;
 
@@ -131,6 +131,8 @@ private:
     replaceAllUsesWith(I, With);
     eraseFromParent(I);
   }
+
+  Value *foldMallocMemset(CallInst *Memset, IRBuilderBase &B);
 
 public:
   LibCallSimplifier(

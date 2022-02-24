@@ -456,7 +456,7 @@ public:
                        Optional<StorageClass> storage = llvm::None);
 };
 
-} // namespace spirv
-} // namespace mlir
+} // end namespace spirv
+} // end namespace mlir
 
 #endif // MLIR_DIALECT_SPIRV_IR_SPIRVTYPES_H_

@@ -39,11 +39,9 @@
 #include <vector>
 
 namespace llvm {
-namespace detail {
-struct RecordContext;
-} // namespace detail
 
 class ListRecTy;
+struct MultiClass;
 class Record;
 class RecordKeeper;
 class RecordVal;
@@ -102,7 +100,7 @@ inline raw_ostream &operator<<(raw_ostream &OS, const RecTy &Ty) {
 
 /// 'bit' - Represent a single bit
 class BitRecTy : public RecTy {
-  friend detail::RecordContext;
+  static BitRecTy Shared;
 
   BitRecTy() : RecTy(BitRecTyKind) {}
 
@@ -111,7 +109,7 @@ public:
     return RT->getRecTyKind() == BitRecTyKind;
   }
 
-  static BitRecTy *get();
+  static BitRecTy *get() { return &Shared; }
 
   std::string getAsString() const override { return "bit"; }
 
@@ -142,7 +140,7 @@ public:
 
 /// 'int' - Represent an integer value of no particular size
 class IntRecTy : public RecTy {
-  friend detail::RecordContext;
+  static IntRecTy Shared;
 
   IntRecTy() : RecTy(IntRecTyKind) {}
 
@@ -151,7 +149,7 @@ public:
     return RT->getRecTyKind() == IntRecTyKind;
   }
 
-  static IntRecTy *get();
+  static IntRecTy *get() { return &Shared; }
 
   std::string getAsString() const override { return "int"; }
 
@@ -160,7 +158,7 @@ public:
 
 /// 'string' - Represent an string value
 class StringRecTy : public RecTy {
-  friend detail::RecordContext;
+  static StringRecTy Shared;
 
   StringRecTy() : RecTy(StringRecTyKind) {}
 
@@ -169,7 +167,7 @@ public:
     return RT->getRecTyKind() == StringRecTyKind;
   }
 
-  static StringRecTy *get();
+  static StringRecTy *get() { return &Shared; }
 
   std::string getAsString() const override;
 
@@ -202,7 +200,7 @@ public:
 
 /// 'dag' - Represent a dag fragment
 class DagRecTy : public RecTy {
-  friend detail::RecordContext;
+  static DagRecTy Shared;
 
   DagRecTy() : RecTy(DagRecTyKind) {}
 
@@ -211,7 +209,7 @@ public:
     return RT->getRecTyKind() == DagRecTyKind;
   }
 
-  static DagRecTy *get();
+  static DagRecTy *get() { return &Shared; }
 
   std::string getAsString() const override;
 };
@@ -223,7 +221,6 @@ public:
 class RecordRecTy final : public RecTy, public FoldingSetNode,
                           public TrailingObjects<RecordRecTy, Record *> {
   friend class Record;
-  friend detail::RecordContext;
 
   unsigned NumClasses;
 
@@ -440,8 +437,6 @@ public:
 
 /// '?' - Represents an uninitialized value.
 class UnsetInit : public Init {
-  friend detail::RecordContext;
-
   UnsetInit() : Init(IK_UnsetInit) {}
 
 public:
@@ -473,11 +468,9 @@ public:
 
 /// 'true'/'false' - Represent a concrete initializer for a bit.
 class BitInit final : public TypedInit {
-  friend detail::RecordContext;
-
   bool Value;
 
-  explicit BitInit(bool V, RecTy *T) : TypedInit(IK_BitInit, T), Value(V) {}
+  explicit BitInit(bool V) : TypedInit(IK_BitInit, BitRecTy::get()), Value(V) {}
 
 public:
   BitInit(const BitInit &) = delete;
@@ -644,7 +637,7 @@ public:
   }
 
   StringRef getValue() const { return Value; }
-  StringFormat getFormat() const { return Format; }
+  StringFormat getFormat() const { return Format; }  
   bool hasCodeFormat() const { return Format == SF_Code; }
 
   Init *convertInitializerTo(RecTy *Ty) const override;
@@ -1421,7 +1414,6 @@ private:
   SMLoc Loc; // Source location of definition of name.
   PointerIntPair<RecTy *, 2, FieldKind> TyAndKind;
   Init *Value;
-  bool IsUsed = false;
 
 public:
   RecordVal(Init *N, RecTy *T, FieldKind K);
@@ -1466,11 +1458,6 @@ public:
   /// Set the value and source location of the field.
   bool setValue(Init *V, SMLoc NewLoc);
 
-  /// Whether this value is used. Useful for reporting warnings, for example
-  /// when a template argument is unused.
-  void setUsed(bool Used) { IsUsed = Used; }
-  bool isUsed() const { return IsUsed; }
-
   void dump() const;
 
   /// Print the value to an output stream, possibly with a semicolon.
@@ -1496,6 +1483,8 @@ public:
   };
 
 private:
+  static unsigned LastID;
+
   Init *Name;
   // Location where record was instantiated, followed by the location of
   // multiclass prototypes used.
@@ -1526,8 +1515,8 @@ public:
   // Constructs a record.
   explicit Record(Init *N, ArrayRef<SMLoc> locs, RecordKeeper &records,
                   bool Anonymous = false, bool Class = false)
-      : Name(N), Locs(locs.begin(), locs.end()), TrackedRecords(records),
-        ID(getNewUID()), IsAnonymous(Anonymous), IsClass(Class) {
+    : Name(N), Locs(locs.begin(), locs.end()), TrackedRecords(records),
+      ID(LastID++), IsAnonymous(Anonymous), IsClass(Class) {
     checkName();
   }
 
@@ -1539,12 +1528,12 @@ public:
   // ID number. Don't copy CorrespondingDefInit either, since it's owned by the
   // original record. All other fields can be copied normally.
   Record(const Record &O)
-      : Name(O.Name), Locs(O.Locs), TemplateArgs(O.TemplateArgs),
-        Values(O.Values), Assertions(O.Assertions),
-        SuperClasses(O.SuperClasses), TrackedRecords(O.TrackedRecords),
-        ID(getNewUID()), IsAnonymous(O.IsAnonymous), IsClass(O.IsClass) {}
+    : Name(O.Name), Locs(O.Locs), TemplateArgs(O.TemplateArgs),
+      Values(O.Values), Assertions(O.Assertions), SuperClasses(O.SuperClasses),
+      TrackedRecords(O.TrackedRecords), ID(LastID++),
+      IsAnonymous(O.IsAnonymous), IsClass(O.IsClass) { }
 
-  static unsigned getNewUID();
+  static unsigned getNewUID() { return LastID++; }
 
   unsigned getID() const { return ID; }
 
@@ -1643,7 +1632,6 @@ public:
   }
 
   void checkRecordAssertions();
-  void checkUnusedTemplateArgs();
 
   bool isSubClassOf(const Record *R) const {
     for (const auto &SCPair : SuperClasses)
@@ -2015,7 +2003,7 @@ class Resolver {
 
 public:
   explicit Resolver(Record *CurRec) : CurRec(CurRec) {}
-  virtual ~Resolver() = default;
+  virtual ~Resolver() {}
 
   Record *getCurrentRecord() const { return CurRec; }
 

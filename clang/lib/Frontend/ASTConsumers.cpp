@@ -57,11 +57,8 @@ namespace {
         bool ShowColors = Out.has_colors();
         if (ShowColors)
           Out.changeColor(raw_ostream::BLUE);
-
-        if (OutputFormat == ADOF_Default)
-          Out << (OutputKind != Print ? "Dumping " : "Printing ") << getName(D)
-              << ":\n";
-
+        Out << (OutputKind != Print ? "Dumping " : "Printing ") << getName(D)
+            << ":\n";
         if (ShowColors)
           Out.resetColor();
         print(D);

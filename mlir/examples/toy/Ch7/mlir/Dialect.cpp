@@ -22,8 +22,6 @@
 using namespace mlir;
 using namespace mlir::toy;
 
-#include "toy/Dialect.cpp.inc"
-
 //===----------------------------------------------------------------------===//
 // ToyInlinerInterface
 //===----------------------------------------------------------------------===//
@@ -87,7 +85,7 @@ struct ToyInlinerInterface : public DialectInlinerInterface {
 static mlir::ParseResult parseBinaryOp(mlir::OpAsmParser &parser,
                                        mlir::OperationState &result) {
   SmallVector<mlir::OpAsmParser::OperandType, 2> operands;
-  SMLoc operandsLoc = parser.getCurrentLocation();
+  llvm::SMLoc operandsLoc = parser.getCurrentLocation();
   Type type;
   if (parser.parseOperandList(operands, /*requiredOperandCount=*/2) ||
       parser.parseOptionalAttrDict(result.attributes) ||
@@ -114,7 +112,7 @@ static mlir::ParseResult parseBinaryOp(mlir::OpAsmParser &parser,
 /// A generalized printer for binary operations. It prints in two different
 /// forms depending on if all of the types match.
 static void printBinaryOp(mlir::OpAsmPrinter &printer, mlir::Operation *op) {
-  printer << " " << op->getOperands();
+  printer << op->getName() << " " << op->getOperands();
   printer.printOptionalAttrDict(op->getAttrs());
   printer << " : ";
 
@@ -150,8 +148,8 @@ void ConstantOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 /// or `false` on success. This allows for easily chaining together a set of
 /// parser rules. These rules are used to populate an `mlir::OperationState`
 /// similarly to the `build` methods described above.
-mlir::ParseResult ConstantOp::parse(mlir::OpAsmParser &parser,
-                                    mlir::OperationState &result) {
+static mlir::ParseResult parseConstantOp(mlir::OpAsmParser &parser,
+                                         mlir::OperationState &result) {
   mlir::DenseElementsAttr value;
   if (parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseAttribute(value, "value", result.attributes))
@@ -163,10 +161,10 @@ mlir::ParseResult ConstantOp::parse(mlir::OpAsmParser &parser,
 
 /// The 'OpAsmPrinter' class is a stream that allows for formatting
 /// strings, attributes, operands, types, etc.
-void ConstantOp::print(mlir::OpAsmPrinter &printer) {
-  printer << " ";
-  printer.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
-  printer << value();
+static void print(mlir::OpAsmPrinter &printer, ConstantOp op) {
+  printer << "toy.constant ";
+  printer.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+  printer << op.value();
 }
 
 /// Verify that the given attribute value is valid for the given type.
@@ -227,12 +225,12 @@ static mlir::LogicalResult verifyConstantForType(mlir::Type type,
 
 /// Verifier for the constant operation. This corresponds to the `::verify(...)`
 /// in the op definition.
-mlir::LogicalResult ConstantOp::verify() {
-  return verifyConstantForType(getResult().getType(), value(), *this);
+static mlir::LogicalResult verify(ConstantOp op) {
+  return verifyConstantForType(op.getResult().getType(), op.value(), op);
 }
 
-mlir::LogicalResult StructConstantOp::verify() {
-  return verifyConstantForType(getResult().getType(), value(), *this);
+static mlir::LogicalResult verify(StructConstantOp op) {
+  return verifyConstantForType(op.getResult().getType(), op.value(), op);
 }
 
 /// Infer the output shape of the ConstantOp, this is required by the shape
@@ -247,13 +245,6 @@ void AddOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
   state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
   state.addOperands({lhs, rhs});
 }
-
-mlir::ParseResult AddOp::parse(mlir::OpAsmParser &parser,
-                               mlir::OperationState &result) {
-  return parseBinaryOp(parser, result);
-}
-
-void AddOp::print(mlir::OpAsmPrinter &p) { printBinaryOp(p, *this); }
 
 /// Infer the output shape of the AddOp, this is required by the shape inference
 /// interface.
@@ -289,8 +280,7 @@ void GenericCallOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
   // Generic call always returns an unranked Tensor initially.
   state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
   state.addOperands(arguments);
-  state.addAttribute("callee",
-                     mlir::SymbolRefAttr::get(builder.getContext(), callee));
+  state.addAttribute("callee", builder.getSymbolRefAttr(callee));
 }
 
 /// Return the callee of the generic call operation, this is required by the
@@ -312,13 +302,6 @@ void MulOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
   state.addOperands({lhs, rhs});
 }
 
-mlir::ParseResult MulOp::parse(mlir::OpAsmParser &parser,
-                               mlir::OperationState &result) {
-  return parseBinaryOp(parser, result);
-}
-
-void MulOp::print(mlir::OpAsmPrinter &p) { printBinaryOp(p, *this); }
-
 /// Infer the output shape of the MulOp, this is required by the shape inference
 /// interface.
 void MulOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
@@ -326,27 +309,28 @@ void MulOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 //===----------------------------------------------------------------------===//
 // ReturnOp
 
-mlir::LogicalResult ReturnOp::verify() {
+static mlir::LogicalResult verify(ReturnOp op) {
   // We know that the parent operation is a function, because of the 'HasParent'
   // trait attached to the operation definition.
-  auto function = cast<FuncOp>((*this)->getParentOp());
+  auto function = cast<FuncOp>(op->getParentOp());
 
   /// ReturnOps can only have a single optional operand.
-  if (getNumOperands() > 1)
-    return emitOpError() << "expects at most 1 return operand";
+  if (op.getNumOperands() > 1)
+    return op.emitOpError() << "expects at most 1 return operand";
 
   // The operand number and types must match the function signature.
   const auto &results = function.getType().getResults();
-  if (getNumOperands() != results.size())
-    return emitOpError() << "does not return the same number of values ("
-                         << getNumOperands() << ") as the enclosing function ("
-                         << results.size() << ")";
+  if (op.getNumOperands() != results.size())
+    return op.emitOpError()
+           << "does not return the same number of values ("
+           << op.getNumOperands() << ") as the enclosing function ("
+           << results.size() << ")";
 
   // If the operation does not have an input, we are done.
-  if (!hasOperand())
+  if (!op.hasOperand())
     return mlir::success();
 
-  auto inputType = *operand_type_begin();
+  auto inputType = *op.operand_type_begin();
   auto resultType = results.front();
 
   // Check that the result type of the function matches the operand type.
@@ -354,9 +338,9 @@ mlir::LogicalResult ReturnOp::verify() {
       resultType.isa<mlir::UnrankedTensorType>())
     return mlir::success();
 
-  return emitError() << "type of return operand (" << inputType
-                     << ") doesn't match function result type (" << resultType
-                     << ")";
+  return op.emitError() << "type of return operand (" << inputType
+                        << ") doesn't match function result type ("
+                        << resultType << ")";
 }
 
 //===----------------------------------------------------------------------===//
@@ -373,16 +357,16 @@ void StructAccessOp::build(mlir::OpBuilder &b, mlir::OperationState &state,
   build(b, state, resultType, input, b.getI64IntegerAttr(index));
 }
 
-mlir::LogicalResult StructAccessOp::verify() {
-  StructType structTy = input().getType().cast<StructType>();
-  size_t indexValue = index();
-  if (indexValue >= structTy.getNumElementTypes())
-    return emitOpError()
+static mlir::LogicalResult verify(StructAccessOp op) {
+  StructType structTy = op.input().getType().cast<StructType>();
+  size_t index = op.index();
+  if (index >= structTy.getNumElementTypes())
+    return op.emitOpError()
            << "index should be within the range of the input struct type";
-  mlir::Type resultType = getResult().getType();
-  if (resultType != structTy.getElementTypes()[indexValue])
-    return emitOpError() << "must have the same result type as the struct "
-                            "element referred to by the index";
+  mlir::Type resultType = op.getResult().getType();
+  if (resultType != structTy.getElementTypes()[index])
+    return op.emitOpError() << "must have the same result type as the struct "
+                               "element referred to by the index";
   return mlir::success();
 }
 
@@ -401,16 +385,16 @@ void TransposeOp::inferShapes() {
   getResult().setType(RankedTensorType::get(dims, arrayTy.getElementType()));
 }
 
-mlir::LogicalResult TransposeOp::verify() {
-  auto inputType = getOperand().getType().dyn_cast<RankedTensorType>();
-  auto resultType = getType().dyn_cast<RankedTensorType>();
+static mlir::LogicalResult verify(TransposeOp op) {
+  auto inputType = op.getOperand().getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
   if (!inputType || !resultType)
     return mlir::success();
 
   auto inputShape = inputType.getShape();
   if (!std::equal(inputShape.begin(), inputShape.end(),
                   resultType.getShape().rbegin())) {
-    return emitError()
+    return op.emitError()
            << "expected result shape to be a transpose of the input";
   }
   return mlir::success();
@@ -474,9 +458,9 @@ struct StructTypeStorage : public mlir::TypeStorage {
   /// The following field contains the element types of the struct.
   llvm::ArrayRef<mlir::Type> elementTypes;
 };
-} // namespace detail
-} // namespace toy
-} // namespace mlir
+} // end namespace detail
+} // end namespace toy
+} // end namespace mlir
 
 /// Create an instance of a `StructType` with the given element types. There
 /// *must* be at least one element type.
@@ -514,7 +498,7 @@ mlir::Type ToyDialect::parseType(mlir::DialectAsmParser &parser) const {
   SmallVector<mlir::Type, 1> elementTypes;
   do {
     // Parse the current element type.
-    SMLoc typeLoc = parser.getCurrentLocation();
+    llvm::SMLoc typeLoc = parser.getCurrentLocation();
     mlir::Type elementType;
     if (parser.parseType(elementType))
       return nullptr;

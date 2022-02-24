@@ -1,10 +1,10 @@
 @import config;
 
-int *test_foo(void) {
+int *test_foo() {
   return foo();
 }
 
-char *test_bar(void) {
+char *test_bar() {
   return bar(); // expected-warning{{implicit declaration of function 'bar' is invalid in C99}} \
                 // expected-warning{{incompatible integer to pointer conversion}}
 }

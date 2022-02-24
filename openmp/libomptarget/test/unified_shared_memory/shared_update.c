@@ -1,9 +1,5 @@
 // RUN: %libomptarget-compile-run-and-check-generic
-
-// REQUIRES: unified_shared_memory
-
-// amdgpu runtime crash
-// UNSUPPORTED: amdgcn-amd-amdhsa
+// XFAIL: nvptx64-nvidia-cuda
 
 #include <stdio.h>
 #include <omp.h>

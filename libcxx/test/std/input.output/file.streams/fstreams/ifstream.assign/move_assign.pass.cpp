@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+// UNSUPPORTED: c++03
 // FILE_DEPENDENCIES: test.dat
 
 // <fstream>
@@ -25,21 +26,19 @@ int main(int, char**)
     {
         std::ifstream fso("test.dat");
         std::ifstream fs;
-        fs = std::move(fso);
+        fs = move(fso);
         double x = 0;
         fs >> x;
         assert(x == 3.25);
     }
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     {
         std::wifstream fso("test.dat");
         std::wifstream fs;
-        fs = std::move(fso);
+        fs = move(fso);
         double x = 0;
         fs >> x;
         assert(x == 3.25);
     }
-#endif
 
   return 0;
 }

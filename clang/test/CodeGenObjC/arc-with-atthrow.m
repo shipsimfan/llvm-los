@@ -3,7 +3,7 @@
 // rdar://10042689
 
 id make(void);
-void test(void) { 
+void test() { 
   @throw make();
 }
 

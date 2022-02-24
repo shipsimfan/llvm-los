@@ -20,8 +20,8 @@
 
 #include "llvm/ADT/Optional.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace lldb_private {
 

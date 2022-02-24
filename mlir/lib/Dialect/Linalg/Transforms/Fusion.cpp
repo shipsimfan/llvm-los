@@ -12,13 +12,15 @@
 
 #include "PassDetail.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Linalg/Analysis/DependenceAnalysis.h"
-#include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Linalg/IR/LinalgOps.h"
+#include "mlir/Dialect/Linalg/IR/LinalgTypes.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
+#include "mlir/Dialect/MemRef/EDSC/Intrinsics.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/StandardOps/EDSC/Intrinsics.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineMap.h"
@@ -36,7 +38,11 @@
 #define DEBUG_TYPE "linalg-fusion"
 
 using namespace mlir;
+using namespace mlir::edsc;
+using namespace mlir::edsc::intrinsics;
 using namespace mlir::linalg;
+
+using llvm::dbgs;
 
 /// Implements a simple high-level fusion pass on linalg structured operations.
 ///
@@ -46,8 +52,8 @@ using namespace mlir::linalg;
 ///      are 2 cases:
 ///      a) buffer case: use the SSA value of the views and a simple alias
 ///         analysis on subview ops to determine producer-consumer dependences;
-///      b) tensor case: use SSA use-def chains on extract_slice ops;
-///   2. greedily fuse the linalg ops that produce the subview/extract_slice.
+///      b) tensor case: use SSA use-def chains on subtensor ops;
+///   2. greedily fuse the linalg ops that produce the subview/subtensor.
 ///   3. inspect the fused ops and determine whether they have other remaining
 ///      LinalgOp uses. If not, then erase the original producing linalg op.
 ///
@@ -67,126 +73,69 @@ struct ShapeDimension {
 static ShapeDimension
 getShapeDefiningLoopRange(LinalgOp op, unsigned loopDepth,
                           bool fromSubViewOpOnly = false) {
+  auto maps = op.indexing_maps();
   // Iterate over the inputs and outputs in order.
   // Extract the subranges from the linearized ranges.
-  for (OpOperand *opOperand : op.getInputAndOutputOperands()) {
+  for (auto en : llvm::enumerate(op.getShapedOperands())) {
     // The method `getRangeFromOperandShape` requires using SubViewOp or
-    // ExtractSliceOps. If the value isn't defined from there continue.
+    // SubTensorOps. If the value isnt defined from there continue.
     // todo: The method should be adapted to get the values from
     // `ViewInterface`. The interface needs a `getOrCreateRanges` method which
     // currently returns a `linalg.range`. The fix here is to move this op to
     // `std` dialect and add the method to `ViewInterface`.
-    if (fromSubViewOpOnly &&
-        !isa_and_nonnull<memref::SubViewOp, tensor::ExtractSliceOp>(
-            opOperand->get().getDefiningOp()))
+    if (fromSubViewOpOnly && !isa_and_nonnull<memref::SubViewOp, SubTensorOp>(
+                                 en.value().getDefiningOp()))
       continue;
 
-    AffineMap map = op.getTiedIndexingMap(opOperand);
-    LLVM_DEBUG(llvm::dbgs() << "getShapeDefiningLoopRange I/O idx: "
-                            << opOperand->getOperandNumber() << "\n");
+    unsigned idx = en.index();
+    auto map = maps[idx].cast<AffineMapAttr>().getValue();
+    LLVM_DEBUG(llvm::dbgs()
+               << "getShapeDefiningLoopRange I/O idx: " << idx << "\n");
     LLVM_DEBUG(llvm::dbgs()
                << "getShapeDefiningLoopRange map: " << map << "\n");
+    Value shape = en.value();
     SmallVector<Value, 8> shapeRanges(map.getNumResults(), nullptr);
-    for (const auto &en : llvm::enumerate(map.getResults())) {
-      auto dimExpr = en.value().dyn_cast<AffineDimExpr>();
+    for (auto en2 : llvm::enumerate(map.getResults())) {
+      auto dimExpr = en2.value().dyn_cast<AffineDimExpr>();
       if (!dimExpr)
         continue;
-      if (loopDepth == en.value().cast<AffineDimExpr>().getPosition()) {
+      if (loopDepth == en2.value().cast<AffineDimExpr>().getPosition()) {
         LLVM_DEBUG(llvm::dbgs() << "getShapeDefiningLoopRange loopDepth: "
                                 << loopDepth << "\n");
-        LLVM_DEBUG(llvm::dbgs() << "getShapeDefiningLoopRange shape: "
-                                << opOperand->get() << "\n");
-        return ShapeDimension{opOperand->get(),
-                              static_cast<unsigned>(en.index())};
+        LLVM_DEBUG(llvm::dbgs()
+                   << "getShapeDefiningLoopRange shape: " << shape << "\n");
+        return ShapeDimension{shape, static_cast<unsigned>(en2.index())};
       }
     }
   }
   llvm_unreachable("Expect to be able to extract a shape defining loop range");
 }
 
-// Return tiled operands for the fused producer op. When fusing into
-// `linalg.tiled_loop` one has to update `input` and `output` arguments of the
-// loop correspondingly.
-// Each input tensor of the producer op has to be added to `inputs` of the
-// `tiled_loop` if it is not present there already. Each output tensor has to
-// be added either to `inputs` or to `outputs` of `linalg.tiled_loop` depending
-// on whether the correponding result is an input or an output to the loop.
-//
-// NOTE: This way of updating the arguments of the `tiled_loop` assumes that the
-// intermediate result is not used by any other operation but the consumer. A
-// more generic way is to append all missing output tensors of the producer to
-// the tiled loop outputs and hence modify the number of the results, since we
-// would need to add the intermediate results to `linalg.yield`. After that a
-// canonicalization pass would move the unused output args of the `tiled_loop`
-// to the `input` section.
-static SmallVector<Value> getTiledOperands(OpBuilder &b, LinalgOp producer) {
-  auto tiledLoop = dyn_cast<TiledLoopOp>(b.getBlock()->getParentOp());
-  if (!tiledLoop)
-    return producer.getInputAndOutputOperands();
-
-  SmallVector<Value> tiledOperands;
-  assert(producer.hasTensorSemantics() &&
-         "only fusion on tensors is currently supported for TiledLinalgOp");
-
-  for (OpOperand *producerInput : producer.getInputOperands()) {
-    OpOperand *addedInput = tiledLoop.findInputOperand(producerInput->get());
-    if (addedInput == nullptr)
-      addedInput = &tiledLoop.appendInputOperand(b, producerInput->get());
-    BlockArgument addedBlockArg = tiledLoop.getTiedBlockArgument(*addedInput);
-    tiledOperands.push_back(addedBlockArg);
-  }
-  for (OpOperand *producerOutput : producer.getOutputOperands()) {
-    OpResult result = producer.getTiedOpResult(producerOutput);
-    OpOperand *resultInputOperand = tiledLoop.findInputOperand(result);
-    OpOperand *resultOutputOperand = tiledLoop.findOutputOperand(result);
-    assert((resultInputOperand != nullptr) ^ (resultOutputOperand != nullptr) &&
-           "The result should be present in `input` or `output` args of "
-           "`tiled_loop");
-
-    bool isInput = resultInputOperand;
-    int opNumber = isInput ? resultInputOperand->getOperandNumber()
-                           : resultOutputOperand->getOperandNumber();
-
-    OpOperand *addedOutput = tiledLoop.findOutputOperand(producerOutput->get());
-    if (addedOutput == nullptr)
-      addedOutput =
-          isInput ? &tiledLoop.appendInputOperand(b, producerOutput->get())
-                  : &tiledLoop.appendOutputOperand(b, producerOutput->get());
-
-    OpOperand &resultOperand = tiledLoop->getOpOperand(opNumber);
-    auto addedBlockArg = tiledLoop.getTiedBlockArgument(*addedOutput);
-    auto resultOperandBlockArg = tiledLoop.getTiedBlockArgument(resultOperand);
-    resultOperandBlockArg.replaceAllUsesWith(addedBlockArg);
-    tiledLoop.eraseOperand(b, resultOperand);
-    tiledOperands.push_back(addedBlockArg);
-  }
-  return tiledOperands;
-}
-
 /// Fuses the producer by cloning the `producer`. The `fusedLoopsAndRanges`
 /// provides the loop range information for the fused loops. The rest are
 /// obtained from the producer itself, since they are not tiled + fused.
-static LinalgOp fuse(OpBuilder &b, LinalgOp producer,
+static LinalgOp fuse(OpBuilder &builder, LinalgOp producer,
                      const DenseMap<unsigned, Range> &fusedLoopsAndRanges) {
   SmallVector<Value, 8> ivs, tileSizes, sizeBounds;
   SmallVector<Range, 8> loopRanges;
+  auto zero = std_constant_index(0);
+  auto one = std_constant_index(1);
   Location loc = producer.getLoc();
-  auto zero = b.create<arith::ConstantIndexOp>(loc, 0);
-  auto one = b.create<arith::ConstantIndexOp>(loc, 1);
 
   for (unsigned i = 0, e = producer.getNumLoops(); i < e; ++i) {
-    auto shapeDim = getShapeDefiningLoopRange(producer, i);
-    Value dim = createOrFoldDimOp(b, loc, shapeDim.shape, shapeDim.dimension);
-    sizeBounds.push_back(dim);
     auto it = fusedLoopsAndRanges.find(i);
     if (it != fusedLoopsAndRanges.end()) {
       ivs.push_back(it->second.offset);
       tileSizes.push_back(it->second.size);
+      sizeBounds.push_back(nullptr);
       loopRanges.push_back(it->second);
       LLVM_DEBUG(llvm::dbgs() << "tiled loop#" << i << " with LoopRange "
                               << loopRanges.back() << "\n");
     } else {
+      auto shapeDim = getShapeDefiningLoopRange(producer, i);
+      Value dim = memref_dim(shapeDim.shape, shapeDim.dimension);
       tileSizes.push_back(zero);
+      sizeBounds.push_back(dim);
       loopRanges.push_back(Range{zero, dim, one});
       LLVM_DEBUG(llvm::dbgs() << "full loop#" << i << " with LoopRange "
                               << loopRanges.back() << "\n");
@@ -194,12 +143,16 @@ static LinalgOp fuse(OpBuilder &b, LinalgOp producer,
   }
 
   SmallVector<Value, 8> clonedShapes;
-  clonedShapes.reserve(producer.getNumInputsAndOutputs());
+  clonedShapes.reserve(producer.getNumShapedOperands());
 
   // Compute subranges for all tensor input/output operands.
-  clonedShapes.append(makeTiledShapes(b, loc, producer,
-                                      getTiledOperands(b, producer), ivs,
-                                      tileSizes, sizeBounds));
+  auto tiledOperands = llvm::to_vector<4>(producer.getShapedOperands());
+  clonedShapes.append(makeTiledShapes(builder, loc, producer, tiledOperands,
+                                      ivs, tileSizes, sizeBounds));
+
+  // Append the other operands.
+  auto operands = producer.getAssumedNonShapedOperands();
+  clonedShapes.append(operands.begin(), operands.end());
 
   // Iterate over the results in order.
   // Extract the subtensor type from the linearized range.
@@ -214,43 +167,81 @@ static LinalgOp fuse(OpBuilder &b, LinalgOp producer,
     SmallVector<int64_t, 4> staticSizesVector(rank, ShapedType::kDynamicSize);
     SmallVector<int64_t, 4> staticStridesVector(
         rank, ShapedType::kDynamicStrideOrOffset);
-    resultTypes.push_back(tensor::ExtractSliceOp::inferResultType(
+    resultTypes.push_back(SubTensorOp::inferResultType(
         t.cast<RankedTensorType>(), staticOffsetsVector, staticSizesVector,
         staticStridesVector));
   }
 
-  Operation *clonedOp = producer.clone(b, loc, resultTypes, clonedShapes);
-
-  // Shift all IndexOp results by the tile offset.
-  SmallVector<Value> allIvs;
-  transform(loopRanges, std::back_inserter(allIvs),
-            [](Range range) { return range.offset; });
-  addTileLoopIvsToIndexOpResults(b, clonedOp, allIvs);
+  Operation *clonedOp = producer.clone(builder, loc, resultTypes, clonedShapes);
+  // When the producer is an IndexedGenericOp, we have to transform its block
+  // IV arguments according to the tiling of the consumer, i.e. offset them by
+  // the values computed in `loopRanges`.
+  if (auto indexedGenericOp = dyn_cast<IndexedGenericOp>(clonedOp)) {
+    auto &block = indexedGenericOp.region().front();
+    OpBuilder::InsertionGuard g(builder);
+    builder.setInsertionPointToStart(&block);
+    for (unsigned i = 0, e = indexedGenericOp.getNumLoops(); i < e; ++i) {
+      Value oldIndex = block.getArgument(i);
+      // TODO: replace by an affine_apply.
+      AddIOp newIndex = builder.create<AddIOp>(indexedGenericOp.getLoc(),
+                                               oldIndex, loopRanges[i].offset);
+      oldIndex.replaceAllUsesExcept(newIndex,
+                                    SmallPtrSet<Operation *, 1>{newIndex});
+    }
+  }
+  // When the producer has index semantics, we have to transform the indices of
+  // the producer according to the tiling of the consumer, i.e. offset them by
+  // the values computed in `loopRanges`.
+  if (producer.hasIndexSemantics()) {
+    assert(clonedOp->getNumRegions() == 1 &&
+           clonedOp->getRegion(0).getBlocks().size() == 1 &&
+           "expected producer to have one block.");
+    // Shift all indices by the tile offset.
+    Block &block = clonedOp->getRegion(0).front();
+    for (IndexOp indexOp : block.getOps<IndexOp>()) {
+      OpBuilder::InsertionGuard g(builder);
+      builder.setInsertionPointAfter(indexOp);
+      AffineExpr index, offset;
+      bindDims(builder.getContext(), index, offset);
+      AffineApplyOp applyOp = builder.create<AffineApplyOp>(
+          indexOp.getLoc(), index + offset,
+          ValueRange{indexOp.getResult(), loopRanges[indexOp.dim()].offset});
+      indexOp.getResult().replaceAllUsesExcept(
+          applyOp, SmallPtrSet<Operation *, 1>{applyOp});
+    }
+  }
 
   return clonedOp;
 }
 
 /// Get the loop range for a dimension `dim` based on the `shapedOperand`. It is
-/// expected to be defined by a subview op or an extract_slice op.
+/// expected to be defined by a subview op or a subtensor op.
 static Range getRangeFromOperandShape(OpBuilder &b, Location loc,
                                       Value shapedOperand, unsigned dim) {
   Operation *shapeProducingOp = shapedOperand.getDefiningOp();
   if (auto subViewOp = dyn_cast<memref::SubViewOp>(shapeProducingOp))
     return subViewOp.getOrCreateRanges(b, loc)[dim];
-  if (auto sliceOp = dyn_cast<tensor::ExtractSliceOp>(shapeProducingOp))
-    return sliceOp.getOrCreateRanges(b, loc)[dim];
-  llvm_unreachable("SubviewOp or ExtractSliceOp expected");
+  if (auto subTensorOp = dyn_cast<SubTensorOp>(shapeProducingOp))
+    return subTensorOp.getOrCreateRanges(b, loc)[dim];
+  llvm_unreachable("SubviewOp or SubTensorOp expected");
 }
 
-/// Fuses the producer into the loop immediately enclosing the consumer.
-/// This is achieved by "recomputing" the producer at the time it
-/// is needed just before the consumer.
+/// Fuses the producer of `producerIdx` into the loop immediately enclosing
+/// `consumer`. This is achieved by "recomputing" the `producer` at the time it
+/// is needed just before the `consumer.
+///
+/// Depending on the type of `consumer.getShapedOperand(consumerIdx)`, there are
+/// 2 cases:
+///   1. Buffer case: `producerIdx` is the index of the buffer in
+///      `producer.getOutputBuffers()`.
+///   2. Tensor case: `producerIdx` is the index of the tensor in
+///      `producer.getResults()`.
 static LinalgOp fuse(OpBuilder &b, LinalgOp producerOp, AffineMap producerMap,
                      OpOperand &consumerOpOperand) {
   LLVM_DEBUG(llvm::dbgs() << "Producer map: " << producerMap << "\n");
   DenseMap<unsigned, Range> fusedLoopsAndRanges;
   Value shapedOperand = consumerOpOperand.get();
-  for (const auto &en : llvm::enumerate(producerMap.getResults())) {
+  for (auto en : llvm::enumerate(producerMap.getResults())) {
     unsigned posInProducerLoop = en.value().cast<AffineDimExpr>().getPosition();
     fusedLoopsAndRanges[posInProducerLoop] = getRangeFromOperandShape(
         b, consumerOpOperand.getOwner()->getLoc(), shapedOperand, en.index());
@@ -322,13 +313,23 @@ bool mlir::linalg::isFusableInto(const LinalgDependenceGraph &graph,
                << *producer.getOperation());
     return false;
   }
+  if (auto convOp = dyn_cast<linalg::ConvOp>(producer.getOperation())) {
+    // TODO: add a level of indirection to linalg.generic.
+    if (convOp.padding())
+      return false;
+  }
+  if (auto convOp = dyn_cast<linalg::ConvOp>(consumer.getOperation())) {
+    // TODO: add a level of indirection to linalg.generic.
+    if (convOp.padding())
+      return false;
+  }
   return true;
 }
 
 /// For `consumer` with buffer semantics, find the Linalg operation on buffers
 /// that is the last writer of `consumerOpOperand`. For now the fusable
 /// dependence is returned as an instance of the `dependenceGraph`.
-static FailureOr<LinalgDependenceGraph::LinalgDependenceGraphElem>
+static Optional<LinalgDependenceGraph::LinalgDependenceGraphElem>
 findFusableProducer(OpOperand &consumerOpOperand,
                     const LinalgDependenceGraph &dependenceGraph) {
   LLVM_DEBUG(llvm::dbgs() << "findFusableProducer for: "
@@ -337,7 +338,7 @@ findFusableProducer(OpOperand &consumerOpOperand,
                           << *consumerOpOperand.getOwner() << "\n");
   LinalgOp consumerOp = dyn_cast<LinalgOp>(consumerOpOperand.getOwner());
   if (!consumerOp)
-    return failure();
+    return {};
 
   // Only consider RAW and WAW atm.
   for (auto depType : {
@@ -383,42 +384,43 @@ findFusableProducer(OpOperand &consumerOpOperand,
       }
     }
   }
-  return failure();
+  return {};
 }
 
-FailureOr<FusionInfo>
+Optional<FusionInfo>
 mlir::linalg::fuseProducerOfBuffer(OpBuilder &b, OpOperand &consumerOpOperand,
                                    const LinalgDependenceGraph &graph) {
   Optional<LinalgDependenceGraph::LinalgDependenceGraphElem> fusableDependence =
       findFusableProducer(consumerOpOperand, graph);
   if (!fusableDependence)
-    return failure();
+    return llvm::None;
 
   LinalgOp producerOp = dyn_cast<LinalgOp>(fusableDependence->getDependentOp());
   if (!producerOp)
-    return failure();
+    return llvm::None;
 
   // If producer is already in the same block as consumer, we are done.
   if (consumerOpOperand.get().getParentBlock() ==
       fusableDependence->getDependentValue().getParentBlock())
-    return failure();
+    return llvm::None;
 
   Optional<AffineMap> producerMap =
       fusableDependence->getDependentOpViewIndexingMap();
   if (!producerMap)
-    return failure();
+    return llvm::None;
 
-  // Must be a subview or an extract_slice to guarantee there are loops we can
-  // fuse into.
+  // Must be a subview or a slice to guarantee there are loops we can fuse
+  // into.
   auto subView = consumerOpOperand.get().getDefiningOp<memref::SubViewOp>();
   if (!subView) {
     LLVM_DEBUG(llvm::dbgs() << "\nNot fusable (not a subview)");
-    return failure();
+    return llvm::None;
   }
 
   // Fuse `producer` just before `consumer`.
   OpBuilder::InsertionGuard g(b);
   b.setInsertionPoint(consumerOpOperand.getOwner());
+  ScopedContext scope(b, consumerOpOperand.getOwner()->getLoc());
   LLVM_DEBUG(llvm::dbgs() << "Fuse into consumer: "
                           << *consumerOpOperand.getOwner() << "\n");
 
@@ -442,8 +444,8 @@ static void getProducerOfTensor(Value tensor, OpResult &opResult) {
       opResult = tensor.cast<OpResult>();
       return;
     }
-    if (auto sliceOp = tensor.getDefiningOp<tensor::ExtractSliceOp>()) {
-      tensor = sliceOp.source();
+    if (auto subTensorOp = tensor.getDefiningOp<SubTensorOp>()) {
+      tensor = subTensorOp.source();
       continue;
     }
     if (auto blockArg = tensor.dyn_cast<BlockArgument>()) {
@@ -456,52 +458,52 @@ static void getProducerOfTensor(Value tensor, OpResult &opResult) {
   }
 }
 
-FailureOr<FusionInfo>
+Optional<FusionInfo>
 mlir::linalg::fuseProducerOfTensor(OpBuilder &b, OpOperand &consumerOpOperand) {
   Value inputTensor = consumerOpOperand.get();
   OpResult producerOpResult;
   getProducerOfTensor(inputTensor, producerOpResult);
   if (!producerOpResult) {
     LLVM_DEBUG(llvm::dbgs() << "\nUnable to find producer");
-    return failure();
+    return {};
   }
   return fuseProducerOfTensor(b, producerOpResult, consumerOpOperand);
 }
 
-FailureOr<FusionInfo>
+Optional<FusionInfo>
 mlir::linalg::fuseProducerOfTensor(OpBuilder &b, OpResult producerOpResult,
                                    OpOperand &consumerOpOperand) {
   auto producerOp = dyn_cast<LinalgOp>(producerOpResult.getOwner());
   if (!producerOp)
-    return failure();
+    return llvm::None;
 
   LinalgOp consumerOp = dyn_cast<LinalgOp>(consumerOpOperand.getOwner());
   if (!consumerOp)
-    return failure();
+    return llvm::None;
 
   Value inputTensor = consumerOpOperand.get();
 
-  // Must be an extract_slice op to guarantee there are loops we can fuse into.
-  auto sliceOp = inputTensor.getDefiningOp<tensor::ExtractSliceOp>();
-  if (!sliceOp) {
+  // Must be a subtensor to guarantee there are loops we can fuse into.
+  auto subTensor = inputTensor.getDefiningOp<SubTensorOp>();
+  if (!subTensor) {
     LLVM_DEBUG(llvm::dbgs()
-               << "\nNot fusable, not an extract_slice op: " << inputTensor);
-    return failure();
+               << "\nNot fusable, not a subtensor: " << inputTensor);
+    return {};
   }
 
   // If producer is already in the same block as consumer, we are done.
   if (consumerOpOperand.get().getParentBlock() ==
       producerOpResult.getParentBlock())
-    return failure();
+    return {};
 
   // Insert fused `producer` just before `consumer`.
   OpBuilder::InsertionGuard g(b);
   b.setInsertionPoint(consumerOp);
+  ScopedContext scope(b, consumerOp->getLoc());
   LLVM_DEBUG(llvm::dbgs() << "Fuse into consumer: " << *consumerOp << "\n");
-  OpOperand *opOperand =
-      producerOp.getOutputOperand(producerOpResult.getResultNumber());
   LinalgOp fusedProducer =
-      fuse(b, producerOp, producerOp.getTiedIndexingMap(opOperand),
+      fuse(b, producerOp,
+           producerOp.getOutputIndexingMap(producerOpResult.getResultNumber()),
            consumerOpOperand);
 
   // Replace use.
@@ -520,10 +522,10 @@ mlir::linalg::fuseProducerOfTensor(OpBuilder &b, OpResult producerOpResult,
 /// Prune all dimensions that are of reduction iterator type from `map`.
 static AffineMap pruneReductionDimsFromMap(ArrayRef<Attribute> iteratorTypes,
                                            AffineMap map) {
-  llvm::SmallBitVector projectedDims(iteratorTypes.size());
-  for (const auto &attr : llvm::enumerate(iteratorTypes)) {
+  llvm::SmallDenseSet<unsigned> projectedDims;
+  for (auto attr : llvm::enumerate(iteratorTypes)) {
     if (!isParallelIterator(attr.value()))
-      projectedDims.set(attr.index());
+      projectedDims.insert(attr.index());
   }
   return getProjectedMap(map, projectedDims);
 }
@@ -534,27 +536,27 @@ static AffineMap pruneReductionDimsFromMap(ArrayRef<Attribute> iteratorTypes,
 /// - indexing map of the fused view in the producer : producerIndexMap
 ///     consumerLoopToProducerLoop =
 ///       inverse(producerIndexMap).compose(consumerIndexMap)
-static FailureOr<AffineMap> getConsumerLoopToProducerLoopMap(
+static Optional<AffineMap> getConsumerLoopToProducerLoopMap(
     LinalgDependenceGraph::LinalgDependenceGraphElem dependence) {
   auto producer = dyn_cast<LinalgOp>(dependence.getDependentOp());
   if (!producer)
-    return failure();
+    return None;
 
   Optional<AffineMap> producerIndexingMap =
       dependence.getDependentOpViewIndexingMap();
   Optional<AffineMap> consumerIndexingMap =
       dependence.getIndexingOpViewIndexingMap();
   if (!producerIndexingMap || !consumerIndexingMap)
-    return failure();
+    return None;
 
   AffineMap prunedProducerIndexingMap = pruneReductionDimsFromMap(
       producer.iterator_types().getValue(), *producerIndexingMap);
   if (!prunedProducerIndexingMap.isPermutation())
-    return failure();
+    return None;
 
   if (consumerIndexingMap->getNumResults() !=
       prunedProducerIndexingMap.getNumResults())
-    return failure();
+    return None;
 
   LLVM_DEBUG({
     llvm::dbgs() << "\t producerMap : ";
@@ -569,7 +571,7 @@ static FailureOr<AffineMap> getConsumerLoopToProducerLoopMap(
 
   AffineMap invProducerIndexMap = inversePermutation(prunedProducerIndexingMap);
   if (!invProducerIndexMap)
-    return failure();
+    return None;
 
   return invProducerIndexMap.compose(*consumerIndexingMap);
 }
@@ -616,7 +618,7 @@ static bool doesTransposeAccess(AffineMap map,
 /// parallel loops and appear in the result of the map
 ///
 /// Example 1:
-///   linalg.fill(%cst, %c)
+///   linalg.fill(%c, %cst)
 ///   linalg.matmul ins(%a, %b) outs(%c)
 ///     Number of parallel loops : 2
 ///     producerIndexMap = affine_map<(i, j) ->(i , j)>
@@ -637,7 +639,7 @@ static bool doesTransposeAccess(AffineMap map,
 ///     Fused dimensions : i, j
 ///
 /// Example 3:
-///   memref.copy(%s, %b)
+///   linalg.copy(%s, %b)
 ///   linalg.matmul ins(%a, %b) outs(%c)
 ///
 ///   Number of parallel loops = 2
@@ -721,9 +723,9 @@ FusableOpDependencesTy mlir::linalg::findAllFusableDependences(
   FusableOpDependencesTy fusableDependences;
   DenseMap<Operation *, SmallVector<AffineMap, 1>> fusedProducerIndexingMap;
   for (LinalgOp op : reverse(ops)) {
-    for (OpOperand *opOperand : op.getInputAndOutputOperands()) {
+    for (OpOperand &opOperand : op.getShapedOpOperands()) {
       Optional<LinalgDependenceGraph::LinalgDependenceGraphElem>
-          fusableDependence = findFusableProducer(*opOperand, dependenceGraph);
+          fusableDependence = findFusableProducer(opOperand, dependenceGraph);
       if (!fusableDependence)
         continue;
       LinalgOp producerOp =
@@ -773,20 +775,17 @@ FusableOpDependencesTy mlir::linalg::findAllFusableDependences(
 
 /// Tile the fused loops in the root operation, by setting the tile sizes for
 /// all other loops to zero (those will be tiled later).
-static FailureOr<TiledLinalgOp>
-tileRootOperation(OpBuilder &b, LinalgOp op, ArrayRef<Value> tileSizeVector,
-                  const LinalgTilingOptions &options,
-                  const std::set<unsigned> &fusedLoops) {
+static Optional<TiledLinalgOp> tileRootOperation(
+    OpBuilder &builder, LinalgOp op, ArrayRef<Value> tileSizeVector,
+    const LinalgTilingOptions &options, const std::set<unsigned> &fusedLoops) {
   SmallVector<Value, 4> tileSizes(tileSizeVector.begin(), tileSizeVector.end());
-  auto zero = b.create<arith::ConstantIndexOp>(op.getLoc(), 0);
+  auto zero = std_constant_index(0);
   for (unsigned i = 0, e = tileSizes.size(); i != e; ++i)
     if (!fusedLoops.count(i))
       tileSizes[i] = zero;
   LinalgTilingOptions tileFusedLoopsOptions = options;
   tileFusedLoopsOptions.setTileSizes(tileSizes);
-  // TODO: Propagate RewriterBase everywhere.
-  IRRewriter rewriter(b);
-  return tileLinalgOp(rewriter, op, tileFusedLoopsOptions);
+  return tileLinalgOp(builder, op, tileFusedLoopsOptions);
 }
 
 /// Fuse the operations in `fusionCandidates` with `tiledOp`. Latter is expected
@@ -794,32 +793,33 @@ tileRootOperation(OpBuilder &b, LinalgOp op, ArrayRef<Value> tileSizeVector,
 /// `fusionCandidates`, i.e. move the operation within the inter-tile loops of
 /// `tiledOp`.
 static SmallVector<LinalgOp, 1>
-fuseOperations(OpBuilder &b, LinalgOp rootOp, TiledLinalgOp tiledLinalgOp,
+fuseOperations(OpBuilder &builder, LinalgOp rootOp, TiledLinalgOp tiledLinalgOp,
                ArrayRef<LinalgOp> fusionCandidates,
                const FusableOpDependencesTy &fusableDependences,
                const std::set<unsigned> &fusedLoops) {
   LinalgOp tiledOp = tiledLinalgOp.op;
-  OpBuilder::InsertionGuard guard(b);
-  b.setInsertionPoint(tiledOp);
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPoint(tiledOp);
 
   DenseMap<unsigned, Range> fusedLoopsAndRanges;
   for (unsigned loop : fusedLoops) {
     ShapeDimension shapeDim = getShapeDefiningLoopRange(tiledOp, loop, true);
     fusedLoopsAndRanges[loop] = getRangeFromOperandShape(
-        b, tiledOp.getLoc(), shapeDim.shape, shapeDim.dimension);
+        builder, tiledOp.getLoc(), shapeDim.shape, shapeDim.dimension);
   }
 
   SmallVector<LinalgOp, 1> fusedOps(fusionCandidates.size());
   DenseMap<Operation *, LinalgOp> origOpToFusedOp;
   origOpToFusedOp[rootOp.getOperation()] = tiledOp;
-  for (const auto &candidate : enumerate(llvm::reverse(fusionCandidates))) {
+  for (auto candidate : enumerate(llvm::reverse(fusionCandidates))) {
     LinalgOp origOp = candidate.value();
-    LinalgOp fusedOp = fuse(b, origOp, fusedLoopsAndRanges);
+    LinalgOp fusedOp = fuse(builder, origOp, fusedLoopsAndRanges);
     origOpToFusedOp[origOp.getOperation()] = fusedOp;
     fusedOps[fusionCandidates.size() - candidate.index() - 1] = fusedOp;
 
     // Prepare the builder for the next insertion point.
-    auto guard = llvm::make_scope_exit([&]() { b.setInsertionPoint(fusedOp); });
+    auto guard =
+        llvm::make_scope_exit([&]() { builder.setInsertionPoint(fusedOp); });
     if (!origOp.hasTensorSemantics())
       continue;
 
@@ -854,28 +854,22 @@ fuseOperations(OpBuilder &b, LinalgOp rootOp, TiledLinalgOp tiledLinalgOp,
     //  2. encode destructive updates that may be inplaceable by bufferization.
     // To keep the second type of information while letting the unfused op die
     // unused, we need to forward the producer output operand.
-    if (auto forOp = dyn_cast<scf::ForOp>(tiledLinalgOp.loops.front())) {
-      for (auto &operand : forOp.getIterOpOperands()) {
-        if (auto opResult = operand.get().dyn_cast<OpResult>()) {
-          if (opResult.getOwner() == origOp) {
-            Value output =
-                origOp.getOutputOperand(opResult.getResultNumber())->get();
-            assert(output.getType().isa<RankedTensorType>());
-            operand.set(output);
-          }
-        }
-      }
-    }
+    for (auto &operand :
+         cast<scf::ForOp>(tiledLinalgOp.loops.front()).getIterOpOperands())
+      if (auto opResult = operand.get().dyn_cast<OpResult>())
+        if (opResult.getOwner() == origOp)
+          operand.set(origOp.getOutputTensors()[opResult.getResultNumber()]);
   }
   return fusedOps;
 }
 
-static FailureOr<TiledAndFusedLinalgOps>
-tileAndFuseLinalgOpsImpl(OpBuilder &b, ArrayRef<LinalgOp> ops,
+template <typename LoopType>
+static Optional<TiledAndFusedLinalgOps>
+tileAndFuseLinalgOpsImpl(OpBuilder &builder, ArrayRef<LinalgOp> ops,
                          const LinalgDependenceGraph &dependenceGraph,
                          const LinalgTilingOptions &tilingOptions) {
   if (ops.size() < 2)
-    return failure();
+    return llvm::None;
   LinalgOp rootOp = ops.back();
   if (!llvm::all_of(
           ops,
@@ -886,17 +880,18 @@ tileAndFuseLinalgOpsImpl(OpBuilder &b, ArrayRef<LinalgOp> ops,
     rootOp.emitError(
         "unable to fuse operations that have tensor semantics with operations "
         "that have buffer semantics and viceversa.");
-    return failure();
+    return llvm::None;
   }
   // TODO: Support interchange with tile + fuse. This might actually help do
   // better fusion.
   if (!tilingOptions.interchangeVector.empty()) {
     rootOp.emitRemark("unable to handle tile and fuse with interchange");
-    return failure();
+    return llvm::None;
   }
 
-  OpBuilder::InsertionGuard guard(b);
-  b.setInsertionPoint(rootOp);
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPoint(rootOp);
+  ScopedContext scope(builder, rootOp.getLoc());
 
   // Find all the producers.
   LLVM_DEBUG(llvm::dbgs() << "findAllFusableDependences\n");
@@ -904,7 +899,7 @@ tileAndFuseLinalgOpsImpl(OpBuilder &b, ArrayRef<LinalgOp> ops,
       findAllFusableDependences(ops, dependenceGraph);
   if (fusableDependences.empty()) {
     LLVM_DEBUG(llvm::dbgs() << "no fusable dependencies found\n");
-    return failure();
+    return llvm::None;
   }
 
   TiledAndFusedLinalgOps ret;
@@ -916,38 +911,41 @@ tileAndFuseLinalgOpsImpl(OpBuilder &b, ArrayRef<LinalgOp> ops,
   // just return.
   if (ret.fusedLoopDims.empty()) {
     LLVM_DEBUG(llvm::dbgs() << "no fusable loops found\n");
-    return failure();
+    return llvm::None;
   }
 
   // Tile the fused loops in the last operation in the list.
   SmallVector<Value, 4> tileSizeVector =
-      tilingOptions.tileSizeComputationFunction(b, rootOp);
-  FailureOr<TiledLinalgOp> tiledRootOp = tileRootOperation(
-      b, rootOp, tileSizeVector, tilingOptions, ret.fusedLoopDims);
-  if (failed(tiledRootOp)) {
+      tilingOptions.tileSizeComputationFunction(builder, rootOp);
+  Optional<TiledLinalgOp> tiledRootOp = tileRootOperation(
+      builder, rootOp, tileSizeVector, tilingOptions, ret.fusedLoopDims);
+  if (!tiledRootOp) {
     rootOp.emitRemark("failed to tile the fused loops");
-    return failure();
+    return llvm::None;
   }
   ret.op = tiledRootOp->op;
   ret.fusedLoops.assign(tiledRootOp->loops.begin(), tiledRootOp->loops.end());
 
   // Fuse the other operations into the fused inter-tile loops produced above.
-  ret.fusedProducers = fuseOperations(b, rootOp, *tiledRootOp, ops.drop_back(),
-                                      fusableDependences, ret.fusedLoopDims);
+  ret.fusedProducers =
+      fuseOperations(builder, rootOp, *tiledRootOp, ops.drop_back(),
+                     fusableDependences, ret.fusedLoopDims);
 
   return ret;
 }
 
-FailureOr<TiledAndFusedLinalgOps>
-mlir::linalg::tileAndFuseLinalgOps(OpBuilder &b, ArrayRef<LinalgOp> ops,
+Optional<TiledAndFusedLinalgOps>
+mlir::linalg::tileAndFuseLinalgOps(OpBuilder &builder, ArrayRef<LinalgOp> ops,
                                    const LinalgDependenceGraph &dependenceGraph,
                                    const LinalgTilingOptions &tilingOptions) {
   switch (tilingOptions.loopType) {
   case LinalgTilingLoopType::Loops:
+    return tileAndFuseLinalgOpsImpl<scf::ForOp>(builder, ops, dependenceGraph,
+                                                tilingOptions);
   case LinalgTilingLoopType::ParallelLoops:
-  case LinalgTilingLoopType::TiledLoops:
-    return tileAndFuseLinalgOpsImpl(b, ops, dependenceGraph, tilingOptions);
+    return tileAndFuseLinalgOpsImpl<scf::ParallelOp>(
+        builder, ops, dependenceGraph, tilingOptions);
   default:;
   }
-  return failure();
+  return llvm::None;
 }

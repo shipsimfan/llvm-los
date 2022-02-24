@@ -9,7 +9,7 @@
 #ifndef LLDB_SOURCE_PLUGINS_OBJECTFILE_ELF_OBJECTFILEELF_H
 #define LLDB_SOURCE_PLUGINS_OBJECTFILE_ELF_OBJECTFILEELF_H
 
-#include <cstdint>
+#include <stdint.h>
 
 #include <vector>
 
@@ -22,13 +22,13 @@
 #include "ELFHeader.h"
 
 struct ELFNote {
-  elf::elf_word n_namesz = 0;
-  elf::elf_word n_descsz = 0;
-  elf::elf_word n_type = 0;
+  elf::elf_word n_namesz;
+  elf::elf_word n_descsz;
+  elf::elf_word n_type;
 
   std::string n_name;
 
-  ELFNote() = default;
+  ELFNote() : n_namesz(0), n_descsz(0), n_type(0) {}
 
   /// Parse an ELFNote entry from the given DataExtractor starting at position
   /// \p offset.
@@ -61,11 +61,9 @@ public:
 
   static void Terminate();
 
-  static llvm::StringRef GetPluginNameStatic() { return "elf"; }
+  static lldb_private::ConstString GetPluginNameStatic();
 
-  static llvm::StringRef GetPluginDescriptionStatic() {
-    return "ELF object file reader.";
-  }
+  static const char *GetPluginDescriptionStatic();
 
   static lldb_private::ObjectFile *
   CreateInstance(const lldb::ModuleSP &module_sp, lldb::DataBufferSP &data_sp,
@@ -87,7 +85,9 @@ public:
                               lldb::addr_t length);
 
   // PluginInterface protocol
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  lldb_private::ConstString GetPluginName() override;
+
+  uint32_t GetPluginVersion() override;
 
   // LLVM RTTI support
   static char ID;
@@ -110,7 +110,7 @@ public:
 
   lldb_private::AddressClass GetAddressClass(lldb::addr_t file_addr) override;
 
-  void ParseSymtab(lldb_private::Symtab &symtab) override;
+  lldb_private::Symtab *GetSymtab() override;
 
   bool IsStripped() override;
 
@@ -123,7 +123,7 @@ public:
   lldb_private::UUID GetUUID() override;
 
   /// Return the contents of the .gnu_debuglink section, if the object file
-  /// contains it.
+  /// contains it. 
   llvm::Optional<lldb_private::FileSpec> GetDebugLink();
 
   uint32_t GetDependentModules(lldb_private::FileSpecList &files) override;
@@ -278,9 +278,8 @@ private:
   /// number of dynamic symbols parsed.
   size_t ParseDynamicSymbols();
 
-  /// Populates the symbol table with all non-dynamic linker symbols.  This
-  /// method will parse the symbols only once.  Returns the number of symbols
-  /// parsed.
+  /// Populates m_symtab_up will all non-dynamic linker symbols.  This method
+  /// will parse the symbols only once.  Returns the number of symbols parsed.
   unsigned ParseSymbolTable(lldb_private::Symtab *symbol_table,
                             lldb::user_id_t start_id,
                             lldb_private::Section *symtab);
@@ -385,7 +384,7 @@ private:
                               lldb_private::UUID &uuid);
 
   bool AnySegmentHasPhysicalAddress();
-
+  
   /// Takes the .gnu_debugdata and returns the decompressed object file that is
   /// stored within that section.
   ///

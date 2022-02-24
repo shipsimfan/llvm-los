@@ -37,9 +37,9 @@ public:
   static void Initialize();
   static void Terminate();
   static void DebuggerInitialize(Debugger &debugger) {}
-  static llvm::StringRef GetPluginNameStatic() { return "breakpad"; }
+  static ConstString GetPluginNameStatic();
 
-  static llvm::StringRef GetPluginDescriptionStatic() {
+  static const char *GetPluginDescriptionStatic() {
     return "Breakpad debug symbol file reader.";
   }
 
@@ -51,7 +51,7 @@ public:
   SymbolFileBreakpad(lldb::ObjectFileSP objfile_sp)
       : SymbolFile(std::move(objfile_sp)) {}
 
-  ~SymbolFileBreakpad() override = default;
+  ~SymbolFileBreakpad() override {}
 
   uint32_t CalculateAbilities() override;
 
@@ -62,8 +62,6 @@ public:
   lldb::LanguageType ParseLanguage(CompileUnit &comp_unit) override {
     return lldb::eLanguageTypeUnknown;
   }
-
-  lldb::FunctionSP GetOrCreateFunction(CompileUnit &comp_unit);
 
   size_t ParseFunctions(CompileUnit &comp_unit) override;
 
@@ -81,7 +79,7 @@ public:
     return false;
   }
 
-  size_t ParseBlocksRecursive(Function &func) override;
+  size_t ParseBlocksRecursive(Function &func) override { return 0; }
 
   void FindGlobalVariables(ConstString name,
                            const CompilerDeclContext &parent_decl_ctx,
@@ -103,7 +101,8 @@ public:
                                 lldb::SymbolContextItem resolve_scope,
                                 SymbolContext &sc) override;
 
-  uint32_t ResolveSymbolContext(const SourceLocationSpec &src_location_spec,
+  uint32_t ResolveSymbolContext(const FileSpec &file_spec, uint32_t line,
+                                bool check_inlines,
                                 lldb::SymbolContextItem resolve_scope,
                                 SymbolContextList &sc_list) override;
 
@@ -148,9 +147,8 @@ public:
   GetUnwindPlan(const Address &address,
                 const RegisterInfoResolver &resolver) override;
 
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
-
-  uint64_t GetDebugInfoSize() override;
+  ConstString GetPluginName() override { return GetPluginNameStatic(); }
+  uint32_t GetPluginVersion() override { return 1; }
 
 private:
   // A class representing a position in the breakpad file. Useful for
@@ -223,13 +221,11 @@ private:
                          UnwindPlan::Row &row);
   lldb::UnwindPlanSP ParseWinUnwindPlan(const Bookmark &bookmark,
                                         const RegisterInfoResolver &resolver);
-  void ParseInlineOriginRecords();
 
   using CompUnitMap = RangeDataVector<lldb::addr_t, lldb::addr_t, CompUnitData>;
 
   llvm::Optional<std::vector<FileSpec>> m_files;
   llvm::Optional<CompUnitMap> m_cu_data;
-  llvm::Optional<std::vector<llvm::StringRef>> m_inline_origins;
 
   using UnwindMap = RangeDataVector<lldb::addr_t, lldb::addr_t, Bookmark>;
   struct UnwindData {

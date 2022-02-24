@@ -921,10 +921,6 @@ protected:
     IBuilder.SetInsertPoint(Entry);
     IBuilder.CreateRetVoid();
 
-    auto *G =
-        Function::Create(FuncType, GlobalValue::ExternalLinkage, "g", OldM);
-    G->addMetadata(LLVMContext::MD_type, *MDNode::get(C, {}));
-
     // Finalize the debug info
     DBuilder.finalize();
   }
@@ -938,10 +934,10 @@ protected:
 
 TEST_F(CloneModule, Verify) {
   // Confirm the old module is (still) valid.
-  EXPECT_FALSE(verifyModule(*OldM, &errs()));
+  EXPECT_FALSE(verifyModule(*OldM));
 
   // Check the new module.
-  EXPECT_FALSE(verifyModule(*NewM, &errs()));
+  EXPECT_FALSE(verifyModule(*NewM));
 }
 
 TEST_F(CloneModule, OldModuleUnchanged) {
@@ -957,11 +953,6 @@ TEST_F(CloneModule, Subprogram) {
   EXPECT_EQ(SP->getName(), "f");
   EXPECT_EQ(SP->getFile()->getFilename(), "filename.c");
   EXPECT_EQ(SP->getLine(), (unsigned)4);
-}
-
-TEST_F(CloneModule, FunctionDeclarationMetadata) {
-  Function *NewF = NewM->getFunction("g");
-  EXPECT_NE(nullptr, NewF->getMetadata(LLVMContext::MD_type));
 }
 
 TEST_F(CloneModule, GlobalMetadata) {

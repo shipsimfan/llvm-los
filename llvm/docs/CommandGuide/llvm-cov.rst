@@ -52,7 +52,9 @@ To use :program:`llvm-cov gcov`, you must first build an instrumented version
 of your application that collects coverage data as it runs. Compile with the
 ``-fprofile-arcs`` and ``-ftest-coverage`` options to add the
 instrumentation. (Alternatively, you can use the ``--coverage`` option, which
-includes both of those other options.)
+includes both of those other options.) You should compile with debugging
+information (``-g``) and without optimization (``-O0``); otherwise, the
+coverage data cannot be accurately mapped back to the source code.
 
 At the time you compile the instrumented code, a ``.gcno`` data file will be
 generated for each object file. These ``.gcno`` files contain half of the
@@ -103,10 +105,6 @@ OPTIONS
 
  Display branch counts instead of probabilities (requires -b).
 
-.. option:: -m, --demangled-names
-
- Demangle function names.
-
 .. option:: -f, --function-summaries
 
  Show a summary of coverage for each function instead of just one summary for
@@ -144,19 +142,6 @@ OPTIONS
  removed and ``..`` directories replaced by ``^`` characters. When used with
  the --long-file-names option, this applies to both the main file name and the
  included file name.
-
-.. option:: -r
-
- Only dump files with relative paths or absolute paths with the prefix specified
- by ``-s``.
-
-.. option:: -s=<string>
-
- Source prefix to elide.
-
-.. option:: -t, --stdout
-
- Print to stdout instead of producing ``.gcov`` files.
 
 .. option:: -u, --unconditional-branches
 
@@ -265,18 +250,11 @@ OPTIONS
 
  Show code coverage only for functions with the given name.
 
-.. option:: -name-allowlist=<FILE>
-
- Show code coverage only for functions listed in the given file. Each line in
- the file should start with `allowlist_fun:`, immediately followed by the name
- of the function to accept. This name can be a wildcard expression.
-
 .. option:: -name-whitelist=<FILE>
 
  Show code coverage only for functions listed in the given file. Each line in
  the file should start with `whitelist_fun:`, immediately followed by the name
- of the function to accept. This name can be a wildcard expression. This option
- will be deprecated for `-name-allowlist=<FILE>` in future releases.
+ of the function to accept. This name can be a wildcard expression.
 
 .. option:: -name-regex=<PATTERN>
 
@@ -316,12 +294,6 @@ OPTIONS
  Use N threads to write file reports (only applicable when -output-dir is
  specified). When N=0, llvm-cov auto-detects an appropriate number of threads to
  use. This is the default.
-
-.. option:: -compilation-dir=<dir>
-
- Directory used as a base for relative coverage mapping paths. Only applicable
- when binaries have been compiled with one of `-fcoverage-prefix-map`
- `-fcoverage-compilation-dir`, or `-ffile-compilation-dir`.
 
 .. option:: -line-coverage-gt=<N>
 
@@ -412,12 +384,6 @@ OPTIONS
 
  Skip source code files with file paths that match the given regular expression.
 
-.. option:: -compilation-dir=<dir>
-
- Directory used as a base for relative coverage mapping paths. Only applicable
- when binaries have been compiled with one of `-fcoverage-prefix-map`
- `-fcoverage-compilation-dir`, or `-ffile-compilation-dir`.
-
 .. program:: llvm-cov export
 
 .. _llvm-cov-export:
@@ -486,9 +452,3 @@ OPTIONS
 
  Use N threads to export coverage data. When N=0, llvm-cov auto-detects an
  appropriate number of threads to use. This is the default.
-
-.. option:: -compilation-dir=<dir>
-
- Directory used as a base for relative coverage mapping paths. Only applicable
- when binaries have been compiled with one of `-fcoverage-prefix-map`
- `-fcoverage-compilation-dir`, or `-ffile-compilation-dir`.

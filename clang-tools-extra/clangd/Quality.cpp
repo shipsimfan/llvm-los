@@ -24,6 +24,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -34,6 +35,11 @@
 
 namespace clang {
 namespace clangd {
+static bool isReserved(llvm::StringRef Name) {
+  // FIXME: Should we exclude _Bool and others recognized by the standard?
+  return Name.size() >= 2 && Name[0] == '_' &&
+         (isUppercase(Name[1]) || Name[1] == '_');
+}
 
 static bool hasDeclInMainFile(const Decl &D) {
   auto &SourceMgr = D.getASTContext().getSourceManager();
@@ -182,10 +188,9 @@ void SymbolQualitySignals::merge(const CodeCompletionResult &SemaCCResult) {
   if (SemaCCResult.Declaration) {
     ImplementationDetail |= isImplementationDetail(SemaCCResult.Declaration);
     if (auto *ID = SemaCCResult.Declaration->getIdentifier())
-      ReservedName = ReservedName || isReservedName(ID->getName());
+      ReservedName = ReservedName || isReserved(ID->getName());
   } else if (SemaCCResult.Kind == CodeCompletionResult::RK_Macro)
-    ReservedName =
-        ReservedName || isReservedName(SemaCCResult.Macro->getName());
+    ReservedName = ReservedName || isReserved(SemaCCResult.Macro->getName());
 }
 
 void SymbolQualitySignals::merge(const Symbol &IndexResult) {
@@ -193,7 +198,7 @@ void SymbolQualitySignals::merge(const Symbol &IndexResult) {
   ImplementationDetail |= (IndexResult.Flags & Symbol::ImplementationDetail);
   References = std::max(IndexResult.References, References);
   Category = categorize(IndexResult.SymInfo);
-  ReservedName = ReservedName || isReservedName(IndexResult.Name);
+  ReservedName = ReservedName || isReserved(IndexResult.Name);
 }
 
 float SymbolQualitySignals::evaluateHeuristics() const {
@@ -373,7 +378,7 @@ static llvm::Optional<llvm::StringRef>
 wordMatching(llvm::StringRef Name, const llvm::StringSet<> *ContextWords) {
   if (ContextWords)
     for (const auto &Word : ContextWords->keys())
-      if (Name.contains_insensitive(Word))
+      if (Name.contains_lower(Word))
         return Word;
   return llvm::None;
 }
@@ -547,7 +552,7 @@ evaluateDecisionForest(const SymbolQualitySignals &Quality,
   int NumMatch = 0;
   if (Relevance.ContextWords) {
     for (const auto &Word : Relevance.ContextWords->keys()) {
-      if (Relevance.Name.contains_insensitive(Word)) {
+      if (Relevance.Name.contains_lower(Word)) {
         ++NumMatch;
       }
     }

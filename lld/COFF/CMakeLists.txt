@@ -5,7 +5,6 @@ add_public_tablegen_target(COFFOptionsTableGen)
 add_lld_library(lldCOFF
   CallGraphSort.cpp
   Chunks.cpp
-  COFFLinkerContext.cpp
   DebugTypes.cpp
   DLL.cpp
   Driver.cpp
@@ -38,7 +37,6 @@ add_lld_library(lldCOFF
   Option
   Passes
   Support
-  WindowsDriver
   WindowsManifest
 
   LINK_LIBS

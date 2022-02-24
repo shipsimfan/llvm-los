@@ -5,12 +5,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-///  This file provides None, an enumerator for use in implicit constructors
-///  of various (usually templated) types to make such construction more
-///  terse.
-///
+//
+//  This file provides None, an enumerator for use in implicit constructors
+//  of various (usually templated) types to make such construction more
+//  terse.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_NONE_H

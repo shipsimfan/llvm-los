@@ -10,7 +10,6 @@
 
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
-#include <functional>
 #include <vector>
 
 namespace llvm {
@@ -26,6 +25,7 @@ struct LogicalResult;
 class ModuleOp;
 class Operation;
 class RewritePatternSet;
+using OwningRewritePatternList = RewritePatternSet;
 
 template <typename T>
 class OperationPass;
@@ -51,12 +51,6 @@ using LoweringCallback = std::function<std::unique_ptr<llvm::Module>(
 /// instead uses a small wrapper library that exports a stable and conveniently
 /// typed ABI on top of GPU runtimes such as CUDA or ROCm (HIP).
 std::unique_ptr<OperationPass<ModuleOp>> createGpuToLLVMConversionPass();
-
-/// Collect a set of patterns to convert from the GPU dialect to LLVM and
-/// populate converter for gpu types.
-void populateGpuToLLVMConversionPatterns(LLVMTypeConverter &converter,
-                                         RewritePatternSet &patterns,
-                                         StringRef gpuBinaryAnnotation = {});
 
 } // namespace mlir
 

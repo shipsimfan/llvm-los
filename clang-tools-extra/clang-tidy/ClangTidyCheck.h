@@ -20,6 +20,7 @@
 
 namespace clang {
 
+class CompilerInstance;
 class SourceManager;
 
 namespace tidy {
@@ -122,7 +123,7 @@ public:
   /// Adds a diagnostic to report errors in the check's configuration.
   DiagnosticBuilder
   configurationDiag(StringRef Description,
-                    DiagnosticIDs::Level Level = DiagnosticIDs::Warning) const;
+                    DiagnosticIDs::Level Level = DiagnosticIDs::Warning);
 
   /// Should store all options supported by this check with their
   /// current values or default values for options that haven't been overridden.

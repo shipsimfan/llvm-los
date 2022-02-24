@@ -1,3 +1,4 @@
+; RUN: opt < %s -scalarizer -S -o - | FileCheck %s
 ; RUN: opt < %s -passes='function(scalarizer)' -S | FileCheck %s
 
 ; The scalarizer used to change the name of the global variable

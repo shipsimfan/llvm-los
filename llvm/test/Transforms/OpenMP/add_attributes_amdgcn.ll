@@ -26,7 +26,3 @@ declare void @__kmpc_syncwarp(i64)
 
 ; OPTIMISTIC: ; Function Attrs: convergent nounwind
 ; OPTIMISTIC-NEXT: declare void @__kmpc_syncwarp(i64)
-
-!llvm.module.flags = !{!0}
-
-!0 = !{i32 7, !"openmp", i32 50}

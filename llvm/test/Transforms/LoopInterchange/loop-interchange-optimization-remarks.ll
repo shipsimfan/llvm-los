@@ -130,12 +130,12 @@ define void @test02(i32 %k, i32 %N) {
 ; CHECK-NEXT:   - String:          Cannot interchange loops due to dependences.
 ; CHECK-NEXT: ...
 
-; DELIN: --- !Passed
+; DELIN: --- !Missed
 ; DELIN-NEXT: Pass:            loop-interchange
-; DELIN-NEXT: Name:            Interchanged
+; DELIN-NEXT: Name:            UnsupportedInsBetweenInduction
 ; DELIN-NEXT: Function:        test02
 ; DELIN-NEXT: Args:
-; DELIN-NEXT:   - String:           Loop interchanged with enclosing loop.
+; DELIN-NEXT:   - String:          Found unsupported instruction between induction variable increment and branch.
 ; DELIN-NEXT: ...
 
 ;;-----------------------------------Test case 03-------------------------------
@@ -178,12 +178,12 @@ for.body4:                                        ; preds = %for.body4, %for.con
   br i1 %exitcond, label %for.body4, label %for.cond.loopexit
 }
 
-; CHECK: --- !Passed
+; CHECK: --- !Missed
 ; CHECK-NEXT: Pass:            loop-interchange
-; CHECK-NEXT: Name:            Interchanged
+; CHECK-NEXT: Name:            Dependence
 ; CHECK-NEXT: Function:        test03
 ; CHECK-NEXT: Args:
-; CHECK-NEXT:   - String:          Loop interchanged with enclosing loop.
+; CHECK-NEXT:   - String:          Cannot interchange loops due to dependences.
 ; CHECK-NEXT: ...
 
 ; DELIN: --- !Passed

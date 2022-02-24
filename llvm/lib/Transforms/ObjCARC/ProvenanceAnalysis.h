@@ -32,6 +32,7 @@
 namespace llvm {
 
 class AAResults;
+class DataLayout;
 class PHINode;
 class SelectInst;
 class Value;
@@ -55,8 +56,7 @@ class ProvenanceAnalysis {
 
   CachedResultsTy CachedResults;
 
-  DenseMap<const Value *, std::pair<WeakVH, WeakTrackingVH>>
-      UnderlyingObjCPtrCache;
+  DenseMap<const Value *, WeakTrackingVH> UnderlyingObjCPtrCache;
 
   bool relatedCheck(const Value *A, const Value *B);
   bool relatedSelect(const SelectInst *A, const Value *B);

@@ -267,6 +267,7 @@ entry:
 ; CHECK-NEXT: li
 ; CHECK-NEXT: lfiwzx
 ; CHECK-NEXT: fcfidu
+; CHECKLE: fcfidu
 ; PPC970-NOT: lfiwzx
 ; PPC970-NOT: fcfidu
 ; SPE: efdcfui

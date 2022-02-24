@@ -15,9 +15,8 @@
 
 // void wait() const;
 
-#include <cassert>
-#include <chrono>
 #include <future>
+#include <cassert>
 
 #include "make_test_thread.h"
 #include "test_macros.h"

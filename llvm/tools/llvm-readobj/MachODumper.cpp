@@ -16,7 +16,6 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Object/MachO.h"
-#include "llvm/Support/BinaryStreamReader.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ScopedPrinter.h"
 
@@ -35,7 +34,6 @@ public:
   void printRelocations() override;
   void printUnwindInfo() override;
   void printStackMap() const override;
-  void printCGProfile() override;
 
   void printNeededLibraries() override;
 
@@ -50,8 +48,6 @@ public:
 private:
   template<class MachHeader>
   void printFileHeaders(const MachHeader &Header);
-
-  StringRef getSymbolName(const SymbolRef &Symbol);
 
   void printSymbols() override;
   void printDynamicSymbols() override;
@@ -78,7 +74,7 @@ std::unique_ptr<ObjDumper> createMachODumper(const object::MachOObjectFile &Obj,
 
 } // namespace llvm
 
-const EnumEntry<uint32_t> MachOMagics[] = {
+static const EnumEntry<uint32_t> MachOMagics[] = {
   { "Magic",      MachO::MH_MAGIC    },
   { "Cigam",      MachO::MH_CIGAM    },
   { "Magic64",    MachO::MH_MAGIC_64 },
@@ -87,7 +83,7 @@ const EnumEntry<uint32_t> MachOMagics[] = {
   { "FatCigam",   MachO::FAT_CIGAM   },
 };
 
-const EnumEntry<uint32_t> MachOHeaderFileTypes[] = {
+static const EnumEntry<uint32_t> MachOHeaderFileTypes[] = {
   { "Relocatable",          MachO::MH_OBJECT      },
   { "Executable",           MachO::MH_EXECUTE     },
   { "FixedVMLibrary",       MachO::MH_FVMLIB      },
@@ -101,7 +97,7 @@ const EnumEntry<uint32_t> MachOHeaderFileTypes[] = {
   { "KextBundle",           MachO::MH_KEXT_BUNDLE },
 };
 
-const EnumEntry<uint32_t> MachOHeaderCpuTypes[] = {
+static const EnumEntry<uint32_t> MachOHeaderCpuTypes[] = {
   { "Any"       , static_cast<uint32_t>(MachO::CPU_TYPE_ANY) },
   { "X86"       , MachO::CPU_TYPE_X86       },
   { "X86-64"    , MachO::CPU_TYPE_X86_64    },
@@ -113,7 +109,7 @@ const EnumEntry<uint32_t> MachOHeaderCpuTypes[] = {
   { "PowerPC64" , MachO::CPU_TYPE_POWERPC64 },
 };
 
-const EnumEntry<uint32_t> MachOHeaderCpuSubtypesX86[] = {
+static const EnumEntry<uint32_t> MachOHeaderCpuSubtypesX86[] = {
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_I386_ALL),
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_386),
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_486),
@@ -136,13 +132,13 @@ const EnumEntry<uint32_t> MachOHeaderCpuSubtypesX86[] = {
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_XEON_MP),
 };
 
-const EnumEntry<uint32_t> MachOHeaderCpuSubtypesX64[] = {
+static const EnumEntry<uint32_t> MachOHeaderCpuSubtypesX64[] = {
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_X86_64_ALL),
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_X86_ARCH1),
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_X86_64_H),
 };
 
-const EnumEntry<uint32_t> MachOHeaderCpuSubtypesARM[] = {
+static const EnumEntry<uint32_t> MachOHeaderCpuSubtypesARM[] = {
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_ARM_ALL),
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_ARM_V4T),
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_ARM_V6),
@@ -157,17 +153,17 @@ const EnumEntry<uint32_t> MachOHeaderCpuSubtypesARM[] = {
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_ARM_V7EM),
 };
 
-const EnumEntry<uint32_t> MachOHeaderCpuSubtypesARM64[] = {
+static const EnumEntry<uint32_t> MachOHeaderCpuSubtypesARM64[] = {
     LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_ARM64_ALL),
     LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_ARM64_V8),
     LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_ARM64E),
 };
 
-const EnumEntry<uint32_t> MachOHeaderCpuSubtypesSPARC[] = {
+static const EnumEntry<uint32_t> MachOHeaderCpuSubtypesSPARC[] = {
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_SPARC_ALL),
 };
 
-const EnumEntry<uint32_t> MachOHeaderCpuSubtypesPPC[] = {
+static const EnumEntry<uint32_t> MachOHeaderCpuSubtypesPPC[] = {
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_POWERPC_ALL),
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_POWERPC_601),
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_POWERPC_602),
@@ -183,7 +179,7 @@ const EnumEntry<uint32_t> MachOHeaderCpuSubtypesPPC[] = {
   LLVM_READOBJ_ENUM_ENT(MachO, CPU_SUBTYPE_POWERPC_970),
 };
 
-const EnumEntry<uint32_t> MachOHeaderFlags[] = {
+static const EnumEntry<uint32_t> MachOHeaderFlags[] = {
   LLVM_READOBJ_ENUM_ENT(MachO, MH_NOUNDEFS),
   LLVM_READOBJ_ENUM_ENT(MachO, MH_INCRLINK),
   LLVM_READOBJ_ENUM_ENT(MachO, MH_DYLDLINK),
@@ -212,7 +208,7 @@ const EnumEntry<uint32_t> MachOHeaderFlags[] = {
   LLVM_READOBJ_ENUM_ENT(MachO, MH_APP_EXTENSION_SAFE),
 };
 
-const EnumEntry<unsigned> MachOSectionTypes[] = {
+static const EnumEntry<unsigned> MachOSectionTypes[] = {
   { "Regular"                        , MachO::S_REGULAR },
   { "ZeroFill"                       , MachO::S_ZEROFILL },
   { "CStringLiterals"                , MachO::S_CSTRING_LITERALS },
@@ -237,7 +233,7 @@ const EnumEntry<unsigned> MachOSectionTypes[] = {
   { "ThreadLocalInitFunctionPointers", MachO::S_THREAD_LOCAL_INIT_FUNCTION_POINTERS }
 };
 
-const EnumEntry<unsigned> MachOSectionAttributes[] = {
+static const EnumEntry<unsigned> MachOSectionAttributes[] = {
   { "LocReloc"         , 1 <<  0 /*S_ATTR_LOC_RELOC          */ },
   { "ExtReloc"         , 1 <<  1 /*S_ATTR_EXT_RELOC          */ },
   { "SomeInstructions" , 1 <<  2 /*S_ATTR_SOME_INSTRUCTIONS  */ },
@@ -250,7 +246,7 @@ const EnumEntry<unsigned> MachOSectionAttributes[] = {
   { "PureInstructions" , 1 << 23 /*S_ATTR_PURE_INSTRUCTIONS  */ },
 };
 
-const EnumEntry<unsigned> MachOSymbolRefTypes[] = {
+static const EnumEntry<unsigned> MachOSymbolRefTypes[] = {
   { "UndefinedNonLazy",                     0 },
   { "ReferenceFlagUndefinedLazy",           1 },
   { "ReferenceFlagDefined",                 2 },
@@ -259,7 +255,7 @@ const EnumEntry<unsigned> MachOSymbolRefTypes[] = {
   { "ReferenceFlagPrivateUndefinedLazy",    5 }
 };
 
-const EnumEntry<unsigned> MachOSymbolFlags[] = {
+static const EnumEntry<unsigned> MachOSymbolFlags[] = {
   { "ThumbDef",               0x8 },
   { "ReferencedDynamically", 0x10 },
   { "NoDeadStrip",           0x20 },
@@ -270,7 +266,7 @@ const EnumEntry<unsigned> MachOSymbolFlags[] = {
   { "ColdFunc",             0x400 },
 };
 
-const EnumEntry<unsigned> MachOSymbolTypes[] = {
+static const EnumEntry<unsigned> MachOSymbolTypes[] = {
   { "Undef",           0x0 },
   { "Abs",             0x2 },
   { "Indirect",        0xA },
@@ -555,7 +551,10 @@ void MachODumper::printRelocation(const MachOObjectFile *Obj,
   if (IsExtern) {
     symbol_iterator Symbol = Reloc.getSymbol();
     if (Symbol != Obj->symbol_end()) {
-      TargetName = getSymbolName(*Symbol);
+      Expected<StringRef> TargetNameOrErr = Symbol->getName();
+      if (!TargetNameOrErr)
+        reportError(TargetNameOrErr.takeError(), Obj->getFileName());
+      TargetName = *TargetNameOrErr;
     }
   } else if (!IsScattered) {
     section_iterator SecI = Obj->getRelocationSection(DR);
@@ -602,14 +601,6 @@ void MachODumper::printRelocation(const MachOObjectFile *Obj,
   }
 }
 
-StringRef MachODumper::getSymbolName(const SymbolRef &Symbol) {
-  Expected<StringRef> SymbolNameOrErr = Symbol.getName();
-  if (!SymbolNameOrErr) {
-    reportError(SymbolNameOrErr.takeError(), Obj->getFileName());
-  }
-  return *SymbolNameOrErr;
-}
-
 void MachODumper::printSymbols() {
   ListScope Group(W, "Symbols");
 
@@ -623,7 +614,13 @@ void MachODumper::printDynamicSymbols() {
 }
 
 void MachODumper::printSymbol(const SymbolRef &Symbol) {
-  StringRef SymbolName = getSymbolName(Symbol);
+  StringRef SymbolName;
+  Expected<StringRef> SymbolNameOrErr = Symbol.getName();
+  if (!SymbolNameOrErr) {
+    // TODO: Actually report errors helpfully.
+    consumeError(SymbolNameOrErr.takeError());
+  } else
+    SymbolName = *SymbolNameOrErr;
 
   MachOSymbol MOSymbol;
   getSymbol(Obj, Symbol.getRawDataRefImpl(), MOSymbol);
@@ -697,48 +694,6 @@ void MachODumper::printStackMap() const {
   else
     prettyPrintStackMap(
         W, StackMapParser<support::big>(StackMapContentsArray));
-}
-
-void MachODumper::printCGProfile() {
-  object::SectionRef CGProfileSection;
-  for (auto Sec : Obj->sections()) {
-    StringRef Name;
-    if (Expected<StringRef> NameOrErr = Sec.getName())
-      Name = *NameOrErr;
-    else
-      consumeError(NameOrErr.takeError());
-
-    if (Name == "__cg_profile") {
-      CGProfileSection = Sec;
-      break;
-    }
-  }
-  if (CGProfileSection == object::SectionRef())
-    return;
-
-  StringRef CGProfileContents =
-      unwrapOrError(Obj->getFileName(), CGProfileSection.getContents());
-  BinaryStreamReader Reader(CGProfileContents, Obj->isLittleEndian()
-                                                   ? llvm::support::little
-                                                   : llvm::support::big);
-
-  ListScope L(W, "CGProfile");
-  while (!Reader.empty()) {
-    uint32_t FromIndex, ToIndex;
-    uint64_t Count;
-    if (Error Err = Reader.readInteger(FromIndex))
-      reportError(std::move(Err), Obj->getFileName());
-    if (Error Err = Reader.readInteger(ToIndex))
-      reportError(std::move(Err), Obj->getFileName());
-    if (Error Err = Reader.readInteger(Count))
-      reportError(std::move(Err), Obj->getFileName());
-    DictScope D(W, "CGProfileEntry");
-    W.printNumber("From", getSymbolName(*Obj->getSymbolByIndex(FromIndex)),
-                  FromIndex);
-    W.printNumber("To", getSymbolName(*Obj->getSymbolByIndex(ToIndex)),
-                  ToIndex);
-    W.printNumber("Weight", Count);
-  }
 }
 
 void MachODumper::printNeededLibraries() {

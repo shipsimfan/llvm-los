@@ -61,7 +61,6 @@ public:
     UndefinedKind,
     LazyArchiveKind,
     LazyObjectKind,
-    LazyDLLSymbolKind,
 
     LastDefinedCOFFKind = DefinedCommonKind,
     LastDefinedKind = DefinedSyntheticKind,
@@ -93,8 +92,7 @@ public:
   bool isLive() const;
 
   bool isLazy() const {
-    return symbolKind == LazyArchiveKind || symbolKind == LazyObjectKind ||
-           symbolKind == LazyDLLSymbolKind;
+    return symbolKind == LazyArchiveKind || symbolKind == LazyObjectKind;
   }
 
 private:
@@ -305,22 +303,10 @@ public:
 
 class LazyObject : public Symbol {
 public:
-  LazyObject(InputFile *f, StringRef n) : Symbol(LazyObjectKind, n), file(f) {}
+  LazyObject(LazyObjFile *f, StringRef n)
+      : Symbol(LazyObjectKind, n), file(f) {}
   static bool classof(const Symbol *s) { return s->kind() == LazyObjectKind; }
-  InputFile *file;
-};
-
-// MinGW only.
-class LazyDLLSymbol : public Symbol {
-public:
-  LazyDLLSymbol(DLLFile *f, DLLFile::Symbol *s, StringRef n)
-      : Symbol(LazyDLLSymbolKind, n), file(f), sym(s) {}
-  static bool classof(const Symbol *s) {
-    return s->kind() == LazyDLLSymbolKind;
-  }
-
-  DLLFile *file;
-  DLLFile::Symbol *sym;
+  LazyObjFile *file;
 };
 
 // Undefined symbols.
@@ -437,7 +423,6 @@ inline uint64_t Defined::getRVA() {
     return cast<DefinedRegular>(this)->getRVA();
   case LazyArchiveKind:
   case LazyObjectKind:
-  case LazyDLLSymbolKind:
   case UndefinedKind:
     llvm_unreachable("Cannot get the address for an undefined symbol.");
   }
@@ -462,7 +447,6 @@ inline Chunk *Defined::getChunk() {
     return cast<DefinedCommon>(this)->getChunk();
   case LazyArchiveKind:
   case LazyObjectKind:
-  case LazyDLLSymbolKind:
   case UndefinedKind:
     llvm_unreachable("Cannot get the chunk of an undefined symbol.");
   }
@@ -483,7 +467,6 @@ union SymbolUnion {
   alignas(DefinedImportThunk) char h[sizeof(DefinedImportThunk)];
   alignas(DefinedLocalImport) char i[sizeof(DefinedLocalImport)];
   alignas(LazyObject) char j[sizeof(LazyObject)];
-  alignas(LazyDLLSymbol) char k[sizeof(LazyDLLSymbol)];
 };
 
 template <typename T, typename... ArgT>

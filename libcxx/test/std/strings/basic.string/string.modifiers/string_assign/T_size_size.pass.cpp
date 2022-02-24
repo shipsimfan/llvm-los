@@ -70,8 +70,9 @@ test_npos(S s, SV sv, typename S::size_type pos, S expected)
 #endif
 }
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     typedef std::string S;
     typedef std::string_view SV;
     test(S(), SV(), 0, 0, S());
@@ -95,9 +96,9 @@ bool test() {
     test(S("12345678901234567890"), SV("12345"), 1, 3, S("234"));
     test(S("12345678901234567890"), SV("12345678901234567890"), 5, 10,
          S("6789012345"));
-  }
+    }
 #if TEST_STD_VER >= 11
-  {
+    {
     typedef std::basic_string     <char, std::char_traits<char>, min_allocator<char>> S;
     typedef std::basic_string_view<char, std::char_traits<char> > SV;
     test(S(), SV(), 0, 0, S());
@@ -121,9 +122,9 @@ bool test() {
     test(S("12345678901234567890"), SV("12345"), 1, 3, S("234"));
     test(S("12345678901234567890"), SV("12345678901234567890"), 5, 10,
          S("6789012345"));
-  }
+    }
 #endif
-  {
+    {
     typedef std::string S;
     typedef std::string_view SV;
     test_npos(S(), SV(), 0, S());
@@ -133,9 +134,9 @@ bool test() {
     test_npos(S(), SV("12345"), 3, S("45"));
     test_npos(S(), SV("12345"), 5, S(""));
     test_npos(S(), SV("12345"), 6, S("not happening"));
-  }
+    }
 
-  {
+    {
     std::string s = "ABCD";
     std::string_view sv = "EFGH";
     char arr[] = "IJKL";
@@ -167,9 +168,9 @@ bool test() {
     s.assign(arr, 0);     // calls assign(const char *, len)
     assert(s == "");
     s.clear();
-  }
+    }
 
-  {
+    {
     std::string s = "ABCD";
     std::string_view sv = s;
     s.assign(sv);
@@ -178,9 +179,9 @@ bool test() {
     sv = s;
     s.assign(sv, 0, std::string::npos);
     assert(s == "ABCD");
-  }
+    }
 
-  {
+    {
     std::string s = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     std::string_view sv = s;
     s.assign(sv);
@@ -189,17 +190,7 @@ bool test() {
     sv = s;
     s.assign(sv, 0, std::string::npos);
     assert(s == "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-  }
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
-#endif
+    }
 
   return 0;
 }

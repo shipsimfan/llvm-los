@@ -2,8 +2,6 @@
 // RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -std=c++11 -Wmicrosoft -verify -fms-compatibility -fexceptions -fcxx-exceptions -fms-compatibility-version=19.27
 // RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -std=c++11 -Wmicrosoft -verify -fms-compatibility -fexceptions -fcxx-exceptions -fms-compatibility-version=19.00
 // RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -std=c++11 -Wmicrosoft -verify -fms-compatibility -fexceptions -fcxx-exceptions -fms-compatibility-version=18.00
-// RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -std=c++17 -Wmicrosoft -verify -fms-compatibility -fexceptions -fcxx-exceptions
-
 
 #if defined(_HAS_CHAR16_T_LANGUAGE_SUPPORT) && _HAS_CHAR16_T_LANGUAGE_SUPPORT
 char16_t x;
@@ -352,7 +350,6 @@ namespace microsoft_exception_spec {
 void foo(); // expected-note {{previous declaration}}
 void foo() throw(); // expected-warning {{exception specification in declaration does not match previous declaration}}
 
-#if __cplusplus < 201703L
 void r6() throw(...); // expected-note {{previous declaration}}
 void r6() throw(int); // expected-warning {{exception specification in declaration does not match previous declaration}}
 
@@ -365,7 +362,6 @@ struct Derived : Base {
   virtual void f2() throw(...);
   virtual void f3();
 };
-#endif
 
 class A {
   virtual ~A() throw();
@@ -381,14 +377,14 @@ class B : public A {
 #endif
 };
 
-void f4() throw(); // expected-note {{previous declaration is here}}
-void f4() {}       // expected-warning {{'f4' is missing exception specification 'throw()'}}
+}
 
-__declspec(nothrow) void f5();
-void f5() {}
+namespace PR25265 {
+struct S {
+  int fn() throw(); // expected-note {{previous declaration is here}}
+};
 
-void f6() noexcept; // expected-note {{previous declaration is here}}
-void f6() {}        // expected-error {{'f6' is missing exception specification 'noexcept'}}
+int S::fn() { return 0; } // expected-warning {{is missing exception specification}}
 }
 
 namespace PR43265 {

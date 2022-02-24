@@ -12,14 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/BinaryFormat/AMDGPUMetadataVerifier.h"
-
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/STLForwardCompat.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/BinaryFormat/MsgPackDocument.h"
-
-#include <map>
-#include <utility>
+#include "llvm/Support/AMDGPUMetadata.h"
 
 namespace llvm {
 namespace AMDGPU {
@@ -63,7 +57,11 @@ bool MetadataVerifier::verifyArray(
   auto &Array = Node.getArray();
   if (Size && Array.size() != *Size)
     return false;
-  return llvm::all_of(Array, verifyNode);
+  for (auto &Item : Array)
+    if (!verifyNode(Item))
+      return false;
+
+  return true;
 }
 
 bool MetadataVerifier::verifyEntry(
@@ -117,28 +115,15 @@ bool MetadataVerifier::verifyKernelArgs(msgpack::DocNode &Node) {
                                .Case("image", true)
                                .Case("pipe", true)
                                .Case("queue", true)
-                               .Case("hidden_block_count_x", true)
-                               .Case("hidden_block_count_y", true)
-                               .Case("hidden_block_count_z", true)
-                               .Case("hidden_group_size_x", true)
-                               .Case("hidden_group_size_y", true)
-                               .Case("hidden_group_size_z", true)
-                               .Case("hidden_remainder_x", true)
-                               .Case("hidden_remainder_y", true)
-                               .Case("hidden_remainder_z", true)
                                .Case("hidden_global_offset_x", true)
                                .Case("hidden_global_offset_y", true)
                                .Case("hidden_global_offset_z", true)
-                               .Case("hidden_grid_dims", true)
                                .Case("hidden_none", true)
                                .Case("hidden_printf_buffer", true)
                                .Case("hidden_hostcall_buffer", true)
                                .Case("hidden_default_queue", true)
                                .Case("hidden_completion_action", true)
                                .Case("hidden_multigrid_sync_arg", true)
-                               .Case("hidden_private_base", true)
-                               .Case("hidden_shared_base", true)
-                               .Case("hidden_queue_ptr", true)
                                .Default(false);
                          }))
     return false;

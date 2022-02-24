@@ -90,18 +90,17 @@ OPTIONS:
   --rsp-quoting         - quoting style for response files
     =posix              -   posix
     =windows            -   windows
-  --thin                - create a thin archive
   --version             - print the version and exit
   @<file>               - read options from <file>
 
 OPERATIONS:
   d - delete [files] from the archive
   m - move [files] in the archive
-  p - print contents of [files] found in the archive
+  p - print [files] found in the archive
   q - quick append [files] to the archive
   r - replace or insert [files] into the archive
   s - act as ranlib
-  t - display list of files in archive
+  t - display contents of archive
   x - extract [files] from the archive
 
 MODIFIERS:
@@ -119,7 +118,7 @@ MODIFIERS:
   [P] - use full names when matching (implied for thin archives)
   [s] - create an archive index (cf. ranlib)
   [S] - do not build a symbol table
-  [T] - deprecated, use --thin instead
+  [T] - create a thin archive
   [u] - update only [files] newer than archive contents
   [U] - use actual timestamps and uids/gids
   [v] - be verbose about actions taken
@@ -127,9 +126,9 @@ MODIFIERS:
 )";
 
 static void printHelpMessage() {
-  if (Stem.contains_insensitive("ranlib"))
+  if (Stem.contains_lower("ranlib"))
     outs() << RanlibHelp;
-  else if (Stem.contains_insensitive("ar"))
+  else if (Stem.contains_lower("ar"))
     outs() << ArHelp;
 }
 
@@ -137,14 +136,14 @@ static unsigned MRILineNumber;
 static bool ParsingMRIScript;
 
 // Show the error plus the usage message, and exit.
-[[noreturn]] static void badUsage(Twine Error) {
+LLVM_ATTRIBUTE_NORETURN static void badUsage(Twine Error) {
   WithColor::error(errs(), ToolName) << Error << "\n";
   printHelpMessage();
   exit(1);
 }
 
 // Show the error message and exit.
-[[noreturn]] static void fail(Twine Error) {
+LLVM_ATTRIBUTE_NORETURN static void fail(Twine Error) {
   if (ParsingMRIScript) {
     WithColor::error(errs(), ToolName)
         << "script line " << MRILineNumber << ": " << Error << "\n";
@@ -391,6 +390,8 @@ static ArchiveOperation parseCommandLine() {
       break;
     case 'T':
       Thin = true;
+      // Thin archives store path names, so P should be forced.
+      CompareFullPath = true;
       break;
     case 'L':
       AddLibrary = true;
@@ -405,10 +406,6 @@ static ArchiveOperation parseCommandLine() {
       badUsage(std::string("unknown option ") + Options[i]);
     }
   }
-
-  // Thin archives store path names, so P should be forced.
-  if (Thin)
-    CompareFullPath = true;
 
   // At this point, the next thing on the command line must be
   // the archive name.
@@ -654,11 +651,6 @@ static void addChildMember(std::vector<NewArchiveMember> &Members,
                            bool FlattenArchive = false) {
   if (Thin && !M.getParent()->isThin())
     fail("cannot convert a regular archive to a thin one");
-
-  // Avoid converting an existing thin archive to a regular one.
-  if (!AddLibrary && M.getParent()->isThin())
-    Thin = true;
-
   Expected<NewArchiveMember> NMOrErr =
       NewArchiveMember::getOldMember(M, Deterministic);
   failIfError(NMOrErr.takeError());
@@ -973,8 +965,6 @@ static void createSymbolTable(object::Archive *OldArchive) {
   if (OldArchive->hasSymbolTable())
     return;
 
-  if (OldArchive->isThin())
-    Thin = true;
   performWriteOperation(CreateSymTab, OldArchive, nullptr, nullptr);
 }
 
@@ -1013,17 +1003,12 @@ static int performOperation(ArchiveOperation Operation,
     fail("unable to open '" + ArchiveName + "': " + EC.message());
 
   if (!EC) {
-    Expected<std::unique_ptr<object::Archive>> ArchiveOrError =
-        object::Archive::create(Buf.get()->getMemBufferRef());
-    if (!ArchiveOrError)
-      failIfError(ArchiveOrError.takeError(),
-                  "unable to load '" + ArchiveName + "'");
-
-    std::unique_ptr<object::Archive> Archive = std::move(ArchiveOrError.get());
-    if (Archive->isThin())
+    Error Err = Error::success();
+    object::Archive Archive(Buf.get()->getMemBufferRef(), Err);
+    failIfError(std::move(Err), "unable to load '" + ArchiveName + "'");
+    if (Archive.isThin())
       CompareFullPath = true;
-    performOperation(Operation, Archive.get(), std::move(Buf.get()),
-                     NewMembers);
+    performOperation(Operation, &Archive, std::move(Buf.get()), NewMembers);
     return 0;
   }
 
@@ -1126,11 +1111,11 @@ static void runMRIScript() {
 }
 
 static bool handleGenericOption(StringRef arg) {
-  if (arg == "--help" || arg == "-h") {
+  if (arg == "-help" || arg == "--help" || arg == "-h") {
     printHelpMessage();
     return true;
   }
-  if (arg == "--version") {
+  if (arg == "-version" || arg == "--version") {
     cl::PrintVersionMessage();
     return true;
   }
@@ -1144,6 +1129,8 @@ static const char *matchFlagWithArg(StringRef Expected,
 
   if (Arg.startswith("--"))
     Arg = Arg.substr(2);
+  else if (Arg.startswith("-"))
+    Arg = Arg.substr(1);
 
   size_t len = Expected.size();
   if (Arg == Expected) {
@@ -1209,11 +1196,6 @@ static int ar_main(int argc, char **argv) {
 
     if (strcmp(*ArgIt, "-M") == 0) {
       MRI = true;
-      continue;
-    }
-
-    if (strcmp(*ArgIt, "--thin") == 0) {
-      Thin = true;
       continue;
     }
 
@@ -1294,7 +1276,7 @@ int main(int argc, char **argv) {
     // Lib.exe -> lib (see D44808, MSBuild runs Lib.exe)
     // dlltool.exe -> dlltool
     // arm-pokymllib32-linux-gnueabi-llvm-ar-10 -> ar
-    auto I = Stem.rfind_insensitive(Tool);
+    auto I = Stem.rfind_lower(Tool);
     return I != StringRef::npos &&
            (I + Tool.size() == Stem.size() || !isAlnum(Stem[I + Tool.size()]));
   };

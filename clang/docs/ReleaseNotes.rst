@@ -1,6 +1,6 @@
-===========================================
-Clang |release| |ReleaseNotesTitle|
-===========================================
+========================================
+Clang 13.0.0 (In-Progress) Release Notes
+========================================
 
 .. contents::
    :local:
@@ -8,18 +8,17 @@ Clang |release| |ReleaseNotesTitle|
 
 Written by the `LLVM Team <https://llvm.org/>`_
 
-.. only:: PreRelease
+.. warning::
 
-  .. warning::
-     These are in-progress notes for the upcoming Clang |version| release.
-     Release notes for previous releases can be found on
-     `the Download Page <https://releases.llvm.org/download.html>`_.
+   These are in-progress notes for the upcoming Clang 13 release.
+   Release notes for previous releases can be found on
+   `the Download Page <https://releases.llvm.org/download.html>`_.
 
 Introduction
 ============
 
 This document contains the release notes for the Clang C/C++/Objective-C
-frontend, part of the LLVM Compiler Infrastructure, release |release|. Here we
+frontend, part of the LLVM Compiler Infrastructure, release 13.0.0. Here we
 describe the status of Clang in some detail, including major
 improvements from the previous release and new feature work. For the
 general LLVM release notes, see `the LLVM
@@ -36,8 +35,8 @@ main Clang web page, this document applies to the *next* release, not
 the current one. To see the release notes for a specific release, please
 see the `releases page <https://llvm.org/releases/>`_.
 
-What's New in Clang |release|?
-==============================
+What's New in Clang 13.0.0?
+===========================
 
 Some of the major new features and improvements to Clang are listed
 here. Generic improvements to Clang as a whole or to its underlying
@@ -47,38 +46,55 @@ sections with improvements to Clang's support for those languages.
 Major New Features
 ------------------
 
-- Clang now supports the ``-fzero-call-used-regs`` feature for x86. The purpose
-  of this feature is to limit Return-Oriented Programming (ROP) exploits and
-  information leakage. It works by zeroing out a selected class of registers
-  before function return --- e.g., all GPRs that are used within the function.
-  There is an analogous ``zero_call_used_regs`` attribute to allow for finer
-  control of this feature.
-
-Bug Fixes
-------------------
-- ``CXXNewExpr::getArraySize()`` previously returned a ``llvm::Optional``
-  wrapping a ``nullptr`` when the ``CXXNewExpr`` did not have an array
-  size expression. This was fixed and ``::getArraySize()`` will now always
-  either return ``None`` or a ``llvm::Optional`` wrapping a valid ``Expr*``.
-  This fixes `Issue 53742 <https://github.com/llvm/llvm-project/issues/53742>`_.
+- Guaranteed tail calls are now supported with statement attributes
+  ``[[clang::musttail]]`` in C++ and ``__attribute__((musttail))`` in C. The
+  attribute is applied to a return statement (not a function declaration),
+  and an error is emitted if a tail call cannot be guaranteed, for example if
+  the function signatures of caller and callee are not compatible. Guaranteed
+  tail calls enable a class of algorithms that would otherwise use an
+  arbitrary amount of stack space.
 
 Improvements to Clang's diagnostics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+- ...
+
 Non-comprehensive list of changes in this release
 -------------------------------------------------
+
+- ...
 
 New Compiler Flags
 ------------------
 
+- ...
+
 Deprecated Compiler Flags
 -------------------------
+
+- ...
 
 Modified Compiler Flags
 -----------------------
 
+- -Wshadow now also checks for shadowed structured bindings
+- ``-B <prefix>`` (when ``<prefix>`` is a directory) was overloaded to additionally
+  detect GCC installations under ``<prefix>`` (``lib{,32,64}/gcc{,-cross}/$triple``).
+  This behavior was incompatible with GCC, caused interop issues with
+  ``--gcc-toolchain``, and was thus dropped. Specify ``--gcc-toolchain=<dir>``
+  instead. ``-B``'s other GCC-compatible semantics are preserved:
+  ``$prefix/$triple-$file`` and ``$prefix$file`` are searched for executables,
+  libraries, includes, and data files used by the compiler.
+
 Removed Compiler Flags
 -------------------------
+
+- The clang-cl ``/fallback`` flag, which made clang-cl invoke Microsoft Visual
+  C++ on files it couldn't compile itself, has been removed.
+
+- ``-Wreturn-std-move-in-c++11``, which checked whether an entity is affected by
+  `CWG1579 <https://wg21.link/CWG1579>`_ to become implicitly movable, has been
+  removed.
 
 New Pragmas in Clang
 --------------------
@@ -88,44 +104,31 @@ New Pragmas in Clang
 Attribute Changes in Clang
 --------------------------
 
-- Added support for parameter pack expansion in `clang::annotate`.
-
-- The ``overloadable`` attribute can now be written in all of the syntactic
-  locations a declaration attribute may appear.
-  This fixes `Issue 53805 <https://github.com/llvm/llvm-project/issues/53805>`_.
+- ...
 
 Windows Support
 ---------------
 
-- Add support for MSVC-compatible ``/JMC``/``/JMC-`` flag in clang-cl (supports
-  X86/X64/ARM/ARM64). ``/JMC`` could only be used when ``/Zi`` or ``/Z7`` is
-  turned on. With this addition, clang-cl can be used in Visual Studio for the
-  JustMyCode feature. Note, you may need to manually add ``/JMC`` as additional
-  compile options in the Visual Studio since it currently assumes clang-cl does not support ``/JMC``.
-
 C Language Changes in Clang
 ---------------------------
 
-C2x Feature Support
--------------------
-
-- Implemented `WG14 N2674 The noreturn attribute <http://www.open-std.org/jtc1/sc22/wg14/www/docs/n2764.pdf>`_.
+- ...
 
 C++ Language Changes in Clang
 -----------------------------
+
+- The oldest supported GNU libstdc++ is now 4.8.3 (released 2014-05-22).
+  Clang workarounds for bugs in earlier versions have been removed.
 
 - ...
 
 C++20 Feature Support
 ^^^^^^^^^^^^^^^^^^^^^
+...
 
 C++2b Feature Support
 ^^^^^^^^^^^^^^^^^^^^^
-
-- Implemented `P2128R6: Multidimensional subscript operator <https://wg21.link/P2128R6>`_.
-
-CUDA Language Changes in Clang
-------------------------------
+...
 
 Objective-C Language Changes in Clang
 -------------------------------------
@@ -141,18 +144,7 @@ ABI Changes in Clang
 OpenMP Support in Clang
 -----------------------
 
-- ``clang-nvlink-wrapper`` tool introduced to support linking of cubin files
-  archived in an archive. See :doc:`ClangNvlinkWrapper`.
-- ``clang-linker-wrapper`` tool introduced to support linking using a new OpenMP
-  target offloading method. See :doc:`ClangLinkerWrapper`.
-- Support for a new driver for OpenMP target offloading has been added as an
-  opt-in feature. The new driver can be selected using ``-fopenmp-new-driver``
-  with clang. Device-side LTO can also be enabled using the new driver by
-  passing ``-foffload-lto=`` as well. The new driver supports the following
-  features:
-  - Linking AMDGPU and NVPTX offloading targets.
-  - Static linking using archive files.
-  - Device-side LTO.
+- ...
 
 CUDA Support in Clang
 ---------------------
@@ -162,45 +154,90 @@ CUDA Support in Clang
 X86 Support in Clang
 --------------------
 
-DWARF Support in Clang
-----------------------
-
-Arm and AArch64 Support in Clang
---------------------------------
-
-Floating Point Support in Clang
--------------------------------
+- ...
 
 Internal API Changes
 --------------------
 
-- Added a new attribute flag `AcceptsExprPack` that when set allows expression
-  pack expansions in the parsed arguments of the corresponding attribute.
-  Additionally it introduces delaying of attribute arguments, adding common
-  handling for creating attributes that cannot be fully initialized prior to
-  template instantiation.
+These are major API changes that have happened since the 12.0.0 release of
+Clang. If upgrading an external codebase that uses Clang as a library,
+this section should help get you past the largest hurdles of upgrading.
+
+- ...
 
 Build System Changes
 --------------------
 
+These are major changes to the build system that have happened since the 12.0.0
+release of Clang. Users of the build system should adjust accordingly.
+
+- The option ``LIBCLANG_INCLUDE_CLANG_TOOLS_EXTRA`` no longer exists. There were
+  two releases with that flag forced off, and no uses were added that forced it
+  on. The recommended replacement is clangd.
+
+- ...
+
 AST Matchers
 ------------
 
-- Expanded ``isInline`` narrowing matcher to support c++17 inline variables.
+- ...
 
 clang-format
 ------------
 
-- **Important change**: Renamed ``IndentRequires`` to ``IndentRequiresClause``
-  and changed the default for all styles from ``false`` to ``true``.
+- Option ``SpacesInLineCommentPrefix`` has been added to control the
+  number of spaces in a line comments prefix.
 
-- Reworked and improved handling of concepts and requires. Added the
-  ``RequiresClausePosition`` option as part of that.
+- Option ``SortIncludes`` has been updated from a ``bool`` to an
+  ``enum`` with backwards compatibility. In addition to the previous
+  ``true``/``false`` states (now ``CaseSensitive``/``Never``), a third
+  state has been added (``CaseInsensitive``) which causes an alphabetical sort
+  with case used as a tie-breaker.
 
-- Changed ``BreakBeforeConceptDeclarations`` from ``Boolean`` to an enum.
+  .. code-block:: c++
 
-- Option ``InsertBraces`` has been added to insert optional braces after control
-  statements.
+    // Never (previously false)
+    #include "B/A.h"
+    #include "A/B.h"
+    #include "a/b.h"
+    #include "A/b.h"
+    #include "B/a.h"
+
+    // CaseSensitive (previously true)
+    #include "A/B.h"
+    #include "A/b.h"
+    #include "B/A.h"
+    #include "B/a.h"
+    #include "a/b.h"
+
+    // CaseInsensitive
+    #include "A/B.h"
+    #include "A/b.h"
+    #include "a/b.h"
+    #include "B/A.h"
+    #include "B/a.h"
+
+- ``BasedOnStyle: InheritParentConfig`` allows to use the ``.clang-format`` of
+  the parent directories to overwrite only parts of it.
+
+- Option ``IndentAccessModifiers`` has been added to be able to give access
+  modifiers their own indentation level inside records.
+
+- Option ``ShortNamespaceLines`` has been added to give better control
+  over ``FixNamespaceComments`` when determining a namespace length.
+
+- Support for Whitesmiths has been improved, with fixes for ``namespace`` blocks
+  and ``case`` blocks and labels.
+
+- Option ``EmptyLineAfterAccessModifier`` has been added to remove, force or keep
+  new lines after access modifiers.
+
+- Checks for newlines in option ``EmptyLineBeforeAccessModifier`` are now based
+  on the formatted new lines and not on the new lines in the file. (Fixes
+  https://llvm.org/PR41870.)
+
+- Option ``SpacesInAngles`` has been improved, it now accepts ``Leave`` value
+  that allows to keep spaces where they are already present.
 
 libclang
 --------

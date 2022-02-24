@@ -114,11 +114,11 @@ uint8_t *SectionMemoryManager::allocateSection(
 
   // Copy the address to all the other groups, if they have not
   // been initialized.
-  if (CodeMem.Near.base() == nullptr)
+  if (CodeMem.Near.base() == 0)
     CodeMem.Near = MB;
-  if (RODataMem.Near.base() == nullptr)
+  if (RODataMem.Near.base() == 0)
     RODataMem.Near = MB;
-  if (RWDataMem.Near.base() == nullptr)
+  if (RWDataMem.Near.base() == 0)
     RWDataMem.Near = MB;
 
   // Remember that we allocated this memory
@@ -238,7 +238,7 @@ SectionMemoryManager::~SectionMemoryManager() {
   }
 }
 
-SectionMemoryManager::MemoryMapper::~MemoryMapper() = default;
+SectionMemoryManager::MemoryMapper::~MemoryMapper() {}
 
 void SectionMemoryManager::anchor() {}
 

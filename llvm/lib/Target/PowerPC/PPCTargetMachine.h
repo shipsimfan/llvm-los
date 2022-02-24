@@ -68,8 +68,6 @@ public:
   }
 
   bool isLittleEndian() const;
-
-  int unqualifiedInlineAsmVariant() const override { return 1; }
 };
 } // end namespace llvm
 

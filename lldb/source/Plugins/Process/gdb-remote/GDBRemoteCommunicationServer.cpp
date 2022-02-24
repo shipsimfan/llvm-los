@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cerrno>
+#include <errno.h>
 
 #include "lldb/Host/Config.h"
 
@@ -33,7 +33,7 @@ GDBRemoteCommunicationServer::GDBRemoteCommunicationServer(
              bool &quit) { return this->Handle_QErrorStringEnable(packet); });
 }
 
-GDBRemoteCommunicationServer::~GDBRemoteCommunicationServer() = default;
+GDBRemoteCommunicationServer::~GDBRemoteCommunicationServer() {}
 
 void GDBRemoteCommunicationServer::RegisterPacketHandler(
     StringExtractorGDBRemote::ServerPacketType packet_type,
@@ -46,7 +46,7 @@ GDBRemoteCommunicationServer::GetPacketAndSendResponse(
     Timeout<std::micro> timeout, Status &error, bool &interrupt, bool &quit) {
   StringExtractorGDBRemote packet;
 
-  PacketResult packet_result = ReadPacket(packet, timeout, false);
+  PacketResult packet_result = WaitForPacketNoLock(packet, timeout, false);
   if (packet_result == PacketResult::Success) {
     const StringExtractorGDBRemote::ServerPacketType packet_type =
         packet.GetServerPacketType();
@@ -138,7 +138,7 @@ GDBRemoteCommunicationServer::Handle_QErrorStringEnable(
 GDBRemoteCommunication::PacketResult
 GDBRemoteCommunicationServer::SendIllFormedResponse(
     const StringExtractorGDBRemote &failed_packet, const char *message) {
-  Log *log = GetLog(GDBRLog::Packets);
+  Log *log(ProcessGDBRemoteLog::GetLogIfAllCategoriesSet(GDBR_LOG_PACKETS));
   LLDB_LOGF(log, "GDBRemoteCommunicationServer::%s: ILLFORMED: '%s' (%s)",
             __FUNCTION__, failed_packet.GetStringRef().data(),
             message ? message : "");
@@ -148,6 +148,10 @@ GDBRemoteCommunicationServer::SendIllFormedResponse(
 GDBRemoteCommunication::PacketResult
 GDBRemoteCommunicationServer::SendOKResponse() {
   return SendPacketNoLock("OK");
+}
+
+bool GDBRemoteCommunicationServer::HandshakeWithClient() {
+  return GetAck() == PacketResult::Success;
 }
 
 GDBRemoteCommunication::PacketResult

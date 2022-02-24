@@ -64,7 +64,7 @@ static std::string collapseConsecutive(StringRef Str, char C) {
 static bool hasReservedDoubleUnderscore(StringRef Name,
                                         const LangOptions &LangOpts) {
   if (LangOpts.CPlusPlus)
-    return Name.contains("__");
+    return Name.find("__") != StringRef::npos;
   return Name.startswith("__");
 }
 
@@ -152,7 +152,7 @@ getFailureInfoImpl(StringRef Name, bool IsInGlobalNamespace,
 }
 
 Optional<RenamerClangTidyCheck::FailureInfo>
-ReservedIdentifierCheck::getDeclFailureInfo(const NamedDecl *Decl,
+ReservedIdentifierCheck::GetDeclFailureInfo(const NamedDecl *Decl,
                                             const SourceManager &) const {
   assert(Decl && Decl->getIdentifier() && !Decl->getName().empty() &&
          !Decl->isImplicit() &&
@@ -163,14 +163,14 @@ ReservedIdentifierCheck::getDeclFailureInfo(const NamedDecl *Decl,
 }
 
 Optional<RenamerClangTidyCheck::FailureInfo>
-ReservedIdentifierCheck::getMacroFailureInfo(const Token &MacroNameTok,
+ReservedIdentifierCheck::GetMacroFailureInfo(const Token &MacroNameTok,
                                              const SourceManager &) const {
   return getFailureInfoImpl(MacroNameTok.getIdentifierInfo()->getName(), true,
                             getLangOpts(), Invert, AllowedIdentifiers);
 }
 
 RenamerClangTidyCheck::DiagInfo
-ReservedIdentifierCheck::getDiagInfo(const NamingCheckId &ID,
+ReservedIdentifierCheck::GetDiagInfo(const NamingCheckId &ID,
                                      const NamingCheckFailure &Failure) const {
   return DiagInfo{Message, [&](DiagnosticBuilder &Diag) {
                     Diag << ID.second

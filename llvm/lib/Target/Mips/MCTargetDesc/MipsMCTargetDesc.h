@@ -31,8 +31,10 @@ class Target;
 class Triple;
 
 MCCodeEmitter *createMipsMCCodeEmitterEB(const MCInstrInfo &MCII,
+                                         const MCRegisterInfo &MRI,
                                          MCContext &Ctx);
 MCCodeEmitter *createMipsMCCodeEmitterEL(const MCInstrInfo &MCII,
+                                         const MCRegisterInfo &MRI,
                                          MCContext &Ctx);
 
 MCAsmBackend *createMipsAsmBackend(const Target &T, const MCSubtargetInfo &STI,

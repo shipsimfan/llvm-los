@@ -104,7 +104,7 @@ public:
   bool FoundationIncluded;
   llvm::SmallPtrSet<ObjCProtocolDecl *, 32> ObjCProtocolDecls;
   llvm::SmallVector<const Decl *, 8> CFFunctionIBCandidates;
-  llvm::StringSet<> AllowListFilenames;
+  llvm::StringSet<> WhiteListFilenames;
 
   RetainSummaryManager &getSummaryManager(ASTContext &Ctx) {
     if (!Summaries)
@@ -118,14 +118,14 @@ public:
                          FileRemapper &remapper, FileManager &fileMgr,
                          const PPConditionalDirectiveRecord *PPRec,
                          Preprocessor &PP, bool isOutputFile,
-                         ArrayRef<std::string> AllowList)
+                         ArrayRef<std::string> WhiteList)
       : MigrateDir(migrateDir), ASTMigrateActions(astMigrateActions),
         NSIntegerTypedefed(nullptr), NSUIntegerTypedefed(nullptr),
         Remapper(remapper), FileMgr(fileMgr), PPRec(PPRec), PP(PP),
         IsOutputFile(isOutputFile), FoundationIncluded(false) {
     // FIXME: StringSet should have insert(iter, iter) to use here.
-    for (const std::string &Val : AllowList)
-      AllowListFilenames.insert(Val);
+    for (const std::string &Val : WhiteList)
+      WhiteListFilenames.insert(Val);
   }
 
 protected:
@@ -151,10 +151,10 @@ protected:
   void HandleTranslationUnit(ASTContext &Ctx) override;
 
   bool canModifyFile(StringRef Path) {
-    if (AllowListFilenames.empty())
+    if (WhiteListFilenames.empty())
       return true;
-    return AllowListFilenames.find(llvm::sys::path::filename(Path)) !=
-           AllowListFilenames.end();
+    return WhiteListFilenames.find(llvm::sys::path::filename(Path))
+        != WhiteListFilenames.end();
   }
   bool canModifyFile(Optional<FileEntryRef> FE) {
     if (!FE)
@@ -487,8 +487,9 @@ static void rewriteToObjCProperty(const ObjCMethodDecl *Getter,
 
   // Short circuit 'delegate' properties that contain the name "delegate" or
   // "dataSource", or have exact name "target" to have 'assign' attribute.
-  if (PropertyName.equals("target") || PropertyName.contains("delegate") ||
-      PropertyName.contains("dataSource")) {
+  if (PropertyName.equals("target") ||
+      (PropertyName.find("delegate") != StringRef::npos) ||
+      (PropertyName.find("dataSource") != StringRef::npos)) {
     QualType QT = Getter->getReturnType();
     if (!QT->isRealType())
       append_attr(PropertyString, "assign", LParenAdded);
@@ -1143,7 +1144,7 @@ static bool AttributesMatch(const Decl *Decl1, const Decl *Decl2,
 
 static bool IsValidIdentifier(ASTContext &Ctx,
                               const char *Name) {
-  if (!isAsciiIdentifierStart(Name[0]))
+  if (!isIdentifierHead(Name[0]))
     return false;
   std::string NameString = Name;
   NameString[0] = toLowercase(NameString[0]);
@@ -1986,7 +1987,7 @@ bool MigrateSourceAction::BeginInvocation(CompilerInstance &CI) {
   return true;
 }
 
-static std::vector<std::string> getAllowListFilenames(StringRef DirPath) {
+static std::vector<std::string> getWhiteListFilenames(StringRef DirPath) {
   using namespace llvm::sys::fs;
   using namespace llvm::sys::path;
 
@@ -2017,16 +2018,16 @@ MigrateSourceAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
   if (ObjCMTOpts == FrontendOptions::ObjCMT_None) {
     // If no specific option was given, enable literals+subscripting transforms
     // by default.
-    ObjCMTAction |=
-        FrontendOptions::ObjCMT_Literals | FrontendOptions::ObjCMT_Subscripting;
+    ObjCMTAction |= FrontendOptions::ObjCMT_Literals |
+                    FrontendOptions::ObjCMT_Subscripting;
   }
   CI.getPreprocessor().addPPCallbacks(std::unique_ptr<PPCallbacks>(PPRec));
-  std::vector<std::string> AllowList =
-      getAllowListFilenames(CI.getFrontendOpts().ObjCMTAllowListPath);
+  std::vector<std::string> WhiteList =
+    getWhiteListFilenames(CI.getFrontendOpts().ObjCMTWhiteListPath);
   return std::make_unique<ObjCMigrateASTConsumer>(
       CI.getFrontendOpts().OutputFile, ObjCMTAction, Remapper,
       CI.getFileManager(), PPRec, CI.getPreprocessor(),
-      /*isOutputFile=*/true, AllowList);
+      /*isOutputFile=*/true, WhiteList);
 }
 
 namespace {

@@ -223,13 +223,14 @@ bool alwaysReturns(const ExtractionZone &EZ) {
   while (const auto *CS = llvm::dyn_cast<CompoundStmt>(Last)) {
     if (CS->body_empty())
       return false;
-    Last = CS->body_back();
+    else
+      Last = CS->body_back();
   }
   return llvm::isa<ReturnStmt>(Last);
 }
 
 bool ExtractionZone::isRootStmt(const Stmt *S) const {
-  return RootStmts.contains(S);
+  return RootStmts.find(S) != RootStmts.end();
 }
 
 // Finds the function in which the zone lies.

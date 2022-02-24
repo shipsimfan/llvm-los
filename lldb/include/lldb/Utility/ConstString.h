@@ -14,7 +14,7 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/YAMLTraits.h"
 
-#include <cstddef>
+#include <stddef.h>
 
 namespace lldb_private {
 class Stream;
@@ -394,20 +394,22 @@ public:
   ///
   /// \return
   ///     The number of bytes that this object occupies in memory.
+  ///
+  /// \see ConstString::StaticMemorySize ()
   size_t MemorySize() const { return sizeof(ConstString); }
 
-  struct MemoryStats {
-    size_t GetBytesTotal() const { return bytes_total; }
-    size_t GetBytesUsed() const { return bytes_used; }
-    size_t GetBytesUnused() const { return bytes_total - bytes_used; }
-    size_t bytes_total = 0;
-    size_t bytes_used = 0;
-  };
-
-  static MemoryStats GetMemoryStats();
+  /// Get the size in bytes of the current global string pool.
+  ///
+  /// Reports the size in bytes of all shared C string values, containers and
+  /// any other values as a byte size for the entire string pool.
+  ///
+  /// \return
+  ///     The number of bytes that the global string pool occupies
+  ///     in memory.
+  static size_t StaticMemorySize();
 
 protected:
-  template <typename T, typename Enable> friend struct ::llvm::DenseMapInfo;
+  template <typename T> friend struct ::llvm::DenseMapInfo;
   /// Only used by DenseMapInfo.
   static ConstString FromStringPoolPointer(const char *ptr) {
     ConstString s;

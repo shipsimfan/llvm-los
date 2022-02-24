@@ -1,8 +1,9 @@
 //===--- FileIndexRecord.cpp - Index data per file --------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,16 +17,23 @@
 using namespace clang;
 using namespace clang::index;
 
-ArrayRef<DeclOccurrence>
-FileIndexRecord::getDeclOccurrencesSortedByOffset() const {
-  if (!IsSorted) {
-    llvm::stable_sort(Decls,
-                      [](const DeclOccurrence &A, const DeclOccurrence &B) {
-                        return A.Offset < B.Offset;
-                      });
-    IsSorted = true;
+static void addOccurrence(std::vector<DeclOccurrence> &Decls,
+                          DeclOccurrence Info) {
+  auto IsNextOccurence = [&]() -> bool {
+    if (Decls.empty())
+      return true;
+    auto &Last = Decls.back();
+    return Last.Offset < Info.Offset;
+  };
+
+  if (IsNextOccurence()) {
+    Decls.push_back(std::move(Info));
+    return;
   }
-  return Decls;
+
+  // We keep Decls in order as we need to access them in this order in all cases.
+  auto It = llvm::upper_bound(Decls, Info);
+  Decls.insert(It, std::move(Info));
 }
 
 void FileIndexRecord::addDeclOccurence(SymbolRoleSet Roles, unsigned Offset,
@@ -33,15 +41,13 @@ void FileIndexRecord::addDeclOccurence(SymbolRoleSet Roles, unsigned Offset,
                                        ArrayRef<SymbolRelation> Relations) {
   assert(D->isCanonicalDecl() &&
          "Occurrences should be associated with their canonical decl");
-  IsSorted = false;
-  Decls.emplace_back(Roles, Offset, D, Relations);
+  addOccurrence(Decls, DeclOccurrence(Roles, Offset, D, Relations));
 }
 
 void FileIndexRecord::addMacroOccurence(SymbolRoleSet Roles, unsigned Offset,
                                         const IdentifierInfo *Name,
                                         const MacroInfo *MI) {
-  IsSorted = false;
-  Decls.emplace_back(Roles, Offset, Name, MI);
+  addOccurrence(Decls, DeclOccurrence(Roles, Offset, Name, MI));
 }
 
 void FileIndexRecord::removeHeaderGuardMacros() {

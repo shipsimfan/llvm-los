@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/IR/Dialect.h"
-#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/DialectInterface.h"
@@ -24,15 +23,15 @@
 using namespace mlir;
 using namespace detail;
 
+DialectAsmParser::~DialectAsmParser() {}
+
 //===----------------------------------------------------------------------===//
 // DialectRegistry
 //===----------------------------------------------------------------------===//
 
-DialectRegistry::DialectRegistry() { insert<BuiltinDialect>(); }
-
 void DialectRegistry::addDialectInterface(
     StringRef dialectName, TypeID interfaceTypeID,
-    const DialectInterfaceAllocatorFunction &allocator) {
+    InterfaceAllocatorFunction allocator) {
   assert(allocator && "unexpected null interface allocation function");
   auto it = registry.find(dialectName.str());
   assert(it != registry.end() &&
@@ -41,8 +40,8 @@ void DialectRegistry::addDialectInterface(
   // Bail out if the interface with the given ID is already in the registry for
   // the given dialect. We expect a small number (dozens) of interfaces so a
   // linear search is fine here.
-  auto &ifaces = interfaces[it->second.first];
-  for (const auto &kvp : ifaces.dialectInterfaces) {
+  auto &dialectInterfaces = interfaces[it->second.first];
+  for (const auto &kvp : dialectInterfaces) {
     if (kvp.first == interfaceTypeID) {
       LLVM_DEBUG(llvm::dbgs()
                  << "[" DEBUG_TYPE
@@ -52,31 +51,7 @@ void DialectRegistry::addDialectInterface(
     }
   }
 
-  ifaces.dialectInterfaces.emplace_back(interfaceTypeID, allocator);
-}
-
-void DialectRegistry::addObjectInterface(
-    StringRef dialectName, TypeID objectID, TypeID interfaceTypeID,
-    const ObjectInterfaceAllocatorFunction &allocator) {
-  assert(allocator && "unexpected null interface allocation function");
-
-  auto it = registry.find(dialectName.str());
-  assert(it != registry.end() &&
-         "adding an interface for an op from an unregistered dialect");
-
-  auto dialectID = it->second.first;
-  auto &ifaces = interfaces[dialectID];
-
-  for (const auto &info : ifaces.objectInterfaces) {
-    if (std::get<0>(info) == objectID && std::get<1>(info) == interfaceTypeID) {
-      LLVM_DEBUG(llvm::dbgs()
-                 << "[" DEBUG_TYPE
-                    "] repeated interface object interface registration");
-      return;
-    }
-  }
-
-  ifaces.objectInterfaces.emplace_back(objectID, interfaceTypeID, allocator);
+  dialectInterfaces.emplace_back(interfaceTypeID, allocator);
 }
 
 DialectAllocatorFunctionRef
@@ -88,7 +63,7 @@ DialectRegistry::getDialectAllocator(StringRef name) const {
 }
 
 void DialectRegistry::insert(TypeID typeID, StringRef name,
-                             const DialectAllocatorFunction &ctor) {
+                             DialectAllocatorFunction ctor) {
   auto inserted = registry.insert(
       std::make_pair(std::string(name), std::make_pair(typeID, ctor)));
   if (!inserted.second && inserted.first->second.first != typeID) {
@@ -104,15 +79,11 @@ void DialectRegistry::registerDelayedInterfaces(Dialect *dialect) const {
     return;
 
   // Add an interface if it is not already present.
-  for (const auto &kvp : it->getSecond().dialectInterfaces) {
+  for (const auto &kvp : it->second) {
     if (dialect->getRegisteredInterface(kvp.first))
       continue;
     dialect->addInterface(kvp.second(dialect));
   }
-
-  // Add attribute, operation and type interfaces.
-  for (const auto &info : it->getSecond().objectInterfaces)
-    std::get<2>(info)(dialect->getContext());
 }
 
 //===----------------------------------------------------------------------===//
@@ -124,7 +95,7 @@ Dialect::Dialect(StringRef name, MLIRContext *context, TypeID id)
   assert(isValidNamespace(name) && "invalid dialect namespace");
 }
 
-Dialect::~Dialect() = default;
+Dialect::~Dialect() {}
 
 /// Verify an attribute from this dialect on the argument at 'argIndex' for
 /// the region at 'regionIndex' on the given operation. Returns failure if
@@ -156,7 +127,7 @@ Attribute Dialect::parseAttribute(DialectAsmParser &parser, Type type) const {
 Type Dialect::parseType(DialectAsmParser &parser) const {
   // If this dialect allows unknown types, then represent this with OpaqueType.
   if (allowsUnknownTypes()) {
-    StringAttr ns = StringAttr::get(getContext(), getNamespace());
+    Identifier ns = Identifier::get(getNamespace(), getContext());
     return OpaqueType::get(ns, parser.getFullSymbolSpec());
   }
 
@@ -170,16 +141,18 @@ Dialect::getParseOperationHook(StringRef opName) const {
   return None;
 }
 
-llvm::unique_function<void(Operation *, OpAsmPrinter &printer)>
-Dialect::getOperationPrinter(Operation *op) const {
+LogicalResult Dialect::printOperation(Operation *op,
+                                      OpAsmPrinter &printer) const {
   assert(op->getDialect() == this &&
          "Dialect hook invoked on non-dialect owned operation");
-  return nullptr;
+  return failure();
 }
 
 /// Utility function that returns if the given string is a valid dialect
-/// namespace
+/// namespace.
 bool Dialect::isValidNamespace(StringRef str) {
+  if (str.empty())
+    return true;
   llvm::Regex dialectNameRegex("^[a-zA-Z_][a-zA-Z_0-9\\$]*$");
   return dialectNameRegex.match(str);
 }
@@ -196,7 +169,7 @@ void Dialect::addInterface(std::unique_ptr<DialectInterface> interface) {
 // Dialect Interface
 //===----------------------------------------------------------------------===//
 
-DialectInterface::~DialectInterface() = default;
+DialectInterface::~DialectInterface() {}
 
 DialectInterfaceCollectionBase::DialectInterfaceCollectionBase(
     MLIRContext *ctx, TypeID interfaceKind) {
@@ -208,7 +181,7 @@ DialectInterfaceCollectionBase::DialectInterfaceCollectionBase(
   }
 }
 
-DialectInterfaceCollectionBase::~DialectInterfaceCollectionBase() = default;
+DialectInterfaceCollectionBase::~DialectInterfaceCollectionBase() {}
 
 /// Get the interface for the dialect of given operation, or null if one
 /// is not registered.

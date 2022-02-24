@@ -16,11 +16,10 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/BinaryFormat/Dwarf.h"
-#include "llvm/CodeGen/LiveInterval.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/LiveInterval.h"
 #include "llvm/CodeGen/TargetFrameLowering.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
@@ -249,8 +248,8 @@ static void getAllocatableSetForRC(const MachineFunction &MF,
                                    const TargetRegisterClass *RC, BitVector &R){
   assert(RC->isAllocatable() && "invalid for nonallocatable sets");
   ArrayRef<MCPhysReg> Order = RC->getRawAllocationOrder(MF);
-  for (MCPhysReg PR : Order)
-    R.set(PR);
+  for (unsigned i = 0; i != Order.size(); ++i)
+    R.set(Order[i]);
 }
 
 BitVector TargetRegisterInfo::getAllocatableSet(const MachineFunction &MF,
@@ -268,9 +267,8 @@ BitVector TargetRegisterInfo::getAllocatableSet(const MachineFunction &MF,
   }
 
   // Mask out the reserved registers
-  const MachineRegisterInfo &MRI = MF.getRegInfo();
-  const BitVector &Reserved = MRI.getReservedRegs();
-  Allocatable.reset(Reserved);
+  BitVector Reserved = getReservedRegs(MF);
+  Allocatable &= Reserved.flip();
 
   return Allocatable;
 }
@@ -553,7 +551,7 @@ bool TargetRegisterInfo::getCoveringSubRegIndexes(
 
   // Abort if we cannot possibly implement the COPY with the given indexes.
   if (BestIdx == 0)
-    return false;
+    return 0;
 
   NeededIndexes.push_back(BestIdx);
 
@@ -582,7 +580,7 @@ bool TargetRegisterInfo::getCoveringSubRegIndexes(
     }
 
     if (BestIdx == 0)
-      return false; // Impossible to handle
+      return 0; // Impossible to handle
 
     NeededIndexes.push_back(BestIdx);
 

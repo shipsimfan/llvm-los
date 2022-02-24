@@ -14,7 +14,7 @@
 
 const int c0 __attribute__((retain)) = 42;
 
-void foo(void) {
+void foo() {
   static int l0 __attribute__((retain)) = 2;
 }
 

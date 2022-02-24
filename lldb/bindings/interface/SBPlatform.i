@@ -177,9 +177,6 @@ public:
     uint32_t
     GetOSUpdateVersion ();
 
-    void
-    SetSDKRoot(const char *sysroot);
-
     lldb::SBError
     Get (lldb::SBFileSpec &src, lldb::SBFileSpec &dst);
 

@@ -214,7 +214,7 @@ namespace DestructorVirtualCalls {
       C obj;
       clang_analyzer_eval(obj.get() == 3); // expected-warning{{TRUE}}
 
-      // Correctness check for devirtualization.
+      // Sanity check for devirtualization.
       A *base = &obj;
       clang_analyzer_eval(base->get() == 3); // expected-warning{{TRUE}}
 

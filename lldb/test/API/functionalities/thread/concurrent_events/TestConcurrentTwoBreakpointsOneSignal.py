@@ -18,5 +18,5 @@ class ConcurrentTwoBreakpointsOneSignal(ConcurrentEventsBase):
                         bugnumber="llvm.org/pr49433")
     def test(self):
         """Test two threads that trigger a breakpoint and one signal thread. """
-        self.build()
+        self.build(dictionary=self.getBuildFlags())
         self.do_thread_actions(num_breakpoint_threads=2, num_signal_threads=1)

@@ -91,20 +91,8 @@ public:
   void adjustStackMapLiveOutMask(uint32_t *Mask) const override;
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
-  bool isAsmClobberable(const MachineFunction &MF,
-                        MCRegister PhysReg) const override;
   bool isCallerPreservedPhysReg(MCRegister PhysReg,
                                 const MachineFunction &MF) const override;
-
-  // Provide hints to the register allocator for allocating subregisters
-  // of primed and unprimed accumulators. For example, if accumulator
-  // ACC5 is assigned, we also want to assign UACC5 to the input.
-  // Similarly if UACC5 is assigned, we want to assign VSRp10, VSRp11
-  // to its inputs.
-  bool getRegAllocationHints(Register VirtReg, ArrayRef<MCPhysReg> Order,
-                             SmallVectorImpl<MCPhysReg> &Hints,
-                             const MachineFunction &MF, const VirtRegMap *VRM,
-                             const LiveRegMatrix *Matrix) const override;
 
   /// We require the register scavenger.
   bool requiresRegisterScavenging(const MachineFunction &MF) const override {
@@ -113,7 +101,9 @@ public:
 
   bool requiresFrameIndexScavenging(const MachineFunction &MF) const override;
 
-  bool requiresVirtualBaseRegisters(const MachineFunction &MF) const override;
+  bool requiresVirtualBaseRegisters(const MachineFunction &MF) const override {
+    return true;
+  }
 
   void lowerDynamicAlloc(MachineBasicBlock::iterator II) const;
   void lowerDynamicAreaOffset(MachineBasicBlock::iterator II) const;
@@ -134,11 +124,6 @@ public:
                         unsigned FrameIndex) const;
   void lowerACCRestore(MachineBasicBlock::iterator II,
                        unsigned FrameIndex) const;
-
-  void lowerQuadwordSpilling(MachineBasicBlock::iterator II,
-                             unsigned FrameIndex) const;
-  void lowerQuadwordRestore(MachineBasicBlock::iterator II,
-                            unsigned FrameIndex) const;
 
   static void emitAccCopyInfo(MachineBasicBlock &MBB, MCRegister DestReg,
                               MCRegister SrcReg);
@@ -186,10 +171,6 @@ public:
     }
 
     return RegName;
-  }
-
-  bool isNonallocatableRegisterCalleeSave(MCRegister Reg) const override {
-    return Reg == PPC::LR || Reg == PPC::LR8;
   }
 };
 

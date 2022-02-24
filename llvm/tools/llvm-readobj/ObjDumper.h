@@ -20,7 +20,6 @@
 
 namespace llvm {
 namespace object {
-class Archive;
 class COFFImportFile;
 class ObjectFile;
 class XCOFFObjectFile;
@@ -40,9 +39,6 @@ public:
 
   virtual bool canDumpContent() { return true; }
 
-  virtual void printFileSummary(StringRef FileStr, object::ObjectFile &Obj,
-                                ArrayRef<std::string> InputFilenames,
-                                const object::Archive *A);
   virtual void printFileHeaders() = 0;
   virtual void printSectionHeaders() = 0;
   virtual void printRelocations() = 0;
@@ -101,9 +97,6 @@ public:
                      llvm::codeview::GlobalTypeTableBuilder &GlobalCVTypes,
                      bool GHash) {}
 
-  // Only implement for XCOFF
-  virtual void printAuxiliaryHeader() {}
-
   // Only implemented for MachO.
   virtual void printMachODataInCode() { }
   virtual void printMachOVersionMin() { }
@@ -112,12 +105,7 @@ public:
   virtual void printMachOIndirectSymbols() { }
   virtual void printMachOLinkerOptions() { }
 
-  // Currently only implemented for XCOFF.
-  virtual void printStringTable() { }
-
   virtual void printStackMap() const = 0;
-
-  void printAsStringList(StringRef StringContent, size_t StringDataOffset = 0);
 
   void printSectionsAsString(const object::ObjectFile &Obj,
                              ArrayRef<std::string> Sections);

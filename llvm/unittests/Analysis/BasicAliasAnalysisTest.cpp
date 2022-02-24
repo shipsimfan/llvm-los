@@ -46,7 +46,7 @@ protected:
     DominatorTree DT;
     AssumptionCache AC;
     BasicAAResult BAA;
-    SimpleAAQueryInfo AAQI;
+    AAQueryInfo AAQI;
 
     TestAnalyses(BasicAATest &Test)
         : DT(*Test.F), AC(*Test.F), BAA(Test.DL, *Test.F, Test.TLI, AC, &DT),

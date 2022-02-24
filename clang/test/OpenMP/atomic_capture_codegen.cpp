@@ -1,19 +1,11 @@
 
 // RUN: %clang_cc1 -verify -triple x86_64-apple-darwin10 -target-cpu core2 -fopenmp -x c -emit-llvm %s -o - | FileCheck %s
 // RUN: %clang_cc1 -fopenmp -x c -triple x86_64-apple-darwin10 -target-cpu core2 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp -x c -triple x86_64-apple-darwin10 -target-cpu core2 -include-pch %t -verify %s -emit-llvm -o - | FileCheck --check-prefix=CHECK --check-prefix=CHECK-50 %s
+// RUN: %clang_cc1 -fopenmp -x c -triple x86_64-apple-darwin10 -target-cpu core2 -include-pch %t -verify %s -emit-llvm -o - | FileCheck %s
 
 // RUN: %clang_cc1 -verify -triple x86_64-apple-darwin10 -target-cpu core2 -fopenmp-simd -x c -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
 // RUN: %clang_cc1 -fopenmp-simd -x c -triple x86_64-apple-darwin10 -target-cpu core2 -emit-pch -o %t %s
 // RUN: %clang_cc1 -fopenmp-simd -x c -triple x86_64-apple-darwin10 -target-cpu core2 -include-pch %t -verify %s -emit-llvm -o - | FileCheck --check-prefix SIMD-ONLY0 %s
-
-// RUN: %clang_cc1 -verify -triple x86_64-apple-darwin10 -target-cpu core2 -fopenmp -fopenmp-version=51 -x c -emit-llvm %s -o - | FileCheck %s
-// RUN: %clang_cc1 -fopenmp -fopenmp-version=51 -x c -triple x86_64-apple-darwin10 -target-cpu core2 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp -fopenmp-version=51 -x c -triple x86_64-apple-darwin10 -target-cpu core2 -include-pch %t -verify %s -emit-llvm -o - | FileCheck %s
-
-// RUN: %clang_cc1 -verify -triple x86_64-apple-darwin10 -target-cpu core2 -fopenmp-simd -fopenmp-version=51 -x c -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
-// RUN: %clang_cc1 -fopenmp-simd -fopenmp-version=51 -x c -triple x86_64-apple-darwin10 -target-cpu core2 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp-simd -fopenmp-version=51 -x c -triple x86_64-apple-darwin10 -target-cpu core2 -include-pch %t -verify %s -emit-llvm -o - | FileCheck --check-prefix SIMD-ONLY0 %s
 // SIMD-ONLY0-NOT: {{__kmpc|__tgt}}
 // expected-no-diagnostics
 #ifndef HEADER
@@ -90,7 +82,7 @@ float2 float2x;
 // register int rix __asm__("0");
 register int rix __asm__("esp");
 
-int main(void) {
+int main() {
 // CHECK: [[PREV:%.+]] = atomicrmw add i8* @{{.+}}, i8 1 monotonic, align 1
 // CHECK: store i8 [[PREV]], i8* @{{.+}},
 #pragma omp atomic capture
@@ -278,7 +270,7 @@ int main(void) {
 // CHECK: [[EXPR_RE:%.+]] = load i32, i32* getelementptr inbounds ({ i32, i32 }, { i32, i32 }* @{{.+}}, i32 0, i32 0)
 // CHECK: [[EXPR_IM:%.+]] = load i32, i32* getelementptr inbounds ({ i32, i32 }, { i32, i32 }* @{{.+}}, i32 0, i32 1)
 // CHECK: [[BITCAST:%.+]] = bitcast { i32, i32 }* [[EXPECTED_ADDR:%.+]] to i8*
-// CHECK: call void @__atomic_load(i64 noundef 8, i8* noundef bitcast ({ i32, i32 }* [[X_ADDR:@.+]] to i8*), i8* noundef [[BITCAST]], i32 noundef 0)
+// CHECK: call void @__atomic_load(i64 8, i8* bitcast ({ i32, i32 }* [[X_ADDR:@.+]] to i8*), i8* [[BITCAST]], i32 0)
 // CHECK: br label %[[CONT:.+]]
 // CHECK: [[CONT]]
 // CHECK: [[LD_RE_ADDR:%.+]] = getelementptr inbounds { i32, i32 }, { i32, i32 }* [[EXPECTED_ADDR]], i32 0, i32 0
@@ -292,7 +284,7 @@ int main(void) {
 // CHECK: store i32 [[NEW_IM:%.+]], i32* [[X_IM_ADDR]]
 // CHECK: [[EXPECTED:%.+]] = bitcast { i32, i32 }* [[EXPECTED_ADDR]] to i8*
 // CHECK: [[DESIRED:%.+]] = bitcast { i32, i32 }* [[DESIRED_ADDR]] to i8*
-// CHECK: [[SUCCESS_FAIL:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 noundef 8, i8* noundef bitcast ({ i32, i32 }* [[X_ADDR]] to i8*), i8* noundef [[EXPECTED]], i8* noundef [[DESIRED]], i32 noundef 0, i32 noundef 0)
+// CHECK: [[SUCCESS_FAIL:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 8, i8* bitcast ({ i32, i32 }* [[X_ADDR]] to i8*), i8* [[EXPECTED]], i8* [[DESIRED]], i32 0, i32 0)
 // CHECK: br i1 [[SUCCESS_FAIL]], label %[[EXIT:.+]], label %[[CONT]]
 // CHECK: [[EXIT]]
 // CHECK: [[RE_CAST:%.+]] = sitofp i32 [[NEW_RE]] to float
@@ -304,7 +296,7 @@ int main(void) {
 // CHECK: [[EXPR_RE:%.+]] = load float, float* getelementptr inbounds ({ float, float }, { float, float }* @{{.+}}, i32 0, i32 0)
 // CHECK: [[EXPR_IM:%.+]] = load float, float* getelementptr inbounds ({ float, float }, { float, float }* @{{.+}}, i32 0, i32 1)
 // CHECK: [[BITCAST:%.+]] = bitcast { float, float }* [[EXPECTED_ADDR:%.+]] to i8*
-// CHECK: call void @__atomic_load(i64 noundef 8, i8* noundef bitcast ({ float, float }* [[X_ADDR:@.+]] to i8*), i8* noundef [[BITCAST]], i32 noundef 0)
+// CHECK: call void @__atomic_load(i64 8, i8* bitcast ({ float, float }* [[X_ADDR:@.+]] to i8*), i8* [[BITCAST]], i32 0)
 // CHECK: br label %[[CONT:.+]]
 // CHECK: [[CONT]]
 // CHECK: [[X_RE_ADDR:%.+]] = getelementptr inbounds { float, float }, { float, float }* [[EXPECTED_ADDR]], i32 0, i32 0
@@ -318,7 +310,7 @@ int main(void) {
 // CHECK: store float [[NEW_IM:%.+]], float* [[X_IM_ADDR]]
 // CHECK: [[EXPECTED:%.+]] = bitcast { float, float }* [[EXPECTED_ADDR]] to i8*
 // CHECK: [[DESIRED:%.+]] = bitcast { float, float }* [[DESIRED_ADDR]] to i8*
-// CHECK: [[SUCCESS_FAIL:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 noundef 8, i8* noundef bitcast ({ float, float }* [[X_ADDR]] to i8*), i8* noundef [[EXPECTED]], i8* noundef [[DESIRED]], i32 noundef 0, i32 noundef 0)
+// CHECK: [[SUCCESS_FAIL:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 8, i8* bitcast ({ float, float }* [[X_ADDR]] to i8*), i8* [[EXPECTED]], i8* [[DESIRED]], i32 0, i32 0)
 // CHECK: br i1 [[SUCCESS_FAIL]], label %[[EXIT:.+]], label %[[CONT]]
 // CHECK: [[EXIT]]
 // CHECK: [[RE_CAST:%.+]] = fptosi float [[X_RE_OLD]] to i32
@@ -330,7 +322,7 @@ int main(void) {
 // CHECK: [[EXPR_RE:%.+]] = load double, double* getelementptr inbounds ({ double, double }, { double, double }* @{{.+}}, i32 0, i32 0)
 // CHECK: [[EXPR_IM:%.+]] = load double, double* getelementptr inbounds ({ double, double }, { double, double }* @{{.+}}, i32 0, i32 1)
 // CHECK: [[BITCAST:%.+]] = bitcast { double, double }* [[EXPECTED_ADDR:%.+]] to i8*
-// CHECK: call void @__atomic_load(i64 noundef 16, i8* noundef bitcast ({ double, double }* [[X_ADDR:@.+]] to i8*), i8* noundef [[BITCAST]], i32 noundef 5)
+// CHECK: call void @__atomic_load(i64 16, i8* bitcast ({ double, double }* [[X_ADDR:@.+]] to i8*), i8* [[BITCAST]], i32 5)
 // CHECK: br label %[[CONT:.+]]
 // CHECK: [[CONT]]
 // CHECK: [[X_RE_ADDR:%.+]] = getelementptr inbounds { double, double }, { double, double }* [[EXPECTED_ADDR]], i32 0, i32 0
@@ -344,14 +336,14 @@ int main(void) {
 // CHECK: store double [[NEW_IM:%.+]], double* [[X_IM_ADDR]]
 // CHECK: [[EXPECTED:%.+]] = bitcast { double, double }* [[EXPECTED_ADDR]] to i8*
 // CHECK: [[DESIRED:%.+]] = bitcast { double, double }* [[DESIRED_ADDR]] to i8*
-// CHECK: [[SUCCESS_FAIL:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 noundef 16, i8* noundef bitcast ({ double, double }* [[X_ADDR]] to i8*), i8* noundef [[EXPECTED]], i8* noundef [[DESIRED]], i32 noundef 5, i32 noundef 5)
+// CHECK: [[SUCCESS_FAIL:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 16, i8* bitcast ({ double, double }* [[X_ADDR]] to i8*), i8* [[EXPECTED]], i8* [[DESIRED]], i32 5, i32 5)
 // CHECK: br i1 [[SUCCESS_FAIL]], label %[[EXIT:.+]], label %[[CONT]]
 // CHECK: [[EXIT]]
 // CHECK: [[RE_CAST:%.+]] = fptrunc double [[NEW_RE]] to float
 // CHECK: [[IM_CAST:%.+]] = fptrunc double [[NEW_IM]] to float
 // CHECK: store float [[RE_CAST]], float* getelementptr inbounds ({ float, float }, { float, float }* @{{.+}}, i32 0, i32 0),
 // CHECK: store float [[IM_CAST]], float* getelementptr inbounds ({ float, float }, { float, float }* @{{.+}}, i32 0, i32 1),
-// CHECK-50: call{{.*}} @__kmpc_flush(
+// CHECK: call{{.*}} @__kmpc_flush(
 #pragma omp atomic capture seq_cst
   {cdx = cdx - cdv; cfv = cdx;}
 // CHECK: [[BV:%.+]] = load i8, i8* @{{.+}}
@@ -401,7 +393,7 @@ int main(void) {
 // CHECK: br i1 [[SUCCESS_FAIL]], label %[[EXIT:.+]], label %[[CONT]]
 // CHECK: [[EXIT]]
 // CHECK: store i8 [[NEW]], i8* @{{.+}},
-// CHECK-50: call{{.*}} @__kmpc_flush(
+// CHECK: call{{.*}} @__kmpc_flush(
 #pragma omp atomic capture, seq_cst
   {cx = cx >> ucv; cv = cx;}
 // CHECK: [[SV:%.+]]  = load i16, i16* @{{.+}},
@@ -444,7 +436,7 @@ int main(void) {
 // CHECK: [[OLD:%.+]] = atomicrmw or i32* @{{.+}}, i32 [[EXPR]] seq_cst, align 4
 // CHECK: [[DESIRED:%.+]] = or i32 [[EXPR]], [[OLD]]
 // CHECK: store i32 [[DESIRED]], i32* @{{.+}},
-// CHECK-50: call{{.*}} @__kmpc_flush(
+// CHECK: call{{.*}} @__kmpc_flush(
 #pragma omp atomic seq_cst, capture
   {uix = iv | uix; uiv = uix;}
 // CHECK: [[EXPR:%.+]] = load i32, i32* @{{.+}}
@@ -455,7 +447,7 @@ int main(void) {
   iv = ix = ix & uiv;
 // CHECK: [[EXPR:%.+]] = load i64, i64* @{{.+}},
 // CHECK: [[BITCAST:%.+]] = bitcast { i32, i32 }* [[EXPECTED_ADDR:%.+]] to i8*
-// CHECK: call void @__atomic_load(i64 noundef 8, i8* noundef bitcast ({ i32, i32 }* [[X_ADDR:@.+]] to i8*), i8* noundef [[BITCAST]], i32 noundef 0)
+// CHECK: call void @__atomic_load(i64 8, i8* bitcast ({ i32, i32 }* [[X_ADDR:@.+]] to i8*), i8* [[BITCAST]], i32 0)
 // CHECK: br label %[[CONT:.+]]
 // CHECK: [[CONT]]
 // CHECK: [[X_RE_ADDR:%.+]] = getelementptr inbounds { i32, i32 }, { i32, i32 }* [[EXPECTED_ADDR]], i32 0, i32 0
@@ -469,7 +461,7 @@ int main(void) {
 // CHECK: store i32 %{{.+}}, i32* [[X_IM_ADDR]]
 // CHECK: [[EXPECTED:%.+]] = bitcast { i32, i32 }* [[EXPECTED_ADDR]] to i8*
 // CHECK: [[DESIRED:%.+]] = bitcast { i32, i32 }* [[DESIRED_ADDR]] to i8*
-// CHECK: [[SUCCESS_FAIL:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 noundef 8, i8* noundef bitcast ({ i32, i32 }* [[X_ADDR]] to i8*), i8* noundef [[EXPECTED]], i8* noundef [[DESIRED]], i32 noundef 0, i32 noundef 0)
+// CHECK: [[SUCCESS_FAIL:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 8, i8* bitcast ({ i32, i32 }* [[X_ADDR]] to i8*), i8* [[EXPECTED]], i8* [[DESIRED]], i32 0, i32 0)
 // CHECK: br i1 [[SUCCESS_FAIL]], label %[[EXIT:.+]], label %[[CONT]]
 // CHECK: [[EXIT]]
 // CHECK: store i32 [[OLD_RE]], i32* getelementptr inbounds ({ i32, i32 }, { i32, i32 }* @{{.+}}, i32 0, i32 0),
@@ -538,7 +530,7 @@ int main(void) {
   {ldv = ldx; ldx -= ullv;}
 // CHECK: [[EXPR:%.+]] = load float, float* @{{.+}},
 // CHECK: [[BITCAST:%.+]] = bitcast { i32, i32 }* [[EXPECTED_ADDR:%.+]] to i8*
-// CHECK: call void @__atomic_load(i64 noundef 8, i8* noundef bitcast ({ i32, i32 }* [[X_ADDR:@.+]] to i8*), i8* noundef [[BITCAST]], i32 noundef 0)
+// CHECK: call void @__atomic_load(i64 8, i8* bitcast ({ i32, i32 }* [[X_ADDR:@.+]] to i8*), i8* [[BITCAST]], i32 0)
 // CHECK: br label %[[CONT:.+]]
 // CHECK: [[CONT]]
 // CHECK: [[X_RE_ADDR:%.+]] = getelementptr inbounds { i32, i32 }, { i32, i32 }* [[EXPECTED_ADDR]], i32 0, i32 0
@@ -552,7 +544,7 @@ int main(void) {
 // CHECK: store i32 [[NEW_IM:%.+]], i32* [[X_IM_ADDR]]
 // CHECK: [[EXPECTED:%.+]] = bitcast { i32, i32 }* [[EXPECTED_ADDR]] to i8*
 // CHECK: [[DESIRED:%.+]] = bitcast { i32, i32 }* [[DESIRED_ADDR]] to i8*
-// CHECK: [[SUCCESS_FAIL:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 noundef 8, i8* noundef bitcast ({ i32, i32 }* [[X_ADDR]] to i8*), i8* noundef [[EXPECTED]], i8* noundef [[DESIRED]], i32 noundef 0, i32 noundef 0)
+// CHECK: [[SUCCESS_FAIL:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 8, i8* bitcast ({ i32, i32 }* [[X_ADDR]] to i8*), i8* [[EXPECTED]], i8* [[DESIRED]], i32 0, i32 0)
 // CHECK: br i1 [[SUCCESS_FAIL]], label %[[EXIT:.+]], label %[[CONT]]
 // CHECK: [[EXIT]]
 // CHECK: store i32 [[NEW_RE]], i32* getelementptr inbounds ({ i32, i32 }, { i32, i32 }* @{{.+}}, i32 0, i32 0),
@@ -680,7 +672,7 @@ int main(void) {
   iv = bfx.a = bfx.a - ldv;
 // CHECK: [[EXPR:%.+]] = load x86_fp80, x86_fp80* @{{.+}}
 // CHECK: [[BITCAST:%.+]] = bitcast i32* [[LDTEMP:%.+]] to i8*
-// CHECK: call void @__atomic_load(i64 noundef 4, i8* noundef getelementptr (i8, i8* bitcast (%struct.BitFields_packed* @{{.+}} to i8*), i64 4), i8* noundef [[BITCAST]], i32 noundef 0)
+// CHECK: call void @__atomic_load(i64 4, i8* getelementptr (i8, i8* bitcast (%struct.BitFields_packed* @{{.+}} to i8*), i64 4), i8* [[BITCAST]], i32 0)
 // CHECK: br label %[[CONT:.+]]
 // CHECK: [[CONT]]
 // CHECK: [[OLD:%.+]] = load i32, i32* [[LDTEMP]],
@@ -700,7 +692,7 @@ int main(void) {
 // CHECK: store i32 %{{.+}}, i32* [[TEMP1]]
 // CHECK: [[BITCAST_TEMP_OLD_BF_ADDR:%.+]] = bitcast i32* [[LDTEMP]] to i8*
 // CHECK: [[BITCAST_TEMP_NEW_BF_ADDR:%.+]] = bitcast i32* [[TEMP1]] to i8*
-// CHECK: [[FAIL_SUCCESS:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 noundef 4, i8* noundef getelementptr (i8, i8* bitcast (%struct.BitFields_packed* @{{.+}} to i8*), i64 4), i8* noundef [[BITCAST_TEMP_OLD_BF_ADDR]], i8* noundef [[BITCAST_TEMP_NEW_BF_ADDR]], i32 noundef 0, i32 noundef 0)
+// CHECK: [[FAIL_SUCCESS:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 4, i8* getelementptr (i8, i8* bitcast (%struct.BitFields_packed* @{{.+}} to i8*), i64 4), i8* [[BITCAST_TEMP_OLD_BF_ADDR]], i8* [[BITCAST_TEMP_NEW_BF_ADDR]], i32 0, i32 0)
 // CHECK: br i1 [[FAIL_SUCCESS]], label %[[EXIT:.+]], label %[[CONT]]
 // CHECK: [[EXIT]]
 // CHECK: store i32 [[A_ASHR]], i32* @{{.+}},
@@ -795,7 +787,7 @@ int main(void) {
 // CHECK: [[EXPR:%.+]] = load x86_fp80, x86_fp80* @{{.+}}
 // CHECK: [[LDTEMP:%.+]] = bitcast i32* %{{.+}} to i24*
 // CHECK: [[BITCAST:%.+]] = bitcast i24* [[LDTEMP]] to i8*
-// CHECK: call void @__atomic_load(i64 noundef 3, i8* noundef getelementptr (i8, i8* bitcast (%struct.BitFields3_packed* @{{.+}} to i8*), i64 1), i8* noundef [[BITCAST]], i32 noundef 0)
+// CHECK: call void @__atomic_load(i64 3, i8* getelementptr (i8, i8* bitcast (%struct.BitFields3_packed* @{{.+}} to i8*), i64 1), i8* [[BITCAST]], i32 0)
 // CHECK: br label %[[CONT:.+]]
 // CHECK: [[CONT]]
 // CHECK: [[OLD:%.+]] = load i24, i24* [[LDTEMP]],
@@ -818,7 +810,7 @@ int main(void) {
 // CHECK: store i24 %{{.+}}, i24* [[BITCAST2]]
 // CHECK: [[BITCAST_TEMP_OLD_BF_ADDR:%.+]] = bitcast i24* [[LDTEMP]] to i8*
 // CHECK: [[BITCAST_TEMP_NEW_BF_ADDR:%.+]] = bitcast i24* [[BITCAST2]] to i8*
-// CHECK: [[FAIL_SUCCESS:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 noundef 3, i8* noundef getelementptr (i8, i8* bitcast (%struct.BitFields3_packed* @{{.+}} to i8*), i64 1), i8* noundef [[BITCAST_TEMP_OLD_BF_ADDR]], i8* noundef [[BITCAST_TEMP_NEW_BF_ADDR]], i32 noundef 0, i32 noundef 0)
+// CHECK: [[FAIL_SUCCESS:%.+]] = call zeroext i1 @__atomic_compare_exchange(i64 3, i8* getelementptr (i8, i8* bitcast (%struct.BitFields3_packed* @{{.+}} to i8*), i64 1), i8* [[BITCAST_TEMP_OLD_BF_ADDR]], i8* [[BITCAST_TEMP_NEW_BF_ADDR]], i32 0, i32 0)
 // CHECK: br i1 [[FAIL_SUCCESS]], label %[[EXIT:.+]], label %[[CONT]]
 // CHECK: [[EXIT]]
 // CHECK: store i32 [[NEW_VAL]], i32* @{{.+}},
@@ -912,7 +904,7 @@ int main(void) {
 // CHECK: [[EXIT]]
 // CHECK: [[NEW_VAL:%.+]] = trunc i64 [[CONV]] to i32
 // CHECK: store i32 [[NEW_VAL]], i32* @{{.+}},
-// CHECK-50: call{{.*}} @__kmpc_flush(
+// CHECK: call{{.*}} @__kmpc_flush(
 #pragma omp atomic capture release
   {bfx4.b /= ldv; iv = bfx4.b;}
 // CHECK: [[EXPR:%.+]] = load x86_fp80, x86_fp80* @{{.+}}
@@ -945,7 +937,7 @@ int main(void) {
 // CHECK: [[EXIT]]
 // CHECK: [[NEW_VAL_I32:%.+]] = trunc i64 [[NEW_VAL]] to i32
 // CHECK: store i32 [[NEW_VAL_I32]], i32* @{{.+}},
-// CHECK-50: call{{.*}} @__kmpc_flush(
+// CHECK: call{{.*}} @__kmpc_flush(
 #pragma omp atomic capture acquire
   iv = bfx4_packed.b += ldv;
 // CHECK: load i64, i64*
@@ -971,7 +963,7 @@ int main(void) {
 // CHECK: br i1 [[FAIL_SUCCESS]], label %[[EXIT:.+]], label %[[CONT]]
 // CHECK: [[EXIT]]
 // CHECK: store float [[X]], float* @{{.+}},
-// CHECK-50: call{{.*}} @__kmpc_flush(
+// CHECK: call{{.*}} @__kmpc_flush(
 #pragma omp atomic capture acq_rel
   {fv = float2x.x; float2x.x = ulv - float2x.x;}
 // CHECK: [[EXPR:%.+]] = load double, double* @{{.+}},
@@ -981,7 +973,7 @@ int main(void) {
 // CHECK: [[NEW_VAL:%.+]] = fptosi double [[DIV]] to i32
 // CHECK: call void @llvm.write_register.i32([[REG]], i32 [[NEW_VAL]])
 // CHECK: store i32 [[NEW_VAL]], i32* @{{.+}},
-// CHECK-50: call{{.*}} @__kmpc_flush(
+// CHECK: call{{.*}} @__kmpc_flush(
 #pragma omp atomic capture seq_cst
   {rix = dv / rix; iv = rix;}
 // CHECK: [[OLD_VAL:%.+]] = atomicrmw xchg i32* @{{.+}}, i32 5 monotonic, align 4

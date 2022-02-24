@@ -15,7 +15,6 @@
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Tool.h"
 #include "clang/Driver/ToolChain.h"
-#include "llvm/WindowsDriver/MSVCPaths.h"
 
 namespace clang {
 namespace driver {
@@ -53,7 +52,7 @@ public:
   bool IsIntegratedAssemblerDefault() const override;
   bool IsUnwindTablesDefault(const llvm::opt::ArgList &Args) const override;
   bool isPICDefault() const override;
-  bool isPIEDefault(const llvm::opt::ArgList &Args) const override;
+  bool isPIEDefault() const override;
   bool isPICDefaultForced() const override;
 
   /// Set CodeView as the default debug info format for non-MachO binary
@@ -70,18 +69,28 @@ public:
     return llvm::DebuggerKind::Default;
   }
 
-  unsigned GetDefaultDwarfVersion() const override {
-    return 4;
-  }
-
-  std::string getSubDirectoryPath(llvm::SubDirectoryType Type,
-                                  llvm::StringRef SubdirParent = "") const;
-  std::string getSubDirectoryPath(llvm::SubDirectoryType Type,
+  enum class SubDirectoryType {
+    Bin,
+    Include,
+    Lib,
+  };
+  std::string getSubDirectoryPath(SubDirectoryType Type,
+                                  llvm::StringRef SubdirParent,
                                   llvm::Triple::ArchType TargetArch) const;
 
-  bool getIsVS2017OrNewer() const {
-    return VSLayout == llvm::ToolsetLayout::VS2017OrNewer;
+  // Convenience overload.
+  // Uses the current target arch.
+  std::string getSubDirectoryPath(SubDirectoryType Type,
+                                  llvm::StringRef SubdirParent = "") const {
+    return getSubDirectoryPath(Type, SubdirParent, getArch());
   }
+
+  enum class ToolsetLayout {
+    OlderVS,
+    VS2017OrNewer,
+    DevDivInternal,
+  };
+  bool getIsVS2017OrNewer() const { return VSLayout == ToolsetLayout::VS2017OrNewer; }
 
   void
   AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
@@ -113,11 +122,6 @@ public:
 
   bool FoundMSVCInstall() const { return !VCToolChainPath.empty(); }
 
-  void
-  addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                        llvm::opt::ArgStringList &CC1Args,
-                        Action::OffloadKind DeviceOffloadKind) const override;
-
 protected:
   void AddSystemIncludeWithSubfolder(const llvm::opt::ArgList &DriverArgs,
                                      llvm::opt::ArgStringList &CC1Args,
@@ -129,9 +133,8 @@ protected:
   Tool *buildLinker() const override;
   Tool *buildAssembler() const override;
 private:
-  llvm::Optional<llvm::StringRef> WinSdkDir, WinSdkVersion, WinSysRoot;
   std::string VCToolChainPath;
-  llvm::ToolsetLayout VSLayout = llvm::ToolsetLayout::OlderVS;
+  ToolsetLayout VSLayout = ToolsetLayout::OlderVS;
   CudaInstallationDetector CudaInstallation;
   RocmInstallationDetector RocmInstallation;
 };

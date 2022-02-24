@@ -188,9 +188,6 @@ public:
   PathPieces &getMutablePieces() { return PD->getMutablePieces(); }
 
   bool shouldAddPathEdges() const { return Consumer->shouldAddPathEdges(); }
-  bool shouldAddControlNotes() const {
-    return Consumer->shouldAddControlNotes();
-  }
   bool shouldGenerateDiagnostics() const {
     return Consumer->shouldGenerateDiagnostics();
   }
@@ -537,10 +534,10 @@ static void removeEdgesToDefaultInitializers(PathPieces &Pieces) {
     if (auto *CF = dyn_cast<PathDiagnosticControlFlowPiece>(I->get())) {
       const Stmt *Start = CF->getStartLocation().asStmt();
       const Stmt *End = CF->getEndLocation().asStmt();
-      if (isa_and_nonnull<CXXDefaultInitExpr>(Start)) {
+      if (Start && isa<CXXDefaultInitExpr>(Start)) {
         I = Pieces.erase(I);
         continue;
-      } else if (isa_and_nonnull<CXXDefaultInitExpr>(End)) {
+      } else if (End && isa<CXXDefaultInitExpr>(End)) {
         PathPieces::iterator Next = std::next(I);
         if (Next != E) {
           if (auto *NextCF =
@@ -1235,11 +1232,8 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
 
   } else if (auto BE = P.getAs<BlockEdge>()) {
 
-    if (C.shouldAddControlNotes()) {
-      generateMinimalDiagForBlockEdge(C, *BE);
-    }
-
     if (!C.shouldAddPathEdges()) {
+      generateMinimalDiagForBlockEdge(C, *BE);
       return;
     }
 
@@ -1260,14 +1254,12 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
       // do-while statements are explicitly excluded here
 
       auto p = std::make_shared<PathDiagnosticEventPiece>(
-          L, "Looping back to the head of the loop");
+          L, "Looping back to the head "
+          "of the loop");
       p->setPrunable(true);
 
       addEdgeToPath(C.getActivePath(), PrevLoc, p->getLocation());
-      // We might've added a very similar control node already
-      if (!C.shouldAddControlNotes()) {
-        C.getActivePath().push_front(std::move(p));
-      }
+      C.getActivePath().push_front(std::move(p));
 
       if (const auto *CS = dyn_cast_or_null<CompoundStmt>(Body)) {
         addEdgeToPath(C.getActivePath(), PrevLoc,
@@ -1308,13 +1300,10 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
           auto PE = std::make_shared<PathDiagnosticEventPiece>(L, str);
           PE->setPrunable(true);
           addEdgeToPath(C.getActivePath(), PrevLoc, PE->getLocation());
-
-          // We might've added a very similar control node already
-          if (!C.shouldAddControlNotes()) {
-            C.getActivePath().push_front(std::move(PE));
-          }
+          C.getActivePath().push_front(std::move(PE));
         }
-      } else if (isa<BreakStmt, ContinueStmt, GotoStmt>(Term)) {
+      } else if (isa<BreakStmt>(Term) || isa<ContinueStmt>(Term) ||
+          isa<GotoStmt>(Term)) {
         PathDiagnosticLocation L(Term, SM, C.getCurrLocationContext());
         addEdgeToPath(C.getActivePath(), PrevLoc, L);
       }
@@ -1353,7 +1342,9 @@ static const Stmt *getStmtParent(const Stmt *S, const ParentMap &PM) {
     if (!S)
       break;
 
-    if (isa<FullExpr, CXXBindTemporaryExpr, SubstNonTypeTemplateParmExpr>(S))
+    if (isa<FullExpr>(S) ||
+        isa<CXXBindTemporaryExpr>(S) ||
+        isa<SubstNonTypeTemplateParmExpr>(S))
       continue;
 
     break;
@@ -1455,7 +1446,7 @@ static void addContextEdges(PathPieces &pieces, const LocationContext *LC) {
         break;
 
       // If the source is in the same context, we're already good.
-      if (llvm::is_contained(SrcContexts, DstContext))
+      if (llvm::find(SrcContexts, DstContext) != SrcContexts.end())
         break;
 
       // Update the subexpression node to point to the context edge.
@@ -1549,8 +1540,9 @@ static void simplifySimpleBranches(PathPieces &pieces) {
 
     // We only perform this transformation for specific branch kinds.
     // We don't want to do this for do..while, for example.
-    if (!isa<ForStmt, WhileStmt, IfStmt, ObjCForCollectionStmt,
-             CXXForRangeStmt>(s1Start))
+    if (!(isa<ForStmt>(s1Start) || isa<WhileStmt>(s1Start) ||
+          isa<IfStmt>(s1Start) || isa<ObjCForCollectionStmt>(s1Start) ||
+          isa<CXXForRangeStmt>(s1Start)))
       continue;
 
     // Is s1End the branch condition?
@@ -1996,6 +1988,14 @@ PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) const {
 
   const SourceManager &SM = getSourceManager();
   const AnalyzerOptions &Opts = getAnalyzerOptions();
+  StringRef ErrorTag = ErrorNode->getLocation().getTag()->getTagDescription();
+
+  // See whether we need to silence the checker/package.
+  // FIXME: This will not work if the report was emitted with an incorrect tag.
+  for (const std::string &CheckerOrPackage : Opts.SilencedCheckersAndPackages) {
+    if (ErrorTag.startswith(CheckerOrPackage))
+      return nullptr;
+  }
 
   if (!PDC->shouldGenerateDiagnostics())
     return generateEmptyDiagnosticForReport(R, getSourceManager());
@@ -2257,22 +2257,8 @@ void PathSensitiveBugReport::markInteresting(SymbolRef sym,
 
   insertToInterestingnessMap(InterestingSymbols, sym, TKind);
 
-  // FIXME: No tests exist for this code and it is questionable:
-  // How to handle multiple metadata for the same region?
   if (const auto *meta = dyn_cast<SymbolMetadata>(sym))
     markInteresting(meta->getRegion(), TKind);
-}
-
-void PathSensitiveBugReport::markNotInteresting(SymbolRef sym) {
-  if (!sym)
-    return;
-  InterestingSymbols.erase(sym);
-
-  // The metadata part of markInteresting is not reversed here.
-  // Just making the same region not interesting is incorrect
-  // in specific cases.
-  if (const auto *meta = dyn_cast<SymbolMetadata>(sym))
-    markNotInteresting(meta->getRegion());
 }
 
 void PathSensitiveBugReport::markInteresting(const MemRegion *R,
@@ -2285,17 +2271,6 @@ void PathSensitiveBugReport::markInteresting(const MemRegion *R,
 
   if (const auto *SR = dyn_cast<SymbolicRegion>(R))
     markInteresting(SR->getSymbol(), TKind);
-}
-
-void PathSensitiveBugReport::markNotInteresting(const MemRegion *R) {
-  if (!R)
-    return;
-
-  R = R->getBaseRegion();
-  InterestingRegions.erase(R);
-
-  if (const auto *SR = dyn_cast<SymbolicRegion>(R))
-    markNotInteresting(SR->getSymbol());
 }
 
 void PathSensitiveBugReport::markInteresting(SVal V,
@@ -2836,12 +2811,12 @@ Optional<PathDiagnosticBuilder> PathDiagnosticBuilder::findValidReport(
 
     // Register refutation visitors first, if they mark the bug invalid no
     // further analysis is required
-    R->addVisitor<LikelyFalsePositiveSuppressionBRVisitor>();
+    R->addVisitor(std::make_unique<LikelyFalsePositiveSuppressionBRVisitor>());
 
     // Register additional node visitors.
-    R->addVisitor<NilReceiverBRVisitor>();
-    R->addVisitor<ConditionBRVisitor>();
-    R->addVisitor<TagVisitor>();
+    R->addVisitor(std::make_unique<NilReceiverBRVisitor>());
+    R->addVisitor(std::make_unique<ConditionBRVisitor>());
+    R->addVisitor(std::make_unique<TagVisitor>());
 
     BugReporterContext BRC(Reporter);
 
@@ -2854,7 +2829,7 @@ Optional<PathDiagnosticBuilder> PathDiagnosticBuilder::findValidReport(
         // If crosscheck is enabled, remove all visitors, add the refutation
         // visitor and check again
         R->clearVisitors();
-        R->addVisitor<FalsePositiveRefutationBRVisitor>();
+        R->addVisitor(std::make_unique<FalsePositiveRefutationBRVisitor>());
 
         // We don't overwrite the notes inserted by other visitors because the
         // refutation manager does not add any new note to the path
@@ -3066,14 +3041,6 @@ void BugReporter::FlushReport(BugReportEquivClass& EQ) {
   if (!report)
     return;
 
-  // See whether we need to silence the checker/package.
-  for (const std::string &CheckerOrPackage :
-       getAnalyzerOptions().SilencedCheckersAndPackages) {
-    if (report->getBugType().getCheckerName().startswith(
-            CheckerOrPackage))
-      return;
-  }
-
   ArrayRef<PathDiagnosticConsumer*> Consumers = getPathDiagnosticConsumers();
   std::unique_ptr<DiagnosticForConsumerMapTy> Diagnostics =
       generateDiagnosticForConsumerMap(report, Consumers, bugReports);
@@ -3189,7 +3156,7 @@ findExecutedLines(const SourceManager &SM, const ExplodedNode *N) {
         P = N->getParentMap().getParent(RS);
       }
 
-      if (isa_and_nonnull<SwitchCase, LabelStmt>(P))
+      if (P && (isa<SwitchCase>(P) || isa<LabelStmt>(P)))
         populateExecutedLinesWithStmt(P, SM, *ExecutedLines);
     }
 
