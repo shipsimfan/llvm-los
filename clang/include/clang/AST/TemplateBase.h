@@ -52,7 +52,6 @@ template <> struct PointerLikeTypeTraits<clang::Expr *> {
 namespace clang {
 
 class ASTContext;
-class DiagnosticBuilder;
 class Expr;
 struct PrintingPolicy;
 class TypeSourceInfo;
@@ -389,7 +388,8 @@ public:
   TemplateArgument getPackExpansionPattern() const;
 
   /// Print this template argument to the given output stream.
-  void print(const PrintingPolicy &Policy, raw_ostream &Out) const;
+  void print(const PrintingPolicy &Policy, raw_ostream &Out,
+             bool IncludeType) const;
 
   /// Debugging aid that dumps the template argument.
   void dump(raw_ostream &Out) const;

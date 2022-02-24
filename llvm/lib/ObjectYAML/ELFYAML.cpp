@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ObjectYAML/ELFYAML.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/ELF.h"
@@ -28,6 +29,8 @@ namespace llvm {
 ELFYAML::Chunk::~Chunk() = default;
 
 namespace ELFYAML {
+ELF_ELFOSABI Object::getOSAbi() const { return Header.OSABI; }
+
 unsigned Object::getMachine() const {
   if (Header.Machine)
     return *Header.Machine;
@@ -154,7 +157,21 @@ void ScalarEnumerationTraits<ELFYAML::ELF_NT>::enumeration(
   ECase(NT_FREEBSD_PROCSTAT_OSREL);
   ECase(NT_FREEBSD_PROCSTAT_PSSTRINGS);
   ECase(NT_FREEBSD_PROCSTAT_AUXV);
+  // NetBSD core note types.
+  ECase(NT_NETBSDCORE_PROCINFO);
+  ECase(NT_NETBSDCORE_AUXV);
+  ECase(NT_NETBSDCORE_LWPSTATUS);
+  // OpenBSD core note types.
+  ECase(NT_OPENBSD_PROCINFO);
+  ECase(NT_OPENBSD_AUXV);
+  ECase(NT_OPENBSD_REGS);
+  ECase(NT_OPENBSD_FPREGS);
+  ECase(NT_OPENBSD_XFPREGS);
+  ECase(NT_OPENBSD_WCOOKIE);
   // AMD specific notes. (Code Object V2)
+  ECase(NT_AMD_HSA_CODE_OBJECT_VERSION);
+  ECase(NT_AMD_HSA_HSAIL);
+  ECase(NT_AMD_HSA_ISA_VERSION);
   ECase(NT_AMD_HSA_METADATA);
   ECase(NT_AMD_HSA_ISA_NAME);
   ECase(NT_AMD_PAL_METADATA);
@@ -311,6 +328,7 @@ void ScalarEnumerationTraits<ELFYAML::ELF_EM>::enumeration(
   ECase(EM_STM8);
   ECase(EM_TILE64);
   ECase(EM_TILEPRO);
+  ECase(EM_MICROBLAZE);
   ECase(EM_CUDA);
   ECase(EM_TILEGX);
   ECase(EM_CLOUDSHIELD);
@@ -328,6 +346,7 @@ void ScalarEnumerationTraits<ELFYAML::ELF_EM>::enumeration(
   ECase(EM_BPF);
   ECase(EM_VE);
   ECase(EM_CSKY);
+  ECase(EM_LOONGARCH);
 #undef ECase
   IO.enumFallback<Hex16>(Value);
 }
@@ -448,29 +467,31 @@ void ScalarBitSetTraits<ELFYAML::ELF_EF>::bitset(IO &IO,
     BCaseMask(EF_MIPS_ARCH_64R6, EF_MIPS_ARCH);
     break;
   case ELF::EM_HEXAGON:
-    BCase(EF_HEXAGON_MACH_V2);
-    BCase(EF_HEXAGON_MACH_V3);
-    BCase(EF_HEXAGON_MACH_V4);
-    BCase(EF_HEXAGON_MACH_V5);
-    BCase(EF_HEXAGON_MACH_V55);
-    BCase(EF_HEXAGON_MACH_V60);
-    BCase(EF_HEXAGON_MACH_V62);
-    BCase(EF_HEXAGON_MACH_V65);
-    BCase(EF_HEXAGON_MACH_V66);
-    BCase(EF_HEXAGON_MACH_V67);
-    BCase(EF_HEXAGON_MACH_V67T);
-    BCase(EF_HEXAGON_MACH_V68);
-    BCase(EF_HEXAGON_ISA_V2);
-    BCase(EF_HEXAGON_ISA_V3);
-    BCase(EF_HEXAGON_ISA_V4);
-    BCase(EF_HEXAGON_ISA_V5);
-    BCase(EF_HEXAGON_ISA_V55);
-    BCase(EF_HEXAGON_ISA_V60);
-    BCase(EF_HEXAGON_ISA_V62);
-    BCase(EF_HEXAGON_ISA_V65);
-    BCase(EF_HEXAGON_ISA_V66);
-    BCase(EF_HEXAGON_ISA_V67);
-    BCase(EF_HEXAGON_ISA_V68);
+    BCaseMask(EF_HEXAGON_MACH_V2, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V3, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V4, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V5, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V55, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V60, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V62, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V65, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V66, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V67, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V67T, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V68, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_MACH_V69, EF_HEXAGON_MACH);
+    BCaseMask(EF_HEXAGON_ISA_V2, EF_HEXAGON_ISA);
+    BCaseMask(EF_HEXAGON_ISA_V3, EF_HEXAGON_ISA);
+    BCaseMask(EF_HEXAGON_ISA_V4, EF_HEXAGON_ISA);
+    BCaseMask(EF_HEXAGON_ISA_V5, EF_HEXAGON_ISA);
+    BCaseMask(EF_HEXAGON_ISA_V55, EF_HEXAGON_ISA);
+    BCaseMask(EF_HEXAGON_ISA_V60, EF_HEXAGON_ISA);
+    BCaseMask(EF_HEXAGON_ISA_V62, EF_HEXAGON_ISA);
+    BCaseMask(EF_HEXAGON_ISA_V65, EF_HEXAGON_ISA);
+    BCaseMask(EF_HEXAGON_ISA_V66, EF_HEXAGON_ISA);
+    BCaseMask(EF_HEXAGON_ISA_V67, EF_HEXAGON_ISA);
+    BCaseMask(EF_HEXAGON_ISA_V68, EF_HEXAGON_ISA);
+    BCaseMask(EF_HEXAGON_ISA_V69, EF_HEXAGON_ISA);
     break;
   case ELF::EM_AVR:
     BCaseMask(EF_AVR_ARCH_AVR1, EF_AVR_ARCH_MASK);
@@ -500,6 +521,7 @@ void ScalarBitSetTraits<ELFYAML::ELF_EF>::bitset(IO &IO,
     BCaseMask(EF_RISCV_FLOAT_ABI_DOUBLE, EF_RISCV_FLOAT_ABI);
     BCaseMask(EF_RISCV_FLOAT_ABI_QUAD, EF_RISCV_FLOAT_ABI);
     BCase(EF_RISCV_RVE);
+    BCase(EF_RISCV_TSO);
     break;
   case ELF::EM_AMDGPU:
     BCaseMask(EF_AMDGPU_MACH_NONE, EF_AMDGPU_MACH);
@@ -544,10 +566,13 @@ void ScalarBitSetTraits<ELFYAML::ELF_EF>::bitset(IO &IO,
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1010, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1011, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1012, EF_AMDGPU_MACH);
+    BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1013, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1030, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1031, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1032, EF_AMDGPU_MACH);
     BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1033, EF_AMDGPU_MACH);
+    BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1034, EF_AMDGPU_MACH);
+    BCaseMask(EF_AMDGPU_MACH_AMDGCN_GFX1035, EF_AMDGPU_MACH);
     switch (Object->Header.ABIVersion) {
     default:
       // ELFOSABI_AMDGPU_PAL, ELFOSABI_AMDGPU_MESA3D support *_V3 flags.
@@ -557,6 +582,7 @@ void ScalarBitSetTraits<ELFYAML::ELF_EF>::bitset(IO &IO,
       BCase(EF_AMDGPU_FEATURE_SRAMECC_V3);
       break;
     case ELF::ELFABIVERSION_AMDGPU_HSA_V4:
+    case ELF::ELFABIVERSION_AMDGPU_HSA_V5:
       BCaseMask(EF_AMDGPU_FEATURE_XNACK_UNSUPPORTED_V4,
                 EF_AMDGPU_FEATURE_XNACK_V4);
       BCaseMask(EF_AMDGPU_FEATURE_XNACK_ANY_V4,
@@ -647,6 +673,9 @@ void ScalarEnumerationTraits<ELFYAML::ELF_SHT>::enumeration(
   case ELF::EM_RISCV:
     ECase(SHT_RISCV_ATTRIBUTES);
     break;
+  case ELF::EM_MSP430:
+    ECase(SHT_MSP430_ATTRIBUTES);
+    break;
   default:
     // Nothing to do.
     break;
@@ -679,7 +708,14 @@ void ScalarBitSetTraits<ELFYAML::ELF_SHF>::bitset(IO &IO,
   BCase(SHF_GROUP);
   BCase(SHF_TLS);
   BCase(SHF_COMPRESSED);
-  BCase(SHF_GNU_RETAIN);
+  switch (Object->getOSAbi()) {
+  case ELF::ELFOSABI_SOLARIS:
+    BCase(SHF_SUNW_NODISCARD);
+    break;
+  default:
+    BCase(SHF_GNU_RETAIN);
+    break;
+  }
   switch (Object->getMachine()) {
   case ELF::EM_ARM:
     BCase(SHF_ARM_PURECODE);
@@ -813,11 +849,17 @@ void ScalarEnumerationTraits<ELFYAML::ELF_REL>::enumeration(
   case ELF::EM_CSKY:
 #include "llvm/BinaryFormat/ELFRelocs/CSKY.def"
     break;
+  case ELF::EM_PPC:
+#include "llvm/BinaryFormat/ELFRelocs/PowerPC.def"
+    break;
   case ELF::EM_PPC64:
 #include "llvm/BinaryFormat/ELFRelocs/PowerPC64.def"
     break;
   case ELF::EM_68K:
 #include "llvm/BinaryFormat/ELFRelocs/M68k.def"
+    break;
+  case ELF::EM_LOONGARCH:
+#include "llvm/BinaryFormat/ELFRelocs/LoongArch.def"
     break;
   default:
     // Nothing to do.
@@ -878,6 +920,13 @@ void ScalarEnumerationTraits<ELFYAML::ELF_DYNTAG>::enumeration(
 #include "llvm/BinaryFormat/DynamicTags.def"
 #undef PPC64_DYNAMIC_TAG
 #define PPC64_DYNAMIC_TAG(name, value)
+    break;
+  case ELF::EM_RISCV:
+#undef RISCV_DYNAMIC_TAG
+#define RISCV_DYNAMIC_TAG(name, value) DYNAMIC_TAG(name, value)
+#include "llvm/BinaryFormat/DynamicTags.def"
+#undef RISCV_DYNAMIC_TAG
+#define RISCV_DYNAMIC_TAG(name, value)
     break;
   default:
 #include "llvm/BinaryFormat/DynamicTags.def"
@@ -1000,6 +1049,7 @@ void MappingTraits<ELFYAML::FileHeader>::mapping(IO &IO,
   IO.mapOptional("Machine", FileHdr.Machine);
   IO.mapOptional("Flags", FileHdr.Flags, ELFYAML::ELF_EF(0));
   IO.mapOptional("Entry", FileHdr.Entry, Hex64(0));
+  IO.mapOptional("SectionHeaderStringTable", FileHdr.SectionHeaderStringTable);
 
   // obj2yaml does not dump these fields.
   assert(!IO.outputting() ||
@@ -1156,6 +1206,8 @@ struct NormalizedOther {
 
     if (EMachine == ELF::EM_AARCH64)
       Map["STO_AARCH64_VARIANT_PCS"] = ELF::STO_AARCH64_VARIANT_PCS;
+    if (EMachine == ELF::EM_RISCV)
+      Map["STO_RISCV_VARIANT_CC"] = ELF::STO_RISCV_VARIANT_CC;
     return Map;
   }
 
@@ -1826,11 +1878,9 @@ void MappingTraits<ELFYAML::LinkerOption>::mapping(IO &IO,
   IO.mapRequired("Value", Opt.Value);
 }
 
-void MappingTraits<ELFYAML::CallGraphEntry>::mapping(
-    IO &IO, ELFYAML::CallGraphEntry &E) {
+void MappingTraits<ELFYAML::CallGraphEntryWeight>::mapping(
+    IO &IO, ELFYAML::CallGraphEntryWeight &E) {
   assert(IO.getContext() && "The IO context is not initialized");
-  IO.mapRequired("From", E.From);
-  IO.mapRequired("To", E.To);
   IO.mapRequired("Weight", E.Weight);
 }
 

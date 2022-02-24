@@ -595,24 +595,36 @@ TargetInfo *AllocateTarget(const llvm::Triple &Triple,
       return new X86_64TargetInfo(Triple, Opts);
     }
 
-    case llvm::Triple::spir: {
-      if (os != llvm::Triple::UnknownOS ||
-          Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
-        return nullptr;
-      return new SPIR32TargetInfo(Triple, Opts);
-    }
-    case llvm::Triple::spir64: {
-      if (os != llvm::Triple::UnknownOS ||
-          Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
-        return nullptr;
-      return new SPIR64TargetInfo(Triple, Opts);
-    }
-    case llvm::Triple::wasm32:
-      if (Triple.getSubArch() != llvm::Triple::NoSubArch ||
-          Triple.getVendor() != llvm::Triple::UnknownVendor ||
-          !Triple.isOSBinFormatWasm())
-        return nullptr;
-      switch (os) {
+  case llvm::Triple::spir: {
+    if (os != llvm::Triple::UnknownOS ||
+        Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
+      return nullptr;
+    return new SPIR32TargetInfo(Triple, Opts);
+  }
+  case llvm::Triple::spir64: {
+    if (os != llvm::Triple::UnknownOS ||
+        Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
+      return nullptr;
+    return new SPIR64TargetInfo(Triple, Opts);
+  }
+  case llvm::Triple::spirv32: {
+    if (os != llvm::Triple::UnknownOS ||
+        Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
+      return nullptr;
+    return new SPIRV32TargetInfo(Triple, Opts);
+  }
+  case llvm::Triple::spirv64: {
+    if (os != llvm::Triple::UnknownOS ||
+        Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
+      return nullptr;
+    return new SPIRV64TargetInfo(Triple, Opts);
+  }
+  case llvm::Triple::wasm32:
+    if (Triple.getSubArch() != llvm::Triple::NoSubArch ||
+        Triple.getVendor() != llvm::Triple::UnknownVendor ||
+        !Triple.isOSBinFormatWasm())
+      return nullptr;
+    switch (os) {
       case llvm::Triple::WASI:
         return new WASITargetInfo<WebAssembly32TargetInfo>(Triple, Opts);
       case llvm::Triple::Emscripten:
@@ -721,6 +733,10 @@ TargetInfo::CreateTargetInfo(DiagnosticsEngine &Diags,
   Target->setCommandLineOpenCLOpts();
   Target->setMaxAtomicWidth();
 
+  if (!Opts->DarwinTargetVariantTriple.empty())
+    Target->DarwinTargetVariantTriple =
+        llvm::Triple(Opts->DarwinTargetVariantTriple);
+
   if (!Target->validateTarget(Diags))
     return nullptr;
 
@@ -745,8 +761,12 @@ bool TargetInfo::validateOpenCLTarget(const LangOptions &Opts,
   diagnoseNotSupportedCore(#Ext, __VA_ARGS__);
 #include "clang/Basic/OpenCLExtensions.def"
 
-  // For now assume that OpenCL target is always
-  // valid and just provide necessary diagnostics
-  return true;
+  // Validate that feature macros are set properly for OpenCL C 3.0.
+  // In other cases assume that target is always valid.
+  if (Opts.getOpenCLCompatibleVersion() < 300)
+    return true;
+
+  return OpenCLOptions::diagnoseUnsupportedFeatureDependencies(*this, Diags) &&
+         OpenCLOptions::diagnoseFeatureExtensionDifferences(*this, Diags);
 }
 } // namespace clang

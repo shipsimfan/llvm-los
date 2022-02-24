@@ -1,39 +1,23 @@
 // RUN: mlir-opt -split-input-file %s -verify-diagnostics
 
-func @test_index_cast_shape_error(%arg0 : tensor<index>) -> tensor<2xi64> {
-  // expected-error @+1 {{all non-scalar operands/results must have the same shape and base type}}
-  %0 = index_cast %arg0 : tensor<index> to tensor<2xi64>
-  return %0 : tensor<2xi64>
-}
-
-// -----
-
-func @test_index_cast_tensor_error(%arg0 : tensor<index>) -> i64 {
-  // expected-error @+1 {{if an operand is non-scalar, then there must be at least one non-scalar result}}
-  %0 = index_cast %arg0 : tensor<index> to i64
-  return %0 : i64
-}
-
-// -----
-
-func @non_signless_constant() {
-  // expected-error @+1 {{requires integer result types to be signless}}
-  %0 = constant 0 : ui32
-  return
-}
-
-// -----
-
-func @non_signless_constant() {
-  // expected-error @+1 {{requires integer result types to be signless}}
-  %0 = constant 0 : si32
-  return
-}
-
-// -----
-
 func @unsupported_attribute() {
-  // expected-error @+1 {{unsupported 'value' attribute: "" : index}}
+  // expected-error @+1 {{invalid kind of attribute specified}}
   %0 = constant "" : index
+  return
+}
+
+// -----
+
+func @return_i32_f32() -> (i32, f32) {
+  %0 = arith.constant 1 : i32
+  %1 = arith.constant 1. : f32
+  return %0, %1 : i32, f32
+}
+
+func @call() {
+  // expected-error @+3 {{op result type mismatch at index 0}}
+  // expected-note @+2 {{op result types: 'f32', 'i32'}}
+  // expected-note @+1 {{function result types: 'i32', 'f32'}}
+  %0:2 = call @return_i32_f32() : () -> (f32, i32)
   return
 }

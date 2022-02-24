@@ -53,6 +53,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/Delinearization.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
@@ -118,6 +119,11 @@ static cl::opt<bool> DisableDelinearizationChecks(
         "delinearized subscripts. Enabling this option may result in incorrect "
         "dependence vectors for languages that allow the subscript of one "
         "dimension to underflow or overflow into another dimension."));
+
+static cl::opt<unsigned> MIVMaxLevelThreshold(
+    "da-miv-max-level-threshold", cl::init(7), cl::Hidden, cl::ZeroOrMore,
+    cl::desc("Maximum depth allowed for the recursive algorithm used to "
+             "explore MIV direction vectors."));
 
 //===----------------------------------------------------------------------===//
 // basics
@@ -2319,7 +2325,7 @@ bool DependenceInfo::gcdMIVtest(const SCEV *Src, const SCEV *Dst,
   LLVM_DEBUG(dbgs() << "starting gcd\n");
   ++GCDapplications;
   unsigned BitWidth = SE->getTypeSizeInBits(Src->getType());
-  APInt RunningGCD = APInt::getNullValue(BitWidth);
+  APInt RunningGCD = APInt::getZero(BitWidth);
 
   // Examine Src coefficients.
   // Compute running GCD and record source constant.
@@ -2359,7 +2365,7 @@ bool DependenceInfo::gcdMIVtest(const SCEV *Src, const SCEV *Dst,
   }
   const SCEV *DstConst = Coefficients;
 
-  APInt ExtraGCD = APInt::getNullValue(BitWidth);
+  APInt ExtraGCD = APInt::getZero(BitWidth);
   const SCEV *Delta = SE->getMinusSCEV(DstConst, SrcConst);
   LLVM_DEBUG(dbgs() << "    Delta = " << *Delta << "\n");
   const SCEVConstant *Constant = dyn_cast<SCEVConstant>(Delta);
@@ -2602,6 +2608,19 @@ unsigned DependenceInfo::exploreDirections(unsigned Level, CoefficientInfo *A,
                                            const SmallBitVector &Loops,
                                            unsigned &DepthExpanded,
                                            const SCEV *Delta) const {
+  // This algorithm has worst case complexity of O(3^n), where 'n' is the number
+  // of common loop levels. To avoid excessive compile-time, pessimize all the
+  // results and immediately return when the number of common levels is beyond
+  // the given threshold.
+  if (CommonLevels > MIVMaxLevelThreshold) {
+    LLVM_DEBUG(dbgs() << "Number of common levels exceeded the threshold. MIV "
+                         "direction exploration is terminated.\n");
+    for (unsigned K = 1; K <= CommonLevels; ++K)
+      if (Loops[K])
+        Bound[K].DirSet = Dependence::DVEntry::ALL;
+    return 1;
+  }
+
   if (Level > CommonLevels) {
     // record result
     LLVM_DEBUG(dbgs() << "\t[");
@@ -3304,16 +3323,6 @@ bool DependenceInfo::tryDelinearizeFixedSize(
     const SCEV *DstAccessFn, SmallVectorImpl<const SCEV *> &SrcSubscripts,
     SmallVectorImpl<const SCEV *> &DstSubscripts) {
 
-  // In general we cannot safely assume that the subscripts recovered from GEPs
-  // are in the range of values defined for their corresponding array
-  // dimensions. For example some C language usage/interpretation make it
-  // impossible to verify this at compile-time. As such we give up here unless
-  // we can assume that the subscripts do not overlap into neighboring
-  // dimensions and that the number of dimensions matches the number of
-  // subscripts being recovered.
-  if (!DisableDelinearizationChecks)
-    return false;
-
   Value *SrcPtr = getLoadStorePointerOperand(Src);
   Value *DstPtr = getLoadStorePointerOperand(Dst);
   const SCEVUnknown *SrcBase =
@@ -3330,8 +3339,8 @@ bool DependenceInfo::tryDelinearizeFixedSize(
     return false;
 
   SmallVector<int, 4> SrcSizes, DstSizes;
-  SE->getIndexExpressionsFromGEP(SrcGEP, SrcSubscripts, SrcSizes);
-  SE->getIndexExpressionsFromGEP(DstGEP, DstSubscripts, DstSizes);
+  getIndexExpressionsFromGEP(*SE, SrcGEP, SrcSubscripts, SrcSizes);
+  getIndexExpressionsFromGEP(*SE, DstGEP, DstSubscripts, DstSizes);
 
   // Check that the two size arrays are non-empty and equal in length and
   // value.
@@ -3352,22 +3361,55 @@ bool DependenceInfo::tryDelinearizeFixedSize(
 
   // Check that for identical base pointers we do not miss index offsets
   // that have been added before this GEP is applied.
-  if (SrcBasePtr == SrcBase->getValue() && DstBasePtr == DstBase->getValue()) {
-    assert(SrcSubscripts.size() == DstSubscripts.size() &&
-           SrcSubscripts.size() == SrcSizes.size() + 1 &&
-           "Expected equal number of entries in the list of sizes and "
-           "subscripts.");
-    LLVM_DEBUG({
-      dbgs() << "Delinearized subscripts of fixed-size array\n"
-             << "SrcGEP:" << *SrcGEP << "\n"
-             << "DstGEP:" << *DstGEP << "\n";
-    });
-    return true;
+  if (SrcBasePtr != SrcBase->getValue() || DstBasePtr != DstBase->getValue()) {
+    SrcSubscripts.clear();
+    DstSubscripts.clear();
+    return false;
   }
 
-  SrcSubscripts.clear();
-  DstSubscripts.clear();
-  return false;
+  assert(SrcSubscripts.size() == DstSubscripts.size() &&
+         SrcSubscripts.size() == SrcSizes.size() + 1 &&
+         "Expected equal number of entries in the list of sizes and "
+         "subscripts.");
+
+  // In general we cannot safely assume that the subscripts recovered from GEPs
+  // are in the range of values defined for their corresponding array
+  // dimensions. For example some C language usage/interpretation make it
+  // impossible to verify this at compile-time. As such we can only delinearize
+  // iff the subscripts are positive and are less than the range of the
+  // dimension.
+  if (!DisableDelinearizationChecks) {
+    auto AllIndiciesInRange = [&](SmallVector<int, 4> &DimensionSizes,
+                                  SmallVectorImpl<const SCEV *> &Subscripts,
+                                  Value *Ptr) {
+      size_t SSize = Subscripts.size();
+      for (size_t I = 1; I < SSize; ++I) {
+        const SCEV *S = Subscripts[I];
+        if (!isKnownNonNegative(S, Ptr))
+          return false;
+        if (auto *SType = dyn_cast<IntegerType>(S->getType())) {
+          const SCEV *Range = SE->getConstant(
+              ConstantInt::get(SType, DimensionSizes[I - 1], false));
+          if (!isKnownLessThan(S, Range))
+            return false;
+        }
+      }
+      return true;
+    };
+
+    if (!AllIndiciesInRange(SrcSizes, SrcSubscripts, SrcPtr) ||
+        !AllIndiciesInRange(DstSizes, DstSubscripts, DstPtr)) {
+      SrcSubscripts.clear();
+      DstSubscripts.clear();
+      return false;
+    }
+  }
+  LLVM_DEBUG({
+    dbgs() << "Delinearized subscripts of fixed-size array\n"
+           << "SrcGEP:" << *SrcGEP << "\n"
+           << "DstGEP:" << *DstGEP << "\n";
+  });
+  return true;
 }
 
 bool DependenceInfo::tryDelinearizeParametricSize(
@@ -3398,16 +3440,16 @@ bool DependenceInfo::tryDelinearizeParametricSize(
 
   // First step: collect parametric terms in both array references.
   SmallVector<const SCEV *, 4> Terms;
-  SE->collectParametricTerms(SrcAR, Terms);
-  SE->collectParametricTerms(DstAR, Terms);
+  collectParametricTerms(*SE, SrcAR, Terms);
+  collectParametricTerms(*SE, DstAR, Terms);
 
   // Second step: find subscript sizes.
   SmallVector<const SCEV *, 4> Sizes;
-  SE->findArrayDimensions(Terms, Sizes, ElementSize);
+  findArrayDimensions(*SE, Terms, Sizes, ElementSize);
 
   // Third step: compute the access functions for each subscript.
-  SE->computeAccessFunctions(SrcAR, SrcSubscripts, Sizes);
-  SE->computeAccessFunctions(DstAR, DstSubscripts, Sizes);
+  computeAccessFunctions(*SE, SrcAR, SrcSubscripts, Sizes);
+  computeAccessFunctions(*SE, DstAR, DstSubscripts, Sizes);
 
   // Fail when there is only a subscript: that's a linearized access function.
   if (SrcSubscripts.size() < 2 || DstSubscripts.size() < 2 ||
@@ -3530,6 +3572,16 @@ DependenceInfo::depends(Instruction *Src, Instruction *Dst,
   const SCEV *DstSCEV = SE->getSCEV(DstPtr);
   LLVM_DEBUG(dbgs() << "    SrcSCEV = " << *SrcSCEV << "\n");
   LLVM_DEBUG(dbgs() << "    DstSCEV = " << *DstSCEV << "\n");
+  if (SE->getPointerBase(SrcSCEV) != SE->getPointerBase(DstSCEV)) {
+    // If two pointers have different bases, trying to analyze indexes won't
+    // work; we can't compare them to each other. This can happen, for example,
+    // if one is produced by an LCSSA PHI node.
+    //
+    // We check this upfront so we don't crash in cases where getMinusSCEV()
+    // returns a SCEVCouldNotCompute.
+    LLVM_DEBUG(dbgs() << "can't analyze SCEV with different pointer base\n");
+    return std::make_unique<Dependence>(Src, Dst);
+  }
   Pair[0].Src = SrcSCEV;
   Pair[0].Dst = DstSCEV;
 

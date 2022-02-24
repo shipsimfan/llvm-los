@@ -28,7 +28,7 @@ PatternApplicator::PatternApplicator(
     bytecode->initializeMutableState(*mutableByteCodeState);
   }
 }
-PatternApplicator::~PatternApplicator() {}
+PatternApplicator::~PatternApplicator() = default;
 
 #ifndef NDEBUG
 /// Log a message for a pattern that is impossible to match.
@@ -53,7 +53,7 @@ void PatternApplicator::applyCostModel(CostModel model) {
   // Apply the cost model to the bytecode patterns first, and then the native
   // patterns.
   if (const PDLByteCode *bytecode = frozenPatternList.getPDLByteCode()) {
-    for (auto it : llvm::enumerate(bytecode->getPatterns()))
+    for (const auto &it : llvm::enumerate(bytecode->getPatterns()))
       mutableByteCodeState->updatePatternBenefit(it.index(), model(it.value()));
   }
 
@@ -195,7 +195,13 @@ LogicalResult PatternApplicator::matchAndRewrite(
       result = success(!onSuccess || succeeded(onSuccess(*bestPattern)));
     } else {
       const auto *pattern = static_cast<const RewritePattern *>(bestPattern);
+
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Trying to match \"" << pattern->getDebugName() << "\"\n");
       result = pattern->matchAndRewrite(op, rewriter);
+      LLVM_DEBUG(llvm::dbgs() << "\"" << pattern->getDebugName() << "\" result "
+                              << succeeded(result) << "\n");
+
       if (succeeded(result) && onSuccess && failed(onSuccess(*pattern)))
         result = failure();
     }

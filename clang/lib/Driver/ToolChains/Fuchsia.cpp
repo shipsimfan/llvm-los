@@ -54,12 +54,14 @@ void fuchsia::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back("now");
 
   const char *Exec = Args.MakeArgString(ToolChain.GetLinkerPath());
-  if (llvm::sys::path::filename(Exec).equals_lower("ld.lld") ||
-      llvm::sys::path::stem(Exec).equals_lower("ld.lld")) {
+  if (llvm::sys::path::filename(Exec).equals_insensitive("ld.lld") ||
+      llvm::sys::path::stem(Exec).equals_insensitive("ld.lld")) {
     CmdArgs.push_back("-z");
     CmdArgs.push_back("rodynamic");
     CmdArgs.push_back("-z");
     CmdArgs.push_back("separate-loadable-segments");
+    CmdArgs.push_back("-z");
+    CmdArgs.push_back("rel");
     CmdArgs.push_back("--pack-dyn-relocs=relr");
   }
 
@@ -89,7 +91,7 @@ void fuchsia::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   else if (Args.hasArg(options::OPT_shared))
     CmdArgs.push_back("-shared");
 
-  const SanitizerArgs &SanArgs = ToolChain.getSanitizerArgs();
+  const SanitizerArgs &SanArgs = ToolChain.getSanitizerArgs(Args);
 
   if (!Args.hasArg(options::OPT_shared)) {
     std::string Dyld = D.DyldPrefix;
@@ -107,7 +109,8 @@ void fuchsia::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());
 
-  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles)) {
+  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles,
+                   options::OPT_r)) {
     if (!Args.hasArg(options::OPT_shared)) {
       CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("Scrt1.o")));
     }
@@ -124,12 +127,10 @@ void fuchsia::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                   D.getLTOMode() == LTOK_Thin);
   }
 
-  bool NeedsSanitizerDeps = addSanitizerRuntimes(ToolChain, Args, CmdArgs);
-  bool NeedsXRayDeps = addXRayRuntime(ToolChain, Args, CmdArgs);
   AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA);
-  ToolChain.addProfileRTLibs(Args, CmdArgs);
 
-  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs)) {
+  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs,
+                   options::OPT_r)) {
     if (Args.hasArg(options::OPT_static))
       CmdArgs.push_back("-Bdynamic");
 
@@ -149,11 +150,14 @@ void fuchsia::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       }
     }
 
-    if (NeedsSanitizerDeps)
-      linkSanitizerRuntimeDeps(ToolChain, CmdArgs);
+    // Note that Fuchsia never needs to link in sanitizer runtime deps.  Any
+    // sanitizer runtimes with system dependencies use the `.deplibs` feature
+    // instead.
+    addSanitizerRuntimes(ToolChain, Args, CmdArgs);
 
-    if (NeedsXRayDeps)
-      linkXRayRuntimeDeps(ToolChain, CmdArgs);
+    addXRayRuntime(ToolChain, Args, CmdArgs);
+
+    ToolChain.addProfileRTLibs(Args, CmdArgs);
 
     AddRunTimeLibs(ToolChain, D, CmdArgs, Args);
 
@@ -189,9 +193,11 @@ Fuchsia::Fuchsia(const Driver &D, const llvm::Triple &Triple,
 
   auto FilePaths = [&](const Multilib &M) -> std::vector<std::string> {
     std::vector<std::string> FP;
-    SmallString<128> P(getStdlibPath());
-    llvm::sys::path::append(P, M.gccSuffix());
-    FP.push_back(std::string(P.str()));
+    for (const std::string &Path : getStdlibPaths()) {
+      SmallString<128> P(Path);
+      llvm::sys::path::append(P, M.gccSuffix());
+      FP.push_back(std::string(P.str()));
+    }
     return FP;
   };
 
@@ -242,20 +248,21 @@ Fuchsia::Fuchsia(const Driver &D, const llvm::Triple &Triple,
                           .flag("+fsanitize=hwaddress")
                           .flag("-fexceptions")
                           .flag("+fno-exceptions"));
+  // Use Itanium C++ ABI for the compat multilib.
+  Multilibs.push_back(Multilib("compat", {}, {}, 12).flag("+fc++-abi=itanium"));
 
   Multilibs.FilterOut([&](const Multilib &M) {
     std::vector<std::string> RD = FilePaths(M);
-    return std::all_of(RD.begin(), RD.end(), [&](std::string P) {
-      return !getVFS().exists(P);
-    });
+    return llvm::all_of(RD, [&](std::string P) { return !getVFS().exists(P); });
   });
 
   Multilib::flags_list Flags;
   addMultilibFlag(
       Args.hasFlag(options::OPT_fexceptions, options::OPT_fno_exceptions, true),
       "fexceptions", Flags);
-  addMultilibFlag(getSanitizerArgs().needsAsanRt(), "fsanitize=address", Flags);
-  addMultilibFlag(getSanitizerArgs().needsHwasanRt(), "fsanitize=hwaddress",
+  addMultilibFlag(getSanitizerArgs(Args).needsAsanRt(), "fsanitize=address",
+                  Flags);
+  addMultilibFlag(getSanitizerArgs(Args).needsHwasanRt(), "fsanitize=hwaddress",
                   Flags);
 
   addMultilibFlag(
@@ -263,6 +270,8 @@ Fuchsia::Fuchsia(const Driver &D, const llvm::Triple &Triple,
                    options::OPT_fno_experimental_relative_cxx_abi_vtables,
                    /*default=*/false),
       "fexperimental-relative-c++-abi-vtables", Flags);
+  addMultilibFlag(Args.getLastArgValue(options::OPT_fcxx_abi_EQ) == "itanium",
+                  "fc++-abi=itanium", Flags);
 
   Multilibs.setFilePathsCallback(FilePaths);
 
@@ -432,14 +441,4 @@ SanitizerMask Fuchsia::getDefaultSanitizers() const {
     break;
   }
   return Res;
-}
-
-void Fuchsia::addProfileRTLibs(const llvm::opt::ArgList &Args,
-                               llvm::opt::ArgStringList &CmdArgs) const {
-  // Add linker option -u__llvm_profile_runtime to cause runtime
-  // initialization module to be linked in.
-  if (needsProfileRT(Args))
-    CmdArgs.push_back(Args.MakeArgString(
-        Twine("-u", llvm::getInstrProfRuntimeHookVarName())));
-  ToolChain::addProfileRTLibs(Args, CmdArgs);
 }

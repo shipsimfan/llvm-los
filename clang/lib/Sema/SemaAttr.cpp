@@ -340,7 +340,7 @@ void Sema::ActOnPragmaPack(SourceLocation PragmaLoc, PragmaMsStackAction Action,
 
     // pack(0) is like pack(), which just works out since that is what
     // we use 0 for in PackAttr.
-    if (Alignment->isTypeDependent() || Alignment->isValueDependent() || !Val ||
+    if (Alignment->isTypeDependent() || !Val ||
         !(*Val == 0 || Val->isPowerOf2()) || Val->getZExtValue() > 16) {
       Diag(PragmaLoc, diag::warn_pragma_pack_invalid_alignment);
       return; // Ignore
@@ -470,13 +470,35 @@ void Sema::ActOnPragmaDetectMismatch(SourceLocation Loc, StringRef Name,
   Consumer.HandleTopLevelDecl(DeclGroupRef(PDMD));
 }
 
+void Sema::ActOnPragmaFPEvalMethod(SourceLocation Loc,
+                                   LangOptions::FPEvalMethodKind Value) {
+  FPOptionsOverride NewFPFeatures = CurFPFeatureOverrides();
+  switch (Value) {
+  default:
+    llvm_unreachable("invalid pragma eval_method kind");
+  case LangOptions::FEM_Source:
+    NewFPFeatures.setFPEvalMethodOverride(LangOptions::FEM_Source);
+    break;
+  case LangOptions::FEM_Double:
+    NewFPFeatures.setFPEvalMethodOverride(LangOptions::FEM_Double);
+    break;
+  case LangOptions::FEM_Extended:
+    NewFPFeatures.setFPEvalMethodOverride(LangOptions::FEM_Extended);
+    break;
+  }
+  FpPragmaStack.Act(Loc, PSK_Set, StringRef(), NewFPFeatures);
+  CurFPFeatures = NewFPFeatures.applyOverrides(getLangOpts());
+  PP.setCurrentFPEvalMethod(Loc, Value);
+}
+
 void Sema::ActOnPragmaFloatControl(SourceLocation Loc,
                                    PragmaMsStackAction Action,
                                    PragmaFloatControlKind Value) {
   FPOptionsOverride NewFPFeatures = CurFPFeatureOverrides();
   if ((Action == PSK_Push_Set || Action == PSK_Push || Action == PSK_Pop) &&
-      !(CurContext->isTranslationUnit()) && !CurContext->isNamespace()) {
-    // Push and pop can only occur at file or namespace scope.
+      !CurContext->getRedeclContext()->isFileContext()) {
+    // Push and pop can only occur at file or namespace scope, or within a
+    // language linkage declaration.
     Diag(Loc, diag::err_pragma_fc_pp_scope);
     return;
   }
@@ -791,7 +813,7 @@ attrMatcherRuleListToString(ArrayRef<attr::SubjectMatchRule> Rules) {
       OS << (I.index() == Rules.size() - 1 ? ", and " : ", ");
     OS << "'" << attr::getSubjectMatchRuleSpelling(I.value()) << "'";
   }
-  return OS.str();
+  return Result;
 }
 
 } // end anonymous namespace
@@ -1212,8 +1234,9 @@ void Sema::PopPragmaVisibility(bool IsNamespaceEnd, SourceLocation EndLoc) {
 }
 
 template <typename Ty>
-static bool checkCommonAttributeFeatures(Sema& S, const Ty *Node,
-                                         const ParsedAttr& A) {
+static bool checkCommonAttributeFeatures(Sema &S, const Ty *Node,
+                                         const ParsedAttr &A,
+                                         bool SkipArgCountCheck) {
   // Several attributes carry different semantics than the parsing requires, so
   // those are opted out of the common argument checks.
   //
@@ -1239,26 +1262,30 @@ static bool checkCommonAttributeFeatures(Sema& S, const Ty *Node,
   if (A.hasCustomParsing())
     return false;
 
-  if (A.getMinArgs() == A.getMaxArgs()) {
-    // If there are no optional arguments, then checking for the argument count
-    // is trivial.
-    if (!A.checkExactlyNumArgs(S, A.getMinArgs()))
-      return true;
-  } else {
-    // There are optional arguments, so checking is slightly more involved.
-    if (A.getMinArgs() && !A.checkAtLeastNumArgs(S, A.getMinArgs()))
-      return true;
-    else if (!A.hasVariadicArg() && A.getMaxArgs() &&
-             !A.checkAtMostNumArgs(S, A.getMaxArgs()))
-      return true;
+  if (!SkipArgCountCheck) {
+    if (A.getMinArgs() == A.getMaxArgs()) {
+      // If there are no optional arguments, then checking for the argument
+      // count is trivial.
+      if (!A.checkExactlyNumArgs(S, A.getMinArgs()))
+        return true;
+    } else {
+      // There are optional arguments, so checking is slightly more involved.
+      if (A.getMinArgs() && !A.checkAtLeastNumArgs(S, A.getMinArgs()))
+        return true;
+      else if (!A.hasVariadicArg() && A.getMaxArgs() &&
+               !A.checkAtMostNumArgs(S, A.getMaxArgs()))
+        return true;
+    }
   }
 
   return false;
 }
 
-bool Sema::checkCommonAttributeFeatures(const Decl *D, const ParsedAttr &A) {
-  return ::checkCommonAttributeFeatures(*this, D, A);
+bool Sema::checkCommonAttributeFeatures(const Decl *D, const ParsedAttr &A,
+                                        bool SkipArgCountCheck) {
+  return ::checkCommonAttributeFeatures(*this, D, A, SkipArgCountCheck);
 }
-bool Sema::checkCommonAttributeFeatures(const Stmt *S, const ParsedAttr &A) {
-  return ::checkCommonAttributeFeatures(*this, S, A);
+bool Sema::checkCommonAttributeFeatures(const Stmt *S, const ParsedAttr &A,
+                                        bool SkipArgCountCheck) {
+  return ::checkCommonAttributeFeatures(*this, S, A, SkipArgCountCheck);
 }

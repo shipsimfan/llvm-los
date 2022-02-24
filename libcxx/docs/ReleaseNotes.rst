@@ -1,5 +1,5 @@
 =========================================
-Libc++ 13.0.0 (In-Progress) Release Notes
+Libc++ 15.0.0 (In-Progress) Release Notes
 =========================================
 
 .. contents::
@@ -10,7 +10,7 @@ Written by the `Libc++ Team <https://libcxx.llvm.org>`_
 
 .. warning::
 
-   These are in-progress notes for the upcoming libc++ 13 release.
+   These are in-progress notes for the upcoming libc++ 15 release.
    Release notes for previous releases can be found on
    `the Download Page <https://releases.llvm.org/download.html>`_.
 
@@ -18,7 +18,7 @@ Introduction
 ============
 
 This document contains the release notes for the libc++ C++ Standard Library,
-part of the LLVM Compiler Infrastructure, release 13.0.0. Here we describe the
+part of the LLVM Compiler Infrastructure, release 15.0.0. Here we describe the
 status of libc++ in some detail, including major improvements from the previous
 release and new feature work. For the general LLVM release notes, see `the LLVM
 documentation <https://llvm.org/docs/ReleaseNotes.html>`_. All LLVM releases may
@@ -32,26 +32,43 @@ main Libc++ web page, this document applies to the *next* release, not
 the current one. To see the release notes for a specific release, please
 see the `releases page <https://llvm.org/releases/>`_.
 
-What's New in Libc++ 13.0.0?
+What's New in Libc++ 15.0.0?
 ============================
 
 New Features
 ------------
 
-- ...
+ - Implemented P0627R6 (Function to mark unreachable code)
+ - Implemented P1165R1 (Make stateful allocator propagation more consistent for operator+(basic_string))
 
 API Changes
 -----------
 
-- There has been several changes in the tuple constructors provided by libc++.
-  Those changes were made as part of an effort to regularize libc++'s tuple
-  implementation, which contained several subtle bugs due to these extensions.
-  If you notice a build breakage when initializing a tuple, make sure you
-  properly initialize all the tuple elements - this is probably the culprit.
+- The ``_LIBCPP_ABI_UNSTABLE`` macro has been removed in favour of setting
+  ``_LIBCPP_ABI_VERSION=2``. This should not have any impact on users because
+  they were not supposed to set ``_LIBCPP_ABI_UNSTABLE`` manually, however we
+  still feel that it is worth mentioning in the release notes in case some users
+  had been doing it.
+- The header ``<experimental/filesystem>`` has been removed. Instead, use
+  ``<filesystem>`` header. The associated macro
+  ``_LIBCPP_DEPRECATED_EXPERIMENTAL_FILESYSTEM`` has also been removed.
 
-  In particular, the extension allowing tuples to be constructed from fewer
-  elements than the number of elements in the tuple (in which case the remaining
-  elements would be default-constructed) has been removed. See https://godbolt.org/z/sqozjd.
+- Some libc++ headers no longer transitively include all of ``<algorithm>``and ``<chrono>``.
+  If, after updating libc++, you see compiler errors related to missing declarations in
+  namespace ``std``, it might be because one of your source files now needs to
+  ``#include <algorithm>`` and/or ``#include <chrono>``.
 
-  Also, the extension allowing a tuple to be constructed from an array has been
-  removed. See https://godbolt.org/z/5esqbW.
+ABI Changes
+-----------
+
+- The ``_LIBCPP_ABI_USE_CXX03_NULLPTR_EMULATION`` macro controlling whether we use an
+  emulation for ``std::nullptr_t`` in C++03 mode has been removed. After this change,
+  ``_LIBCPP_ABI_USE_CXX03_NULLPTR_EMULATION`` will not be honoured anymore and there
+  will be no way to opt back into the C++03 emulation of ``std::nullptr_t``.
+
+Build System Changes
+--------------------
+
+- Support for standalone builds have been entirely removed from libc++, libc++abi and
+  libunwind. Please use :ref:`these instructions <build instructions>` for building
+  libc++, libc++abi and/or libunwind.
