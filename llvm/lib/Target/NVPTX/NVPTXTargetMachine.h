@@ -16,7 +16,6 @@
 #include "ManagedStringPool.h"
 #include "NVPTXSubtarget.h"
 #include "llvm/Target/TargetMachine.h"
-#include <utility>
 
 namespace llvm {
 
@@ -63,16 +62,14 @@ public:
   }
 
   void adjustPassManager(PassManagerBuilder &) override;
-  void registerPassBuilderCallbacks(PassBuilder &PB) override;
+  void registerPassBuilderCallbacks(PassBuilder &PB,
+                                    bool DebugPassManager) override;
 
   TargetTransformInfo getTargetTransformInfo(const Function &F) override;
 
   bool isMachineVerifierClean() const override {
     return false;
   }
-
-  std::pair<const Value *, unsigned>
-  getPredicatedAddrSpace(const Value *V) const override;
 }; // NVPTXTargetMachine.
 
 class NVPTXTargetMachine32 : public NVPTXTargetMachine {

@@ -1,4 +1,4 @@
-! RUN: bbc -pft-test -o %t %s | FileCheck %s
+! RUN: %flang_fc1 -fsyntax-only -fdebug-pre-fir-tree %s | FileCheck %s
 
 ! Test structure of the Pre-FIR tree
 
@@ -132,12 +132,14 @@ end function
 ! Test top level directives
 !DIR$ INTEGER=64
 ! CHECK: CompilerDirective:
+! CHECK: End CompilerDirective
 
 ! Test nested directive
 ! CHECK: Subroutine test_directive
 subroutine test_directive()
   !DIR$ INTEGER=64
-  ! CHECK: CompilerDirective:
+  ! CHECK: <<CompilerDirective>>
+  ! CHECK: <<End CompilerDirective>>
 end subroutine
 ! CHECK: EndSubroutine
 

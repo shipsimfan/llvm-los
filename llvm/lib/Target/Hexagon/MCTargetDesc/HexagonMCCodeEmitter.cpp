@@ -448,12 +448,13 @@ void HexagonMCCodeEmitter::EncodeSingleInstruction(const MCInst &MI,
   ++MCNumEmitted;
 }
 
-[[noreturn]] static void raise_relocation_error(unsigned Width, unsigned Kind) {
+LLVM_ATTRIBUTE_NORETURN
+static void raise_relocation_error(unsigned Width, unsigned Kind) {
   std::string Text;
   raw_string_ostream Stream(Text);
   Stream << "Unrecognized relocation combination: width=" << Width
          << " kind=" << Kind;
-  report_fatal_error(Twine(Stream.str()));
+  report_fatal_error(Stream.str());
 }
 
 /// Some insns are not extended and thus have no bits. These cases require
@@ -712,6 +713,7 @@ unsigned
 HexagonMCCodeEmitter::getMachineOpValue(MCInst const &MI, MCOperand const &MO,
                                         SmallVectorImpl<MCFixup> &Fixups,
                                         MCSubtargetInfo const &STI) const {
+#ifndef NDEBUG
   size_t OperandNumber = ~0U;
   for (unsigned i = 0, n = MI.getNumOperands(); i < n; ++i)
     if (&MI.getOperand(i) == &MO) {
@@ -719,6 +721,7 @@ HexagonMCCodeEmitter::getMachineOpValue(MCInst const &MI, MCOperand const &MO,
       break;
     }
   assert((OperandNumber != ~0U) && "Operand not found");
+#endif
 
   if (HexagonMCInstrInfo::isNewValue(MCII, MI) &&
       &MO == &HexagonMCInstrInfo::getNewValueOperand(MCII, MI)) {
@@ -775,13 +778,9 @@ HexagonMCCodeEmitter::getMachineOpValue(MCInst const &MI, MCOperand const &MO,
   assert(!MO.isImm());
   if (MO.isReg()) {
     unsigned Reg = MO.getReg();
-    switch (HexagonMCInstrInfo::getDesc(MCII, MI).OpInfo[OperandNumber].RegClass) {
-    case GeneralSubRegsRegClassID:
-    case GeneralDoubleLow8RegsRegClassID:
+    if (HexagonMCInstrInfo::isSubInstruction(MI) ||
+        HexagonMCInstrInfo::getType(MCII, MI) == HexagonII::TypeCJ)
       return HexagonMCInstrInfo::getDuplexRegisterNumbering(Reg);
-    default:
-      break;
-    }
     return MCT.getRegisterInfo()->getEncodingValue(Reg);
   }
 
@@ -789,6 +788,7 @@ HexagonMCCodeEmitter::getMachineOpValue(MCInst const &MI, MCOperand const &MO,
 }
 
 MCCodeEmitter *llvm::createHexagonMCCodeEmitter(MCInstrInfo const &MII,
+                                                MCRegisterInfo const &MRI,
                                                 MCContext &MCT) {
   return new HexagonMCCodeEmitter(MII, MCT);
 }

@@ -1,5 +1,10 @@
 include "spec/spec.td"
 
+class TypeDecl<string name> {
+  string Name = name;
+  string Decl = "";
+}
+
 class MacroDef<string name> {
   string Name = name;
   string Defn = "";
@@ -18,7 +23,7 @@ class MacroDefineIfNot<string name, string value> : MacroDef<name> {
 class PublicAPI<string name> {
   string HeaderName = name;
   list<MacroDef> Macros = [];
-  list<string> Types = [];
+  list<TypeDecl> TypeDeclarations = [];
   list<string> Enumerations = [];
   list<string> Structs = [];
   list<string> Functions = [];

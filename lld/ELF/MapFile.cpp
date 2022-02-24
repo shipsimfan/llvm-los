@@ -19,16 +19,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "MapFile.h"
-#include "Driver.h"
 #include "InputFiles.h"
 #include "LinkerScript.h"
 #include "OutputSections.h"
+#include "SymbolTable.h"
 #include "Symbols.h"
 #include "SyntheticSections.h"
+#include "lld/Common/Strings.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SetVector.h"
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/TimeProfiler.h"
 #include "llvm/Support/raw_ostream.h"
@@ -38,8 +37,7 @@ using namespace llvm::object;
 using namespace lld;
 using namespace lld::elf;
 
-using SymbolMapTy = DenseMap<const SectionBase *,
-                             SmallVector<std::pair<Defined *, uint64_t>, 0>>;
+using SymbolMapTy = DenseMap<const SectionBase *, SmallVector<Defined *, 4>>;
 
 static constexpr char indent8[] = "        ";          // 8 spaces
 static constexpr char indent16[] = "                "; // 16 spaces
@@ -56,11 +54,11 @@ static void writeHeader(raw_ostream &os, uint64_t vma, uint64_t lma,
 // Returns a list of all symbols that we want to print out.
 static std::vector<Defined *> getSymbols() {
   std::vector<Defined *> v;
-  for (ELFFileBase *file : objectFiles)
+  for (InputFile *file : objectFiles)
     for (Symbol *b : file->getSymbols())
       if (auto *dr = dyn_cast<Defined>(b))
         if (!dr->isSection() && dr->section && dr->section->isLive() &&
-            (dr->file == file || dr->needsCopy || dr->section->bss))
+            (dr->file == file || dr->needsPltAddr || dr->section->bss))
           v.push_back(dr);
   return v;
 }
@@ -69,21 +67,15 @@ static std::vector<Defined *> getSymbols() {
 static SymbolMapTy getSectionSyms(ArrayRef<Defined *> syms) {
   SymbolMapTy ret;
   for (Defined *dr : syms)
-    ret[dr->section].emplace_back(dr, dr->getVA());
+    ret[dr->section].push_back(dr);
 
   // Sort symbols by address. We want to print out symbols in the
   // order in the output file rather than the order they appeared
   // in the input files.
-  SmallPtrSet<Defined *, 4> set;
-  for (auto &it : ret) {
-    // Deduplicate symbols which need a canonical PLT entry/copy relocation.
-    set.clear();
-    llvm::erase_if(it.second, [&](std::pair<Defined *, uint64_t> a) {
-      return !set.insert(a.first).second;
+  for (auto &it : ret)
+    llvm::stable_sort(it.second, [](Defined *a, Defined *b) {
+      return a->getVA() < b->getVA();
     });
-
-    llvm::stable_sort(it.second, llvm::less_second());
-  }
   return ret;
 }
 
@@ -92,9 +84,9 @@ static SymbolMapTy getSectionSyms(ArrayRef<Defined *> syms) {
 // we do that in batch using parallel-for.
 static DenseMap<Symbol *, std::string>
 getSymbolStrings(ArrayRef<Defined *> syms) {
-  auto strs = std::make_unique<std::string[]>(syms.size());
+  std::vector<std::string> str(syms.size());
   parallelForEachN(0, syms.size(), [&](size_t i) {
-    raw_string_ostream os(strs[i]);
+    raw_string_ostream os(str[i]);
     OutputSection *osec = syms[i]->getOutputSection();
     uint64_t vma = syms[i]->getVA();
     uint64_t lma = osec ? osec->getLMA() + vma - osec->getVA(0) : 0;
@@ -104,7 +96,7 @@ getSymbolStrings(ArrayRef<Defined *> syms) {
 
   DenseMap<Symbol *, std::string> ret;
   for (size_t i = 0, e = syms.size(); i < e; ++i)
-    ret[syms[i]] = std::move(strs[i]);
+    ret[syms[i]] = std::move(str[i]);
   return ret;
 }
 
@@ -147,7 +139,20 @@ static void printEhFrame(raw_ostream &os, const EhFrameSection *sec) {
   }
 }
 
-static void writeMapFile(raw_fd_ostream &os) {
+void elf::writeMapFile() {
+  if (config->mapFile.empty())
+    return;
+
+  llvm::TimeTraceScope timeScope("Write map file");
+
+  // Open a map file for writing.
+  std::error_code ec;
+  raw_fd_ostream os(config->mapFile, ec, sys::fs::OF_None);
+  if (ec) {
+    error("cannot open " + config->mapFile + ": " + ec.message());
+    return;
+  }
+
   // Collect symbol info that we want to print out.
   std::vector<Defined *> syms = getSymbols();
   SymbolMapTy sectionSyms = getSectionSyms(syms);
@@ -159,75 +164,59 @@ static void writeMapFile(raw_fd_ostream &os) {
      << "     Size Align Out     In      Symbol\n";
 
   OutputSection* osec = nullptr;
-  for (SectionCommand *cmd : script->sectionCommands) {
-    if (auto *assign = dyn_cast<SymbolAssignment>(cmd)) {
-      if (assign->provide && !assign->sym)
+  for (BaseCommand *base : script->sectionCommands) {
+    if (auto *cmd = dyn_cast<SymbolAssignment>(base)) {
+      if (cmd->provide && !cmd->sym)
         continue;
-      uint64_t lma = osec ? osec->getLMA() + assign->addr - osec->getVA(0) : 0;
-      writeHeader(os, assign->addr, lma, assign->size, 1);
-      os << assign->commandString << '\n';
+      uint64_t lma = osec ? osec->getLMA() + cmd->addr - osec->getVA(0) : 0;
+      writeHeader(os, cmd->addr, lma, cmd->size, 1);
+      os << cmd->commandString << '\n';
       continue;
     }
 
-    osec = cast<OutputSection>(cmd);
+    osec = cast<OutputSection>(base);
     writeHeader(os, osec->addr, osec->getLMA(), osec->size, osec->alignment);
     os << osec->name << '\n';
 
     // Dump symbols for each input section.
-    for (SectionCommand *subCmd : osec->commands) {
-      if (auto *isd = dyn_cast<InputSectionDescription>(subCmd)) {
+    for (BaseCommand *base : osec->sectionCommands) {
+      if (auto *isd = dyn_cast<InputSectionDescription>(base)) {
         for (InputSection *isec : isd->sections) {
           if (auto *ehSec = dyn_cast<EhFrameSection>(isec)) {
             printEhFrame(os, ehSec);
             continue;
           }
 
-          writeHeader(os, isec->getVA(), osec->getLMA() + isec->outSecOff,
+          writeHeader(os, isec->getVA(0), osec->getLMA() + isec->getOffset(0),
                       isec->getSize(), isec->alignment);
           os << indent8 << toString(isec) << '\n';
-          for (Symbol *sym : llvm::make_first_range(sectionSyms[isec]))
+          for (Symbol *sym : sectionSyms[isec])
             os << symStr[sym] << '\n';
         }
         continue;
       }
 
-      if (auto *data = dyn_cast<ByteCommand>(subCmd)) {
-        writeHeader(os, osec->addr + data->offset,
-                    osec->getLMA() + data->offset, data->size, 1);
-        os << indent8 << data->commandString << '\n';
+      if (auto *cmd = dyn_cast<ByteCommand>(base)) {
+        writeHeader(os, osec->addr + cmd->offset, osec->getLMA() + cmd->offset,
+                    cmd->size, 1);
+        os << indent8 << cmd->commandString << '\n';
         continue;
       }
 
-      if (auto *assign = dyn_cast<SymbolAssignment>(subCmd)) {
-        if (assign->provide && !assign->sym)
+      if (auto *cmd = dyn_cast<SymbolAssignment>(base)) {
+        if (cmd->provide && !cmd->sym)
           continue;
-        writeHeader(os, assign->addr,
-                    osec->getLMA() + assign->addr - osec->getVA(0),
-                    assign->size, 1);
-        os << indent8 << assign->commandString << '\n';
+        writeHeader(os, cmd->addr, osec->getLMA() + cmd->addr - osec->getVA(0),
+                    cmd->size, 1);
+        os << indent8 << cmd->commandString << '\n';
         continue;
       }
     }
   }
 }
 
-void elf::writeWhyExtract() {
-  if (config->whyExtract.empty())
-    return;
-
-  std::error_code ec;
-  raw_fd_ostream os(config->whyExtract, ec, sys::fs::OF_None);
-  if (ec) {
-    error("cannot open --why-extract= file " + config->whyExtract + ": " +
-          ec.message());
-    return;
-  }
-
-  os << "reference\textracted\tsymbol\n";
-  for (auto &entry : whyExtract) {
-    os << std::get<0>(entry) << '\t' << toString(std::get<1>(entry)) << '\t'
-       << toString(std::get<2>(entry)) << '\n';
-  }
+static void print(StringRef a, StringRef b) {
+  lld::outs() << left_justify(a, 49) << " " << b << "\n";
 }
 
 // Output a cross reference table to stdout. This is for --cref.
@@ -241,10 +230,13 @@ void elf::writeWhyExtract() {
 //
 // In this case, strlen is defined by libc.so.6 and used by other two
 // files.
-static void writeCref(raw_fd_ostream &os) {
+void elf::writeCrossReferenceTable() {
+  if (!config->cref)
+    return;
+
   // Collect symbols and files.
   MapVector<Symbol *, SetVector<InputFile *>> map;
-  for (ELFFileBase *file : objectFiles) {
+  for (InputFile *file : objectFiles) {
     for (Symbol *sym : file->getSymbols()) {
       if (isa<SharedSymbol>(sym))
         map[sym].insert(file);
@@ -254,12 +246,8 @@ static void writeCref(raw_fd_ostream &os) {
     }
   }
 
-  auto print = [&](StringRef a, StringRef b) {
-    os << left_justify(a, 49) << ' ' << b << '\n';
-  };
-
-  // Print a blank line and a header. The format matches GNU ld.
-  os << "\nCross Reference Table\n\n";
+  // Print out a header.
+  lld::outs() << "Cross Reference Table\n\n";
   print("Symbol", "File");
 
   // Print out a table.
@@ -274,27 +262,6 @@ static void writeCref(raw_fd_ostream &os) {
   }
 }
 
-void elf::writeMapAndCref() {
-  if (config->mapFile.empty() && !config->cref)
-    return;
-
-  llvm::TimeTraceScope timeScope("Write map file");
-
-  // Open a map file for writing.
-  std::error_code ec;
-  StringRef mapFile = config->mapFile.empty() ? "-" : config->mapFile;
-  raw_fd_ostream os(mapFile, ec, sys::fs::OF_None);
-  if (ec) {
-    error("cannot open " + mapFile + ": " + ec.message());
-    return;
-  }
-
-  if (!config->mapFile.empty())
-    writeMapFile(os);
-  if (config->cref)
-    writeCref(os);
-}
-
 void elf::writeArchiveStats() {
   if (config->printArchiveStats.empty())
     return;
@@ -307,20 +274,8 @@ void elf::writeArchiveStats() {
     return;
   }
 
-  os << "members\textracted\tarchive\n";
-
-  SmallVector<StringRef, 0> archives;
-  DenseMap<CachedHashStringRef, unsigned> all, extracted;
-  for (ELFFileBase *file : objectFiles)
-    if (file->archiveName.size())
-      ++extracted[CachedHashStringRef(file->archiveName)];
-  for (BitcodeFile *file : bitcodeFiles)
-    if (file->archiveName.size())
-      ++extracted[CachedHashStringRef(file->archiveName)];
-  for (std::pair<StringRef, unsigned> f : driver->archiveFiles) {
-    unsigned &v = extracted[CachedHashString(f.first)];
-    os << f.second << '\t' << v << '\t' << f.first << '\n';
-    // If the archive occurs multiple times, other instances have a count of 0.
-    v = 0;
-  }
+  os << "members\tfetched\tarchive\n";
+  for (const ArchiveFile *f : archiveFiles)
+    os << f->getMemberCount() << '\t' << f->getFetchedMemberCount() << '\t'
+       << f->getName() << '\n';
 }

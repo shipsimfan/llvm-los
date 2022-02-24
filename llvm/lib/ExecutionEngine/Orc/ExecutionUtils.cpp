@@ -7,17 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
+
 #include "llvm/ExecutionEngine/Orc/Layer.h"
-#include "llvm/ExecutionEngine/Orc/ObjectFileInterface.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Module.h"
-#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/MachOUniversal.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetMachine.h"
-#include <string>
 
 namespace llvm {
 namespace orc {
@@ -270,30 +269,25 @@ Error DynamicLibrarySearchGenerator::tryToGenerate(
 }
 
 Expected<std::unique_ptr<StaticLibraryDefinitionGenerator>>
-StaticLibraryDefinitionGenerator::Load(
-    ObjectLayer &L, const char *FileName,
-    GetObjectFileInterface GetObjFileInterface) {
+StaticLibraryDefinitionGenerator::Load(ObjectLayer &L, const char *FileName) {
   auto ArchiveBuffer = errorOrToExpected(MemoryBuffer::getFile(FileName));
 
   if (!ArchiveBuffer)
     return ArchiveBuffer.takeError();
 
-  return Create(L, std::move(*ArchiveBuffer), std::move(GetObjFileInterface));
+  return Create(L, std::move(*ArchiveBuffer));
 }
 
 Expected<std::unique_ptr<StaticLibraryDefinitionGenerator>>
-StaticLibraryDefinitionGenerator::Load(
-    ObjectLayer &L, const char *FileName, const Triple &TT,
-    GetObjectFileInterface GetObjFileInterface) {
-
+StaticLibraryDefinitionGenerator::Load(ObjectLayer &L, const char *FileName,
+                                       const Triple &TT) {
   auto B = object::createBinary(FileName);
   if (!B)
     return B.takeError();
 
   // If this is a regular archive then create an instance from it.
   if (isa<object::Archive>(B->getBinary()))
-    return Create(L, std::move(B->takeBinary().second),
-                  std::move(GetObjFileInterface));
+    return Create(L, std::move(B->takeBinary().second));
 
   // If this is a universal binary then search for a slice matching the given
   // Triple.
@@ -315,8 +309,7 @@ StaticLibraryDefinitionGenerator::Load(
                   " .. " + formatv("{0:x}", Obj.getOffset() + Obj.getSize()) +
                   ": " + SliceBuffer.getError().message(),
               SliceBuffer.getError());
-        return Create(L, std::move(*SliceBuffer),
-                      std::move(GetObjFileInterface));
+        return Create(L, std::move(*SliceBuffer));
       }
     }
 
@@ -333,13 +326,11 @@ StaticLibraryDefinitionGenerator::Load(
 
 Expected<std::unique_ptr<StaticLibraryDefinitionGenerator>>
 StaticLibraryDefinitionGenerator::Create(
-    ObjectLayer &L, std::unique_ptr<MemoryBuffer> ArchiveBuffer,
-    GetObjectFileInterface GetObjFileInterface) {
+    ObjectLayer &L, std::unique_ptr<MemoryBuffer> ArchiveBuffer) {
   Error Err = Error::success();
 
   std::unique_ptr<StaticLibraryDefinitionGenerator> ADG(
-      new StaticLibraryDefinitionGenerator(
-          L, std::move(ArchiveBuffer), std::move(GetObjFileInterface), Err));
+      new StaticLibraryDefinitionGenerator(L, std::move(ArchiveBuffer), Err));
 
   if (Err)
     return std::move(Err);
@@ -380,12 +371,7 @@ Error StaticLibraryDefinitionGenerator::tryToGenerate(
     MemoryBufferRef ChildBufferRef(ChildBufferInfo.first,
                                    ChildBufferInfo.second);
 
-    auto I = GetObjFileInterface(L.getExecutionSession(), ChildBufferRef);
-    if (!I)
-      return I.takeError();
-
-    if (auto Err = L.add(JD, MemoryBuffer::getMemBuffer(ChildBufferRef, false),
-                         std::move(*I)))
+    if (auto Err = L.add(JD, MemoryBuffer::getMemBuffer(ChildBufferRef, false)))
       return Err;
   }
 
@@ -393,15 +379,9 @@ Error StaticLibraryDefinitionGenerator::tryToGenerate(
 }
 
 StaticLibraryDefinitionGenerator::StaticLibraryDefinitionGenerator(
-    ObjectLayer &L, std::unique_ptr<MemoryBuffer> ArchiveBuffer,
-    GetObjectFileInterface GetObjFileInterface, Error &Err)
-    : L(L), GetObjFileInterface(std::move(GetObjFileInterface)),
-      ArchiveBuffer(std::move(ArchiveBuffer)),
-      Archive(std::make_unique<object::Archive>(*this->ArchiveBuffer, Err)) {
-
-  if (!this->GetObjFileInterface)
-    this->GetObjFileInterface = getObjectFileInterface;
-}
+    ObjectLayer &L, std::unique_ptr<MemoryBuffer> ArchiveBuffer, Error &Err)
+    : L(L), ArchiveBuffer(std::move(ArchiveBuffer)),
+      Archive(std::make_unique<object::Archive>(*this->ArchiveBuffer, Err)) {}
 
 } // End namespace orc.
 } // End namespace llvm.

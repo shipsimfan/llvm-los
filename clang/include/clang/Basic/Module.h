@@ -106,14 +106,8 @@ public:
     /// of header files.
     ModuleMapModule,
 
-    /// This is a C++20 module interface unit.
+    /// This is a C++ Modules TS module interface unit.
     ModuleInterfaceUnit,
-
-    /// This is a C++ 20 module partition interface.
-    ModulePartitionInterface,
-
-    /// This is a C++ 20 module partition implementation.
-    ModulePartitionImplementation,
 
     /// This is a fragment of the global module within some C++ module.
     GlobalModuleFragment,
@@ -147,23 +141,14 @@ public:
   /// The name of the umbrella entry, as written in the module map.
   std::string UmbrellaAsWritten;
 
-  // The path to the umbrella entry relative to the root module's \c Directory.
-  std::string UmbrellaRelativeToRootModuleDirectory;
-
   /// The module through which entities defined in this module will
   /// eventually be exposed, for use in "private" modules.
   std::string ExportAsModule;
 
   /// Does this Module scope describe part of the purview of a named C++ module?
   bool isModulePurview() const {
-    return Kind == ModuleInterfaceUnit || Kind == ModulePartitionInterface ||
-           Kind == ModulePartitionImplementation ||
-           Kind == PrivateModuleFragment;
+    return Kind == ModuleInterfaceUnit || Kind == PrivateModuleFragment;
   }
-
-  /// Does this Module scope describe a fragment of the global module within
-  /// some C++ module.
-  bool isGlobalModule() const { return Kind == GlobalModuleFragment; }
 
 private:
   /// The submodules of this module, indexed by name.
@@ -203,7 +188,6 @@ public:
   /// file.
   struct Header {
     std::string NameAsWritten;
-    std::string PathRelativeToRootModuleDirectory;
     const FileEntry *Entry;
 
     explicit operator bool() { return Entry; }
@@ -213,7 +197,6 @@ public:
   /// file.
   struct DirectoryName {
     std::string NameAsWritten;
-    std::string PathRelativeToRootModuleDirectory;
     const DirectoryEntry *Entry;
 
     explicit operator bool() { return Entry; }
@@ -514,9 +497,6 @@ public:
     Parent->SubModules.push_back(this);
   }
 
-  /// Is this a module partition.
-  bool isModulePartition() const { return Name.find(':') != std::string::npos; }
-
   /// Retrieve the full name of this module, including the path from
   /// its top-level module.
   /// \param AllowStringLiterals If \c true, components that might not be
@@ -565,8 +545,7 @@ public:
   /// module.
   Header getUmbrellaHeader() const {
     if (auto *FE = Umbrella.dyn_cast<const FileEntry *>())
-      return Header{UmbrellaAsWritten, UmbrellaRelativeToRootModuleDirectory,
-                    FE};
+      return Header{UmbrellaAsWritten, FE};
     return Header{};
   }
 

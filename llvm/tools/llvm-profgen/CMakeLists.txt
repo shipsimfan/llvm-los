@@ -3,7 +3,6 @@ set(LLVM_LINK_COMPONENTS
   AllTargetsDescs
   AllTargetsDisassemblers
   AllTargetsInfos
-  DebugInfoDWARF
   Core
   MC
   IPO
@@ -20,4 +19,5 @@ add_llvm_tool(llvm-profgen
   CSPreInliner.cpp
   ProfiledBinary.cpp
   ProfileGenerator.cpp
+  PseudoProbe.cpp
   )

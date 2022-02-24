@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash -eu
 #
 # Run as: CLANG=bin/clang ZLIB_SRC=src/zlib \
 #             build_symbolizer.sh runtime_build/lib/clang/4.0.0/lib/linux/
@@ -71,7 +71,6 @@ TBLGEN=$CLANG_DIR/llvm-tblgen
 OPT=$CLANG_DIR/opt
 export AR=$CLANG_DIR/llvm-ar
 export LINK=$CLANG_DIR/llvm-link
-TARGET_TRIPLE=$($CC -print-target-triple)
 
 for F in $CC $CXX $TBLGEN $LINK $OPT $AR; do
   if [[ ! -x "$F" ]]; then
@@ -124,7 +123,7 @@ cd ${LIBCXX_BUILD}
 ninja cxx cxxabi
 
 FLAGS="${FLAGS} -fno-rtti -fno-exceptions"
-LLVM_FLAGS="${FLAGS} -nostdinc++ -I${ZLIB_BUILD} -isystem ${LIBCXX_BUILD}/include/${TARGET_TRIPLE}/c++/v1 -isystem ${LIBCXX_BUILD}/include/c++/v1 -Wno-error=global-constructors"
+LLVM_FLAGS="${FLAGS} -nostdinc++ -I${ZLIB_BUILD} -I${LIBCXX_BUILD}/include/c++/v1"
 
 # Build LLVM.
 if [[ ! -d ${LLVM_BUILD} ]]; then
@@ -143,7 +142,7 @@ if [[ ! -d ${LLVM_BUILD} ]]; then
   $LLVM_SRC
 fi
 cd ${LLVM_BUILD}
-ninja LLVMSymbolize LLVMObject LLVMBinaryFormat LLVMDebugInfoDWARF LLVMSupport LLVMDebugInfoPDB LLVMDebuginfod LLVMMC LLVMDemangle LLVMTextAPI
+ninja LLVMSymbolize LLVMObject LLVMBinaryFormat LLVMDebugInfoDWARF LLVMSupport LLVMDebugInfoPDB LLVMMC LLVMDemangle LLVMTextAPI
 
 cd ${BUILD_DIR}
 rm -rf ${SYMBOLIZER_BUILD}
@@ -155,18 +154,11 @@ SYMBOLIZER_FLAGS="$LLVM_FLAGS -I${LLVM_SRC}/include -I${LLVM_BUILD}/include -std
 $CXX $SYMBOLIZER_FLAGS ${SRC_DIR}/sanitizer_symbolize.cpp ${SRC_DIR}/sanitizer_wrappers.cpp -c
 $AR rc symbolizer.a sanitizer_symbolize.o sanitizer_wrappers.o
 
-SYMBOLIZER_API_LIST=__sanitizer_symbolize_code
-SYMBOLIZER_API_LIST+=,__sanitizer_symbolize_data
-SYMBOLIZER_API_LIST+=,__sanitizer_symbolize_flush
-SYMBOLIZER_API_LIST+=,__sanitizer_symbolize_demangle
-SYMBOLIZER_API_LIST+=,__sanitizer_symbolize_set_demangle
-SYMBOLIZER_API_LIST+=,__sanitizer_symbolize_set_inline_frames
-
-LIBCXX_ARCHIVE_DIR=$(dirname $(find $LIBCXX_BUILD -name libc++.a | head -n1))
+SYMBOLIZER_API_LIST=__sanitizer_symbolize_code,__sanitizer_symbolize_data,__sanitizer_symbolize_flush,__sanitizer_symbolize_demangle
 
 # Merge all the object files together and copy the resulting library back.
-$SCRIPT_DIR/ar_to_bc.sh $LIBCXX_ARCHIVE_DIR/libc++.a \
-                        $LIBCXX_ARCHIVE_DIR/libc++abi.a \
+$SCRIPT_DIR/ar_to_bc.sh $LIBCXX_BUILD/lib/libc++.a \
+                        $LIBCXX_BUILD/lib/libc++abi.a \
                         $LLVM_BUILD/lib/libLLVMSymbolize.a \
                         $LLVM_BUILD/lib/libLLVMObject.a \
                         $LLVM_BUILD/lib/libLLVMBinaryFormat.a \
@@ -175,7 +167,6 @@ $SCRIPT_DIR/ar_to_bc.sh $LIBCXX_ARCHIVE_DIR/libc++.a \
                         $LLVM_BUILD/lib/libLLVMDebugInfoPDB.a \
                         $LLVM_BUILD/lib/libLLVMDebugInfoMSF.a \
                         $LLVM_BUILD/lib/libLLVMDebugInfoCodeView.a \
-                        $LLVM_BUILD/lib/libLLVMDebuginfod.a \
                         $LLVM_BUILD/lib/libLLVMDemangle.a \
                         $LLVM_BUILD/lib/libLLVMMC.a \
                         $LLVM_BUILD/lib/libLLVMTextAPI.a \

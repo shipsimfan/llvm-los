@@ -9,7 +9,6 @@
 #include "clang/Basic/TokenKinds.h"
 #include "clang/Tooling/Syntax/Nodes.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Casting.h"
 #include <cassert>
@@ -127,7 +126,7 @@ void syntax::Tree::replaceChildRangeLowLevel(Node *Begin, Node *End,
   for (auto *N = New; N; N = N->NextSibling) {
     assert(N->Parent == nullptr);
     assert(N->getRole() != NodeRole::Detached && "Roles must be set");
-    // FIXME: validate the role.
+    // FIXME: sanity-check the role.
   }
 
   auto Reachable = [](Node *From, Node *N) {
@@ -203,7 +202,7 @@ static void dumpLeaf(raw_ostream &OS, const syntax::Leaf *L,
 }
 
 static void dumpNode(raw_ostream &OS, const syntax::Node *N,
-                     const SourceManager &SM, llvm::BitVector IndentMask) {
+                     const SourceManager &SM, std::vector<bool> IndentMask) {
   auto DumpExtraInfo = [&OS](const syntax::Node *N) {
     if (N->getRole() != syntax::NodeRole::Unknown)
       OS << " " << N->getRole();
@@ -229,8 +228,8 @@ static void dumpNode(raw_ostream &OS, const syntax::Node *N,
   OS << "\n";
 
   for (const syntax::Node &It : T->getChildren()) {
-    for (unsigned Idx = 0; Idx < IndentMask.size(); ++Idx) {
-      if (IndentMask[Idx])
+    for (bool Filled : IndentMask) {
+      if (Filled)
         OS << "| ";
       else
         OS << "  ";
@@ -264,7 +263,7 @@ std::string syntax::Node::dumpTokens(const SourceManager &SM) const {
       OS << " ";
     }
   });
-  return Storage;
+  return OS.str();
 }
 
 void syntax::Node::assertInvariants() const {

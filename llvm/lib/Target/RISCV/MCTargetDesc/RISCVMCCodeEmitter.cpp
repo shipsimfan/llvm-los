@@ -23,7 +23,6 @@
 #include "llvm/MC/MCInstBuilder.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/EndianStream.h"
@@ -47,7 +46,7 @@ public:
   RISCVMCCodeEmitter(MCContext &ctx, MCInstrInfo const &MCII)
       : Ctx(ctx), MCII(MCII) {}
 
-  ~RISCVMCCodeEmitter() override = default;
+  ~RISCVMCCodeEmitter() override {}
 
   void encodeInstruction(const MCInst &MI, raw_ostream &OS,
                          SmallVectorImpl<MCFixup> &Fixups,
@@ -94,6 +93,7 @@ private:
 } // end anonymous namespace
 
 MCCodeEmitter *llvm::createRISCVMCCodeEmitter(const MCInstrInfo &MCII,
+                                              const MCRegisterInfo &MRI,
                                               MCContext &Ctx) {
   return new RISCVMCCodeEmitter(Ctx, MCII);
 }
@@ -197,9 +197,9 @@ void RISCVMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   // Get byte count of instruction.
   unsigned Size = Desc.getSize();
 
-  // RISCVInstrInfo::getInstSizeInBytes expects that the total size of the
-  // expanded instructions for each pseudo is correct in the Size field of the
-  // tablegen definition for the pseudo.
+  // RISCVInstrInfo::getInstSizeInBytes hard-codes the number of expanded
+  // instructions for each pseudo, and must be updated when adding new pseudos
+  // or changing existing ones.
   if (MI.getOpcode() == RISCV::PseudoCALLReg ||
       MI.getOpcode() == RISCV::PseudoCALL ||
       MI.getOpcode() == RISCV::PseudoTAIL ||
@@ -270,7 +270,7 @@ unsigned RISCVMCCodeEmitter::getImmOpValue(const MCInst &MI, unsigned OpNo,
   const MCOperand &MO = MI.getOperand(OpNo);
 
   MCInstrDesc const &Desc = MCII.get(MI.getOpcode());
-  unsigned MIFrm = RISCVII::getFormat(Desc.TSFlags);
+  unsigned MIFrm = Desc.TSFlags & RISCVII::InstFormatMask;
 
   // If the destination is an immediate, there is nothing to do.
   if (MO.isImm())
@@ -358,7 +358,7 @@ unsigned RISCVMCCodeEmitter::getImmOpValue(const MCInst &MI, unsigned OpNo,
     }
   } else if (Kind == MCExpr::SymbolRef &&
              cast<MCSymbolRefExpr>(Expr)->getKind() == MCSymbolRefExpr::VK_None) {
-    if (MIFrm == RISCVII::InstFormatJ) {
+    if (Desc.getOpcode() == RISCV::JAL) {
       FixupKind = RISCV::fixup_riscv_jal;
     } else if (MIFrm == RISCVII::InstFormatB) {
       FixupKind = RISCV::fixup_riscv_branch;

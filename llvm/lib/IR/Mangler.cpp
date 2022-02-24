@@ -99,11 +99,6 @@ static void addByteCountSuffix(raw_ostream &OS, const Function *F,
   const unsigned PtrSize = DL.getPointerSize();
 
   for (const Argument &A : F->args()) {
-    // For the purposes of the byte count suffix, structs returned by pointer
-    // do not count as function arguments.
-    if (A.hasStructRetAttr())
-      continue;
-
     // 'Dereference' type in case of byval or inalloca parameter attribute.
     uint64_t AllocSize = A.hasPassPointeeByValueCopyAttr() ?
       A.getPassPointeeByValueCopySize(DL) :
@@ -191,7 +186,7 @@ void Mangler::getNameWithPrefix(SmallVectorImpl<char> &OutName,
 
 // Check if the name needs quotes to be safe for the linker to interpret.
 static bool canBeUnquotedInDirective(char C) {
-  return isAlnum(C) || C == '_' || C == '@';
+  return isAlnum(C) || C == '_' || C == '$' || C == '.' || C == '@';
 }
 
 static bool canBeUnquotedInDirective(StringRef Name) {

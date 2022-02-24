@@ -28,7 +28,6 @@ namespace llvm {
 class MCExpr;
 class MCInst;
 class MCInstPrinter;
-class MCRegisterInfo;
 class raw_ostream;
 
 /// Instances of this class represent operands of the MCInst class.
@@ -173,7 +172,7 @@ public:
     return Op;
   }
 
-  void print(raw_ostream &OS, const MCRegisterInfo *RegInfo = nullptr) const;
+  void print(raw_ostream &OS) const;
   void dump() const;
   bool isBareSymbolRef() const;
   bool evaluateAsConstantImm(int64_t &Imm) const;
@@ -225,17 +224,16 @@ public:
     return Operands.insert(I, Op);
   }
 
-  void print(raw_ostream &OS, const MCRegisterInfo *RegInfo = nullptr) const;
+  void print(raw_ostream &OS) const;
   void dump() const;
 
   /// Dump the MCInst as prettily as possible using the additional MC
   /// structures, if given. Operators are separated by the \p Separator
   /// string.
   void dump_pretty(raw_ostream &OS, const MCInstPrinter *Printer = nullptr,
-                   StringRef Separator = " ",
-                   const MCRegisterInfo *RegInfo = nullptr) const;
-  void dump_pretty(raw_ostream &OS, StringRef Name, StringRef Separator = " ",
-                   const MCRegisterInfo *RegInfo = nullptr) const;
+                   StringRef Separator = " ") const;
+  void dump_pretty(raw_ostream &OS, StringRef Name,
+                   StringRef Separator = " ") const;
 };
 
 inline raw_ostream& operator<<(raw_ostream &OS, const MCOperand &MO) {

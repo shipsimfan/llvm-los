@@ -3,7 +3,7 @@
 ; RUN: llc -mcpu=pwr4 -mattr=-altivec -mtriple=powerpc-ibm-aix-xcoff \
 ; RUN:     -verify-machineinstrs -data-sections=false -xcoff-traceback-table=false -filetype=obj -o %t.o < %s
 ; RUN: llvm-objdump -D %t.o | FileCheck --check-prefix=CHECKOBJ %s
-; RUN: llvm-readobj -S %t.o | FileCheck --check-prefix=CHECKSECT %s
+; RUN: llvm-readobj -sections %t.o | FileCheck --check-prefix=CHECKSECT %s
 
 ; RUN: not --crash llc -mtriple powerpc64-ibm-aix-xcoff -filetype=obj < %s 2>&1 | \
 ; RUN: FileCheck --check-prefix=XCOFF64 %s
@@ -21,7 +21,7 @@ entry:
 ; CHECK: blr
 }
 
-;CHECKOBJ:      00000000 <.foo>:
+;CHECKOBJ:      00000000 <.text>:
 ;CHECKOBJ-NEXT:       0: 38 60 00 37                    li 3, 55
 ;CHECKOBJ-NEXT:       4: 4e 80 00 20                    blr{{[[:space:]] *}}
 ;CHECKOBJ-NEXT: 00000008 <.rodata.str1.1>:

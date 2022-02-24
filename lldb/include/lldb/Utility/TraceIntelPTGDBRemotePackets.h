@@ -19,13 +19,6 @@ namespace lldb_private {
 struct TraceIntelPTStartRequest : TraceStartRequest {
   /// Size in bytes to use for each thread's trace buffer.
   int64_t threadBufferSize;
-
-  /// Whether to enable TSC
-  bool enableTsc;
-
-  /// PSB packet period
-  llvm::Optional<int64_t> psbPeriod;
-
   /// Required when doing "process tracing".
   ///
   /// Limit in bytes on all the thread traces started by this "process trace"

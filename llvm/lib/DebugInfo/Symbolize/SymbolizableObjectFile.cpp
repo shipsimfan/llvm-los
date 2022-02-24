@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/DebugInfo/Symbolize/SymbolizableObjectFile.h"
+#include "SymbolizableObjectFile.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/BinaryFormat/COFF.h"
@@ -282,7 +282,6 @@ SymbolizableObjectFile::symbolizeCode(object::SectionedAddress ModuleOffset,
     if (getNameFromSymbolTable(ModuleOffset.Address, FunctionName, Start, Size,
                                FileName)) {
       LineInfo.FunctionName = FunctionName;
-      LineInfo.StartAddress = Start;
       if (LineInfo.FileName == DILineInfo::BadString && !FileName.empty())
         LineInfo.FileName = FileName;
     }
@@ -312,7 +311,6 @@ DIInliningInfo SymbolizableObjectFile::symbolizeInlinedCode(
       DILineInfo *LI = InlinedContext.getMutableFrame(
           InlinedContext.getNumberOfFrames() - 1);
       LI->FunctionName = FunctionName;
-      LI->StartAddress = Start;
       if (LI->FileName == DILineInfo::BadString && !FileName.empty())
         LI->FileName = FileName;
     }

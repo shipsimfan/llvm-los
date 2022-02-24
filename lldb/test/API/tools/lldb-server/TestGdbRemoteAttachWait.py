@@ -13,7 +13,6 @@ class TestGdbRemoteAttachWait(gdbremote_testcase.GdbRemoteTestCaseBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
-    @skipIfWindows # This test is flaky on Windows
     def test_attach_with_vAttachWait(self):
         exe = '%s_%d' % (self.testMethodName, os.getpid())
 

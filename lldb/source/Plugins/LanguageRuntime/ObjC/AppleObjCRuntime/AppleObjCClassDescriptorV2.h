@@ -77,14 +77,16 @@ private:
   static const uint32_t RW_REALIZED = (1 << 31);
 
   struct objc_class_t {
-    ObjCLanguageRuntime::ObjCISA m_isa = 0; // The class's metaclass.
-    ObjCLanguageRuntime::ObjCISA m_superclass = 0;
-    lldb::addr_t m_cache_ptr = 0;
-    lldb::addr_t m_vtable_ptr = 0;
-    lldb::addr_t m_data_ptr = 0;
-    uint8_t m_flags = 0;
+    ObjCLanguageRuntime::ObjCISA m_isa; // The class's metaclass.
+    ObjCLanguageRuntime::ObjCISA m_superclass;
+    lldb::addr_t m_cache_ptr;
+    lldb::addr_t m_vtable_ptr;
+    lldb::addr_t m_data_ptr;
+    uint8_t m_flags;
 
-    objc_class_t() = default;
+    objc_class_t()
+        : m_isa(0), m_superclass(0), m_cache_ptr(0), m_vtable_ptr(0),
+          m_data_ptr(0), m_flags(0) {}
 
     void Clear() {
       m_isa = 0;
@@ -166,8 +168,7 @@ private:
              + field_size; // IMP imp;
     }
 
-    bool Read(Process *process, lldb::addr_t addr,
-              lldb::addr_t relative_method_lists_base_addr, bool, bool);
+    bool Read(Process *process, lldb::addr_t addr, bool, bool);
   };
 
   struct ivar_list_t {
@@ -212,7 +213,7 @@ private:
     void fill(AppleObjCRuntimeV2 &runtime, ClassDescriptorV2 &descriptor);
 
   private:
-    bool m_filled = false;
+    bool m_filled;
     std::vector<iVarDescriptor> m_ivars;
     std::recursive_mutex m_mutex;
   };

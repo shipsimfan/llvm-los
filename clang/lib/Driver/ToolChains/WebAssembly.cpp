@@ -8,17 +8,15 @@
 
 #include "WebAssembly.h"
 #include "CommonArgs.h"
-#include "Gnu.h"
 #include "clang/Basic/Version.h"
 #include "clang/Config/config.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Driver.h"
 #include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Driver/Options.h"
-#include "llvm/Option/ArgList.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/VirtualFileSystem.h"
+#include "llvm/Option/ArgList.h"
 
 using namespace clang::driver;
 using namespace clang::driver::tools;
@@ -65,7 +63,7 @@ void wasm::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   ArgStringList CmdArgs;
 
   CmdArgs.push_back("-m");
-  if (ToolChain.getTriple().isArch64Bit())
+  if (getToolChain().getTriple().isArch64Bit())
     CmdArgs.push_back("wasm64");
   else
     CmdArgs.push_back("wasm32");
@@ -78,7 +76,7 @@ void wasm::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   ToolChain.AddFilePathLibArgs(Args, CmdArgs);
 
   const char *Crt1 = "crt1.o";
-  const char *Entry = nullptr;
+  const char *Entry = NULL;
 
   // If crt1-command.o exists, it supports new-style commands, so use it.
   // Otherwise, use the old crt1.o. This is a temporary transition measure.
@@ -132,7 +130,7 @@ void wasm::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   // When optimizing, if wasm-opt is available, run it.
   if (Arg *A = Args.getLastArg(options::OPT_O_Group)) {
-    auto WasmOptPath = ToolChain.GetProgramPath("wasm-opt");
+    auto WasmOptPath = getToolChain().GetProgramPath("wasm-opt");
     if (WasmOptPath != "wasm-opt") {
       StringRef OOpt = "s";
       if (A->getOption().matches(options::OPT_O4) ||
@@ -203,9 +201,7 @@ bool WebAssembly::UseObjCMixedDispatch() const { return true; }
 
 bool WebAssembly::isPICDefault() const { return false; }
 
-bool WebAssembly::isPIEDefault(const llvm::opt::ArgList &Args) const {
-  return false;
-}
+bool WebAssembly::isPIEDefault() const { return false; }
 
 bool WebAssembly::isPICDefaultForced() const { return false; }
 
@@ -297,9 +293,6 @@ void WebAssembly::addClangTargetOptions(const ArgList &DriverArgs,
     // '-fwasm-exceptions' implies exception-handling feature
     CC1Args.push_back("-target-feature");
     CC1Args.push_back("+exception-handling");
-    // Backend needs -wasm-enable-eh to enable Wasm EH
-    CC1Args.push_back("-mllvm");
-    CC1Args.push_back("-wasm-enable-eh");
   }
 
   for (const Arg *A : DriverArgs.filtered(options::OPT_mllvm)) {
@@ -307,14 +300,14 @@ void WebAssembly::addClangTargetOptions(const ArgList &DriverArgs,
     if (Opt.startswith("-emscripten-cxx-exceptions-allowed")) {
       // '-mllvm -emscripten-cxx-exceptions-allowed' should be used with
       // '-mllvm -enable-emscripten-cxx-exceptions'
-      bool EmEHArgExists = false;
+      bool EmExceptionArgExists = false;
       for (const Arg *A : DriverArgs.filtered(options::OPT_mllvm)) {
         if (StringRef(A->getValue(0)) == "-enable-emscripten-cxx-exceptions") {
-          EmEHArgExists = true;
+          EmExceptionArgExists = true;
           break;
         }
       }
-      if (!EmEHArgExists)
+      if (!EmExceptionArgExists)
         getDriver().Diag(diag::err_drv_argument_only_allowed_with)
             << "-mllvm -emscripten-cxx-exceptions-allowed"
             << "-mllvm -enable-emscripten-cxx-exceptions";
@@ -330,38 +323,6 @@ void WebAssembly::addClangTargetOptions(const ArgList &DriverArgs,
                                                    ":noinline"));
       }
     }
-
-    if (Opt.startswith("-wasm-enable-sjlj")) {
-      // '-mllvm -wasm-enable-sjlj' is not compatible with
-      // '-mno-exception-handling'
-      if (DriverArgs.hasFlag(options::OPT_mno_exception_handing,
-                             options::OPT_mexception_handing, false))
-        getDriver().Diag(diag::err_drv_argument_not_allowed_with)
-            << "-mllvm -wasm-enable-sjlj"
-            << "-mno-exception-handling";
-      // '-mllvm -wasm-enable-sjlj' is not compatible with
-      // '-mllvm -enable-emscripten-cxx-exceptions'
-      // because we don't allow Emscripten EH + Wasm SjLj
-      for (const Arg *A : DriverArgs.filtered(options::OPT_mllvm)) {
-        if (StringRef(A->getValue(0)) == "-enable-emscripten-cxx-exceptions")
-          getDriver().Diag(diag::err_drv_argument_not_allowed_with)
-              << "-mllvm -wasm-enable-sjlj"
-              << "-mllvm -enable-emscripten-cxx-exceptions";
-      }
-      // '-mllvm -wasm-enable-sjlj' is not compatible with
-      // '-mllvm -enable-emscripten-sjlj'
-      for (const Arg *A : DriverArgs.filtered(options::OPT_mllvm)) {
-        if (StringRef(A->getValue(0)) == "-enable-emscripten-sjlj")
-          getDriver().Diag(diag::err_drv_argument_not_allowed_with)
-              << "-mllvm -wasm-enable-sjlj"
-              << "-mllvm -enable-emscripten-sjlj";
-      }
-      // '-mllvm -wasm-enable-sjlj' implies exception-handling feature
-      CC1Args.push_back("-target-feature");
-      CC1Args.push_back("+exception-handling");
-      // Backend needs '-exception-model=wasm' to use Wasm EH instructions
-      CC1Args.push_back("-exception-model=wasm");
-    }
   }
 }
 
@@ -373,11 +334,7 @@ ToolChain::CXXStdlibType
 WebAssembly::GetCXXStdlibType(const ArgList &Args) const {
   if (Arg *A = Args.getLastArg(options::OPT_stdlib_EQ)) {
     StringRef Value = A->getValue();
-    if (Value == "libc++")
-      return ToolChain::CST_Libcxx;
-    else if (Value == "libstdc++")
-      return ToolChain::CST_Libstdcxx;
-    else
+    if (Value != "libc++")
       getDriver().Diag(diag::err_drv_invalid_stdlib_name)
           << A->getAsString(Args);
   }
@@ -423,18 +380,17 @@ void WebAssembly::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
 
 void WebAssembly::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
                                                ArgStringList &CC1Args) const {
-
-  if (DriverArgs.hasArg(options::OPT_nostdlibinc) ||
-      DriverArgs.hasArg(options::OPT_nostdincxx))
-    return;
-
-  switch (GetCXXStdlibType(DriverArgs)) {
-  case ToolChain::CST_Libcxx:
-    addLibCxxIncludePaths(DriverArgs, CC1Args);
-    break;
-  case ToolChain::CST_Libstdcxx:
-    addLibStdCXXIncludePaths(DriverArgs, CC1Args);
-    break;
+  if (!DriverArgs.hasArg(options::OPT_nostdlibinc) &&
+      !DriverArgs.hasArg(options::OPT_nostdincxx)) {
+    if (getTriple().getOS() != llvm::Triple::UnknownOS) {
+      const std::string MultiarchTriple =
+          getMultiarchTriple(getDriver(), getTriple(), getDriver().SysRoot);
+      addSystemInclude(DriverArgs, CC1Args,
+                       getDriver().SysRoot + "/include/" + MultiarchTriple +
+                           "/c++/v1");
+    }
+    addSystemInclude(DriverArgs, CC1Args,
+                     getDriver().SysRoot + "/include/c++/v1");
   }
 }
 
@@ -447,8 +403,7 @@ void WebAssembly::AddCXXStdlibLibArgs(const llvm::opt::ArgList &Args,
     CmdArgs.push_back("-lc++abi");
     break;
   case ToolChain::CST_Libstdcxx:
-    CmdArgs.push_back("-lstdc++");
-    break;
+    llvm_unreachable("invalid stdlib name");
   }
 }
 
@@ -462,78 +417,4 @@ SanitizerMask WebAssembly::getSupportedSanitizers() const {
 
 Tool *WebAssembly::buildLinker() const {
   return new tools::wasm::Linker(*this);
-}
-
-void WebAssembly::addLibCxxIncludePaths(
-    const llvm::opt::ArgList &DriverArgs,
-    llvm::opt::ArgStringList &CC1Args) const {
-  const Driver &D = getDriver();
-  std::string SysRoot = computeSysRoot();
-  std::string LibPath = SysRoot + "/include";
-  const std::string MultiarchTriple =
-      getMultiarchTriple(D, getTriple(), SysRoot);
-  bool IsKnownOs = (getTriple().getOS() != llvm::Triple::UnknownOS);
-
-  std::string Version = detectLibcxxVersion(LibPath);
-  if (Version.empty())
-    return;
-
-  // First add the per-target include path if the OS is known.
-  if (IsKnownOs) {
-    std::string TargetDir = LibPath + "/" + MultiarchTriple + "/c++/" + Version;
-    addSystemInclude(DriverArgs, CC1Args, TargetDir);
-  }
-
-  // Second add the generic one.
-  addSystemInclude(DriverArgs, CC1Args, LibPath + "/c++/" + Version);
-}
-
-void WebAssembly::addLibStdCXXIncludePaths(
-    const llvm::opt::ArgList &DriverArgs,
-    llvm::opt::ArgStringList &CC1Args) const {
-  // We cannot use GCCInstallationDetector here as the sysroot usually does
-  // not contain a full GCC installation.
-  // Instead, we search the given sysroot for /usr/include/xx, similar
-  // to how we do it for libc++.
-  const Driver &D = getDriver();
-  std::string SysRoot = computeSysRoot();
-  std::string LibPath = SysRoot + "/include";
-  const std::string MultiarchTriple =
-      getMultiarchTriple(D, getTriple(), SysRoot);
-  bool IsKnownOs = (getTriple().getOS() != llvm::Triple::UnknownOS);
-
-  // This is similar to detectLibcxxVersion()
-  std::string Version;
-  {
-    std::error_code EC;
-    Generic_GCC::GCCVersion MaxVersion =
-        Generic_GCC::GCCVersion::Parse("0.0.0");
-    SmallString<128> Path(LibPath);
-    llvm::sys::path::append(Path, "c++");
-    for (llvm::vfs::directory_iterator LI = getVFS().dir_begin(Path, EC), LE;
-         !EC && LI != LE; LI = LI.increment(EC)) {
-      StringRef VersionText = llvm::sys::path::filename(LI->path());
-      if (VersionText[0] != 'v') {
-        auto Version = Generic_GCC::GCCVersion::Parse(VersionText);
-        if (Version > MaxVersion)
-          MaxVersion = Version;
-      }
-    }
-    if (MaxVersion.Major > 0)
-      Version = MaxVersion.Text;
-  }
-
-  if (Version.empty())
-    return;
-
-  // First add the per-target include path if the OS is known.
-  if (IsKnownOs) {
-    std::string TargetDir = LibPath + "/c++/" + Version + "/" + MultiarchTriple;
-    addSystemInclude(DriverArgs, CC1Args, TargetDir);
-  }
-
-  // Second add the generic one.
-  addSystemInclude(DriverArgs, CC1Args, LibPath + "/c++/" + Version);
-  // Third the backward one.
-  addSystemInclude(DriverArgs, CC1Args, LibPath + "/c++/" + Version + "/backward");
 }

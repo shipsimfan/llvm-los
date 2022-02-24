@@ -20,10 +20,9 @@ input. Otherwise, it will read from the specified ``filenames``.
 OPTIONS
 -------
 
-.. option:: --all, -a
+.. option:: --all
 
- Equivalent to specifying all the main display options relevant to the file
- format.
+ Equivalent to specifying all the main display options.
 
 .. option:: --addrsig
 
@@ -38,13 +37,13 @@ OPTIONS
  Display the contents of the basic block address map section(s), which contain the
  address of each function, along with the relative offset of each basic block.
 
+.. option:: --color
+
+ Use colors in the output for warnings and errors.
+
 .. option:: --demangle, -C
 
  Display demangled symbol names in the output.
-
-.. option:: --dependent-libraries
-
- Display the dependent libraries section.
 
 .. option:: --dyn-relocations
 
@@ -62,7 +61,7 @@ OPTIONS
 
  Display the callgraph profile section.
 
-.. option:: --histogram, -I
+.. option:: --elf-hash-histogram, --histogram, -I
 
  Display a bucket list histogram for dynamic symbol hash tables.
 
@@ -72,12 +71,11 @@ OPTIONS
 
 .. option:: --elf-output-style=<value>
 
- Format ELF information in the specified style. Valid options are ``LLVM``,
- ``GNU``, and ``JSON``. ``LLVM`` output is an expanded and structured format.
- ``GNU`` (the default) output mimics the equivalent GNU :program:`readelf`
- output. ``JSON`` is JSON formatted output intended for machine consumption.
+ Format ELF information in the specified style. Valid options are ``LLVM`` and
+ ``GNU``. ``LLVM`` output is an expanded and structured format, whilst ``GNU``
+ (the default) output mimics the equivalent GNU :program:`readelf` output.
 
-.. option:: --section-groups, -g
+.. option:: --elf-section-groups, --section-groups, -g
 
  Display section groups.
 
@@ -86,7 +84,7 @@ OPTIONS
  When used with :option:`--relocations`, display each relocation in an expanded
  multi-line format.
 
-.. option:: --file-header, -h
+.. option:: --file-headers, -h
 
  Display file headers.
 
@@ -104,12 +102,16 @@ OPTIONS
 
 .. option:: --headers, -e
 
- Equivalent to setting: :option:`--file-header`, :option:`--program-headers`,
+ Equivalent to setting: :option:`--file-headers`, :option:`--program-headers`,
  and :option:`--sections`.
 
 .. option:: --help
 
  Display a summary of command line options.
+
+.. option:: --help-list
+
+ Display an uncategorized summary of command line options.
 
 .. option:: --hex-dump=<section[,section,...]>, -x
 
@@ -120,18 +122,9 @@ OPTIONS
 
  Display the needed libraries.
 
-.. option:: --no-demangle
-
- Do not display demangled symbol names in the output. On by default.
-
 .. option:: --notes, -n
 
  Display all notes.
-
-.. option:: --pretty-print
-
- When used with :option:`--elf-output-style`, JSON output will be formatted in
- a more readable format.
 
 .. option:: --program-headers, --segments, -l
 
@@ -189,7 +182,7 @@ OPTIONS
 
 .. option:: --symbols, --syms, -s
 
- Display the symbol table. Also display the dynamic symbol table when using GNU output style for ELF.
+ Display the symbol table.
 
 .. option:: --unwind, -u
 
@@ -202,10 +195,6 @@ OPTIONS
 .. option:: --version-info, -V
 
  Display version sections.
-
-.. option:: --wide, -W
-
- Ignored for GNU readelf compatibility. The output is already similar to when using -W with GNU readelf.
 
 .. option:: @<FILE>
 

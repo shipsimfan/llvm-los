@@ -101,11 +101,6 @@ namespace llvm {
 extern cl::opt<bool> ForceTopDown;
 extern cl::opt<bool> ForceBottomUp;
 extern cl::opt<bool> VerifyScheduling;
-#ifndef NDEBUG
-extern cl::opt<bool> ViewMISchedDAGs;
-#else
-extern const bool ViewMISchedDAGs;
-#endif
 
 class AAResults;
 class LiveIntervals;
@@ -424,6 +419,10 @@ protected:
   /// The bottom of the unscheduled zone.
   IntervalPressure BotPressure;
   RegPressureTracker BotRPTracker;
+
+  /// True if disconnected subregister components are already renamed.
+  /// The renaming is only done on demand if lane masks are tracked.
+  bool DisconnectedComponentsRenamed = false;
 
 public:
   ScheduleDAGMILive(MachineSchedContext *C,
@@ -1013,7 +1012,7 @@ protected:
                      const RegPressureTracker &RPTracker,
                      RegPressureTracker &TempTracker);
 
-  virtual bool tryCandidate(SchedCandidate &Cand, SchedCandidate &TryCand,
+  virtual void tryCandidate(SchedCandidate &Cand, SchedCandidate &TryCand,
                             SchedBoundary *Zone) const;
 
   SUnit *pickNodeBidirectional(bool &IsTopNode);
@@ -1076,7 +1075,7 @@ public:
   }
 
 protected:
-  virtual bool tryCandidate(SchedCandidate &Cand, SchedCandidate &TryCand);
+  virtual void tryCandidate(SchedCandidate &Cand, SchedCandidate &TryCand);
 
   void pickNodeFromQueue(SchedCandidate &Cand);
 };

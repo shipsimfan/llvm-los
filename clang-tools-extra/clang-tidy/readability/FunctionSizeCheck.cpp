@@ -9,7 +9,6 @@
 #include "FunctionSizeCheck.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "llvm/ADT/BitVector.h"
 
 using namespace clang::ast_matchers;
 
@@ -119,7 +118,7 @@ public:
     std::vector<SourceLocation> NestingThresholders;
   };
   FunctionInfo Info;
-  llvm::BitVector TrackedParent;
+  std::vector<bool> TrackedParent;
   unsigned StructNesting = 0;
   unsigned CurrentNestingLevel = 0;
 };

@@ -14,6 +14,7 @@
 #ifndef LLVM_ANALYSIS_LOOPINFOIMPL_H
 #define LLVM_ANALYSIS_LOOPINFOIMPL_H
 
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetOperations.h"
@@ -573,8 +574,7 @@ void LoopInfoBase<BlockT, LoopT>::analyze(const DomTreeBase<BlockT> &DomTree) {
 }
 
 template <class BlockT, class LoopT>
-SmallVector<LoopT *, 4>
-LoopInfoBase<BlockT, LoopT>::getLoopsInPreorder() const {
+SmallVector<LoopT *, 4> LoopInfoBase<BlockT, LoopT>::getLoopsInPreorder() {
   SmallVector<LoopT *, 4> PreOrderLoops, PreOrderWorklist;
   // The outer-most loop actually goes into the result in the same relative
   // order as we walk it. But LoopInfo stores the top level loops in reverse
@@ -592,7 +592,7 @@ LoopInfoBase<BlockT, LoopT>::getLoopsInPreorder() const {
 
 template <class BlockT, class LoopT>
 SmallVector<LoopT *, 4>
-LoopInfoBase<BlockT, LoopT>::getLoopsInReverseSiblingPreorder() const {
+LoopInfoBase<BlockT, LoopT>::getLoopsInReverseSiblingPreorder() {
   SmallVector<LoopT *, 4> PreOrderLoops, PreOrderWorklist;
   // The outer-most loop actually goes into the result in the same relative
   // order as we walk it. LoopInfo stores the top level loops in reverse

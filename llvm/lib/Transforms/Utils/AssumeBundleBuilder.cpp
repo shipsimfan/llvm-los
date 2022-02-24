@@ -25,7 +25,6 @@
 
 using namespace llvm;
 
-namespace llvm {
 cl::opt<bool> ShouldPreserveAllAttributes(
     "assume-preserve-all", cl::init(false), cl::Hidden,
     cl::desc("enable preservation of all attrbitues. even those that are "
@@ -35,7 +34,6 @@ cl::opt<bool> EnableKnowledgeRetention(
     "enable-knowledge-retention", cl::init(false), cl::Hidden,
     cl::desc(
         "enable preservation of attributes throughout code transformation"));
-} // namespace llvm
 
 #define DEBUG_TYPE "assume-builder"
 
@@ -67,8 +65,7 @@ bool isUsefullToPreserve(Attribute::AttrKind Kind) {
 
 /// This function will try to transform the given knowledge into a more
 /// canonical one. the canonical knowledge maybe the given one.
-RetainedKnowledge canonicalizedKnowledge(RetainedKnowledge RK,
-                                         const DataLayout &DL) {
+RetainedKnowledge canonicalizedKnowledge(RetainedKnowledge RK, DataLayout DL) {
   switch (RK.AttrKind) {
   default:
     return RK;
@@ -104,7 +101,7 @@ struct AssumeBuilderState {
   Module *M;
 
   using MapKey = std::pair<Value *, Attribute::AttrKind>;
-  SmallMapVector<MapKey, uint64_t, 8> AssumedKnowledgeMap;
+  SmallMapVector<MapKey, unsigned, 8> AssumedKnowledgeMap;
   Instruction *InstBeingModified = nullptr;
   AssumptionCache* AC = nullptr;
   DominatorTree* DT = nullptr;
@@ -153,7 +150,7 @@ struct AssumeBuilderState {
     }
     if (auto *Arg = dyn_cast<Argument>(RK.WasOn)) {
       if (Arg->hasAttribute(RK.AttrKind) &&
-          (!Attribute::isIntAttrKind(RK.AttrKind) ||
+          (!Attribute::doesAttrKindHaveArgument(RK.AttrKind) ||
            Arg->getAttribute(RK.AttrKind).getValueAsInt() >= RK.ArgValue))
         return false;
       return true;
@@ -197,27 +194,28 @@ struct AssumeBuilderState {
         (!ShouldPreserveAllAttributes &&
          !isUsefullToPreserve(Attr.getKindAsEnum())))
       return;
-    uint64_t AttrArg = 0;
+    unsigned AttrArg = 0;
     if (Attr.isIntAttribute())
       AttrArg = Attr.getValueAsInt();
     addKnowledge({Attr.getKindAsEnum(), AttrArg, WasOn});
   }
 
   void addCall(const CallBase *Call) {
-    auto addAttrList = [&](AttributeList AttrList, unsigned NumArgs) {
-      for (unsigned Idx = 0; Idx < NumArgs; Idx++)
-        for (Attribute Attr : AttrList.getParamAttrs(Idx)) {
+    auto addAttrList = [&](AttributeList AttrList) {
+      for (unsigned Idx = AttributeList::FirstArgIndex;
+           Idx < AttrList.getNumAttrSets(); Idx++)
+        for (Attribute Attr : AttrList.getAttributes(Idx)) {
           bool IsPoisonAttr = Attr.hasAttribute(Attribute::NonNull) ||
                               Attr.hasAttribute(Attribute::Alignment);
-          if (!IsPoisonAttr || Call->isPassingUndefUB(Idx))
-            addAttribute(Attr, Call->getArgOperand(Idx));
+          if (!IsPoisonAttr || Call->isPassingUndefUB(Idx - 1))
+            addAttribute(Attr, Call->getArgOperand(Idx - 1));
         }
-      for (Attribute Attr : AttrList.getFnAttrs())
+      for (Attribute Attr : AttrList.getFnAttributes())
         addAttribute(Attr, nullptr);
     };
-    addAttrList(Call->getAttributes(), Call->arg_size());
+    addAttrList(Call->getAttributes());
     if (Function *Fn = Call->getCalledFunction())
-      addAttrList(Fn->getAttributes(), Fn->arg_size());
+      addAttrList(Fn->getAttributes());
   }
 
   AssumeInst *build() {
@@ -261,7 +259,8 @@ struct AssumeBuilderState {
         addKnowledge({Attribute::NonNull, 0u, Pointer});
     }
     if (MA.valueOrOne() > 1)
-      addKnowledge({Attribute::Alignment, MA.valueOrOne().value(), Pointer});
+      addKnowledge(
+          {Attribute::Alignment, unsigned(MA.valueOrOne().value()), Pointer});
   }
 
   void addInstruction(Instruction *I) {
@@ -391,7 +390,7 @@ struct AssumeSimplify {
   void dropRedundantKnowledge() {
     struct MapValue {
       IntrinsicInst *Assume;
-      uint64_t ArgValue;
+      unsigned ArgValue;
       CallInst::BundleOpInfo *BOI;
     };
     buildMapping(false);
@@ -421,7 +420,7 @@ struct AssumeSimplify {
           if (auto *Arg = dyn_cast_or_null<Argument>(RK.WasOn)) {
             bool HasSameKindAttr = Arg->hasAttribute(RK.AttrKind);
             if (HasSameKindAttr)
-              if (!Attribute::isIntAttrKind(RK.AttrKind) ||
+              if (!Attribute::doesAttrKindHaveArgument(RK.AttrKind) ||
                   Arg->getAttribute(RK.AttrKind).getValueAsInt() >=
                       RK.ArgValue) {
                 RemoveFromAssume();

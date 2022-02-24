@@ -1,4 +1,4 @@
-; RUN: opt < %s  -passes=instcombine -S 
+; RUN: opt < %s  -instcombine -S 
 ; no crash
 
 %A = type { %B }

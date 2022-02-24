@@ -36,9 +36,6 @@ void NVPTXFrameLowering::emitPrologue(MachineFunction &MF,
     MachineInstr *MI = &MBB.front();
     MachineRegisterInfo &MR = MF.getRegInfo();
 
-    const NVPTXRegisterInfo *NRI =
-        MF.getSubtarget<NVPTXSubtarget>().getRegisterInfo();
-
     // This instruction really occurs before first instruction
     // in the BB, so giving it no debug location.
     DebugLoc dl = DebugLoc();
@@ -53,15 +50,15 @@ void NVPTXFrameLowering::emitPrologue(MachineFunction &MF,
         (Is64Bit ? NVPTX::cvta_local_yes_64 : NVPTX::cvta_local_yes);
     unsigned MovDepotOpcode =
         (Is64Bit ? NVPTX::MOV_DEPOT_ADDR_64 : NVPTX::MOV_DEPOT_ADDR);
-    if (!MR.use_empty(NRI->getFrameRegister(MF))) {
+    if (!MR.use_empty(NVPTX::VRFrame)) {
       // If %SP is not used, do not bother emitting "cvta.local %SP, %SPL".
       MI = BuildMI(MBB, MI, dl,
                    MF.getSubtarget().getInstrInfo()->get(CvtaLocalOpcode),
-                   NRI->getFrameRegister(MF))
-               .addReg(NRI->getFrameLocalRegister(MF));
+                   NVPTX::VRFrame)
+               .addReg(NVPTX::VRFrameLocal);
     }
     BuildMI(MBB, MI, dl, MF.getSubtarget().getInstrInfo()->get(MovDepotOpcode),
-            NRI->getFrameLocalRegister(MF))
+            NVPTX::VRFrameLocal)
         .addImm(MF.getFunctionNumber());
   }
 }

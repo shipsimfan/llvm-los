@@ -18,7 +18,7 @@ typedef struct {
 } FooBar;
 extern FooBar fb;
 int f(int);
-void testGlobalVariable(void) {
+void testGlobalVariable() {
   clang_analyzer_eval(f(5) == 1);         // expected-warning{{TRUE}}
 }
 
@@ -27,14 +27,14 @@ int enumCheck(void);
 enum A { x,
          y,
          z };
-void testEnum(void) {
+void testEnum() {
   clang_analyzer_eval(x == 0);            // expected-warning{{TRUE}}
   clang_analyzer_eval(enumCheck() == 42); // expected-warning{{TRUE}}
 }
 
 // Test that asm import does not fail.
-int inlineAsm(void);
-int testInlineAsm(void) {
+int inlineAsm();
+int testInlineAsm() {
   return inlineAsm();
 }
 
@@ -47,7 +47,7 @@ void testMacro(void) {
 
 // The external function prototype is incomplete.
 // warning:implicit functions are prohibited by c99
-void testImplicit(void) {
+void testImplicit() {
   int res = identImplicit(6);   // external implicit functions are not inlined
   clang_analyzer_eval(res == 6); // expected-warning{{TRUE}}
   // Call something with uninitialized from the same function in which the implicit was called.
@@ -63,7 +63,7 @@ struct DataType {
   int b;
 };
 int structInProto(struct DataType *d);
-void testStructDefInArgument(void) {
+void testStructDefInArgument() {
   struct DataType d;
   d.a = 1;
   d.b = 0;

@@ -25,7 +25,7 @@ class TestUniformQuantizedValueConverter
 public:
   TestUniformQuantizedValueConverter(UniformQuantizedType type)
       : UniformQuantizedValueConverter(type), qtype(type) {}
-  APInt quantizeFloatToInt(APFloat expressedValue) const override {
+  APInt quantizeFloatToInt(APFloat expressedValue) const {
     return APInt(qtype.getStorageType().cast<IntegerType>().getWidth(), 5L);
   }
 
@@ -113,8 +113,7 @@ TEST(QuantizationUtilsTest, convertRankedDenseAttrUniform) {
   EXPECT_TRUE(returnedValue.isa<DenseIntElementsAttr>());
 
   // Check Elements attribute element value is expected.
-  auto firstValue =
-      returnedValue.cast<ElementsAttr>().getValues<Attribute>()[{0, 0}];
+  auto firstValue = returnedValue.cast<ElementsAttr>().getValue({0, 0});
   EXPECT_EQ(firstValue.cast<IntegerAttr>().getInt(), 5);
 }
 
@@ -139,8 +138,7 @@ TEST(QuantizationUtilsTest, convertRankedSplatAttrUniform) {
   EXPECT_TRUE(returnedValue.isa<SplatElementsAttr>());
 
   // Check Elements attribute element value is expected.
-  auto firstValue =
-      returnedValue.cast<ElementsAttr>().getValues<Attribute>()[{0, 0}];
+  auto firstValue = returnedValue.cast<ElementsAttr>().getValue({0, 0});
   EXPECT_EQ(firstValue.cast<IntegerAttr>().getInt(), 5);
 }
 
@@ -164,9 +162,8 @@ TEST(QuantizationUtilsTest, convertRankedSparseAttrUniform) {
   EXPECT_TRUE(returnedValue.isa<SparseElementsAttr>());
 
   // Check Elements attribute element value is expected.
-  auto firstValue =
-      returnedValue.cast<ElementsAttr>().getValues<Attribute>()[{0, 0}];
+  auto firstValue = returnedValue.cast<ElementsAttr>().getValue({0, 0});
   EXPECT_EQ(firstValue.cast<IntegerAttr>().getInt(), 5);
 }
 
-} // namespace
+} // end namespace

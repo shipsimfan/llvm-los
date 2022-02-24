@@ -26,7 +26,6 @@
 #include "lldb/Utility/DataBuffer.h"
 #include "lldb/Utility/DataExtractor.h"
 #include "lldb/Utility/Endian.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/ReproducerProvider.h"
 #include "lldb/Utility/StreamString.h"
@@ -45,7 +44,7 @@ static CFDictionaryRef (*g_dlsym_DBGCopyDSYMPropertyLists)(CFURLRef dsym_url) = 
 
 int LocateMacOSXFilesUsingDebugSymbols(const ModuleSpec &module_spec,
                                        ModuleSpec &return_module_spec) {
-  Log *log = GetLog(LLDBLog::Host);
+  Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
   if (!ModuleList::GetGlobalModuleListProperties().GetEnableExternalLookup()) {
     LLDB_LOGF(log, "Spotlight lookup for .dSYM bundles is disabled.");
     return 0;
@@ -307,7 +306,7 @@ FileSpec Symbols::FindSymbolFileInBundle(const FileSpec &dsym_bundle_fspec,
 
 static bool GetModuleSpecInfoFromUUIDDictionary(CFDictionaryRef uuid_dict,
                                                 ModuleSpec &module_spec) {
-  Log *log = GetLog(LLDBLog::Host);
+  Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
   bool success = false;
   if (uuid_dict != NULL && CFGetTypeID(uuid_dict) == CFDictionaryGetTypeID()) {
     std::string str;
@@ -415,8 +414,9 @@ static bool GetModuleSpecInfoFromUUIDDictionary(CFDictionaryRef uuid_dict,
             // last two filename parts from the source remapping and get a more
             // general source remapping that still works. Add this as another
             // option in addition to the full source path remap.
-            module_spec.GetSourceMappingList().Append(DBGBuildSourcePath,
-                                                      DBGSourcePath, true);
+            module_spec.GetSourceMappingList().Append(
+                ConstString(DBGBuildSourcePath.c_str()),
+                ConstString(DBGSourcePath.c_str()), true);
             if (do_truncate_remapping_names) {
               FileSpec build_path(DBGBuildSourcePath.c_str());
               FileSpec source_path(DBGSourcePath.c_str());
@@ -425,7 +425,8 @@ static bool GetModuleSpecInfoFromUUIDDictionary(CFDictionaryRef uuid_dict,
               source_path.RemoveLastPathComponent();
               source_path.RemoveLastPathComponent();
               module_spec.GetSourceMappingList().Append(
-                  build_path.GetPath(), source_path.GetPath(), true);
+                  ConstString(build_path.GetPath().c_str()),
+                  ConstString(source_path.GetPath().c_str()), true);
             }
           }
         }
@@ -457,8 +458,9 @@ static bool GetModuleSpecInfoFromUUIDDictionary(CFDictionaryRef uuid_dict,
         FileSystem::Instance().Resolve(resolved_source_path);
         DBGSourcePath = resolved_source_path.GetPath();
       }
-      module_spec.GetSourceMappingList().Append(DBGBuildSourcePath,
-                                                DBGSourcePath, true);
+      module_spec.GetSourceMappingList().Append(
+          ConstString(DBGBuildSourcePath.c_str()),
+          ConstString(DBGSourcePath.c_str()), true);
     }
   }
   return success;
@@ -593,7 +595,7 @@ bool Symbols::DownloadObjectAndSymbolFile(ModuleSpec &module_spec,
                        g_dsym_for_uuid_exe_path, file_path);
 
       if (!command.GetString().empty()) {
-        Log *log = GetLog(LLDBLog::Host);
+        Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
         int exit_status = -1;
         int signo = -1;
         std::string command_output;

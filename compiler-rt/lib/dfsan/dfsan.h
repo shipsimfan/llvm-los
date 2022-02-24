@@ -16,15 +16,23 @@
 
 #include "sanitizer_common/sanitizer_internal_defs.h"
 
+#include "dfsan_flags.h"
 #include "dfsan_platform.h"
 
+using __sanitizer::u16;
 using __sanitizer::u32;
-using __sanitizer::u8;
 using __sanitizer::uptr;
 
 // Copy declarations from public sanitizer/dfsan_interface.h header here.
-typedef u8 dfsan_label;
+typedef u16 dfsan_label;
 typedef u32 dfsan_origin;
+
+struct dfsan_label_info {
+  dfsan_label l1;
+  dfsan_label l2;
+  const char *desc;
+  void *userdata;
+};
 
 extern "C" {
 void dfsan_add_label(dfsan_label label, void *addr, uptr size);
@@ -46,33 +54,28 @@ void dfsan_set_label_origin(dfsan_label label, dfsan_origin origin, void *addr,
 
 // Copy or move the origins of the len bytes from src to dst.
 void dfsan_mem_origin_transfer(const void *dst, const void *src, uptr len);
-
-// Copy shadow bytes from src to dst.
-// Note this preserves distinct taint labels at specific offsets.
-void dfsan_mem_shadow_transfer(void *dst, const void *src, uptr len);
 }  // extern "C"
 
 template <typename T>
-void dfsan_set_label(dfsan_label label, T &data) {
+void dfsan_set_label(dfsan_label label, T &data) {  // NOLINT
   dfsan_set_label(label, (void *)&data, sizeof(T));
 }
 
 namespace __dfsan {
 
-extern bool dfsan_inited;
-extern bool dfsan_init_is_running;
-
-void initialize_interceptors();
+void InitializeInterceptors();
 
 inline dfsan_label *shadow_for(void *ptr) {
-  return (dfsan_label *)MEM_TO_SHADOW(ptr);
+  return (dfsan_label *) ((((uptr) ptr) & ShadowMask()) << 1);
 }
 
 inline const dfsan_label *shadow_for(const void *ptr) {
   return shadow_for(const_cast<void *>(ptr));
 }
 
-inline uptr unaligned_origin_for(uptr ptr) { return MEM_TO_ORIGIN(ptr); }
+inline uptr unaligned_origin_for(uptr ptr) {
+  return OriginAddr() + (ptr & ShadowMask());
+}
 
 inline dfsan_origin *origin_for(void *ptr) {
   auto aligned_addr = unaligned_origin_for(reinterpret_cast<uptr>(ptr)) &
@@ -84,22 +87,14 @@ inline const dfsan_origin *origin_for(const void *ptr) {
   return origin_for(const_cast<void *>(ptr));
 }
 
-void dfsan_copy_memory(void *dst, const void *src, uptr size);
+inline bool is_shadow_addr_valid(uptr shadow_addr) {
+  return (uptr)shadow_addr >= ShadowAddr() && (uptr)shadow_addr < OriginAddr();
+}
 
-void dfsan_allocator_init();
-void dfsan_deallocate(void *ptr);
-
-void *dfsan_malloc(uptr size);
-void *dfsan_calloc(uptr nmemb, uptr size);
-void *dfsan_realloc(void *ptr, uptr size);
-void *dfsan_reallocarray(void *ptr, uptr nmemb, uptr size);
-void *dfsan_valloc(uptr size);
-void *dfsan_pvalloc(uptr size);
-void *dfsan_aligned_alloc(uptr alignment, uptr size);
-void *dfsan_memalign(uptr alignment, uptr size);
-int dfsan_posix_memalign(void **memptr, uptr alignment, uptr size);
-
-void dfsan_init();
+inline bool has_valid_shadow_addr(const void *ptr) {
+  const dfsan_label *ptr_s = shadow_for(ptr);
+  return is_shadow_addr_valid((uptr)ptr_s);
+}
 
 }  // namespace __dfsan
 

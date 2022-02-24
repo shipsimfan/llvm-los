@@ -43,10 +43,13 @@ public:
                      | eCondition | eAutoContinue)
   };
   struct CommandData {
-    CommandData() {}
+    CommandData()
+        : user_source(), script_source(),
+          interpreter(lldb::eScriptLanguageNone), stop_on_error(true) {}
 
     CommandData(const StringList &user_source, lldb::ScriptLanguage interp)
-        : user_source(user_source), interpreter(interp), stop_on_error(true) {}
+        : user_source(user_source), script_source(), interpreter(interp),
+          stop_on_error(true) {}
 
     virtual ~CommandData() = default;
 
@@ -60,10 +63,9 @@ public:
 
     StringList user_source;
     std::string script_source;
-    enum lldb::ScriptLanguage interpreter =
-        lldb::eScriptLanguageNone; // eScriptLanguageNone means command
-                                   // interpreter.
-    bool stop_on_error = true;
+    enum lldb::ScriptLanguage
+        interpreter; // eScriptLanguageNone means command interpreter.
+    bool stop_on_error;
 
   private:
     enum class OptionNames : uint32_t {
@@ -194,8 +196,8 @@ public:
   ///    The commands will be appended to this list.
   ///
   /// \return
-  ///    \b true if the command callback is a command-line callback,
-  ///    \b false otherwise.
+  ///    \btrue if the command callback is a command-line callback,
+  ///    \bfalse otherwise.
   bool GetCommandLineCallbacks(StringList &command_list);
 
   /// Remove the callback from this option set.

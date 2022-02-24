@@ -9,7 +9,6 @@
 // CHECK-NEXT: core.CallAndMessageModeling
 // CHECK-NEXT: apiModeling.StdCLibraryFunctions
 // CHECK-NEXT: apiModeling.TrustNonnull
-// CHECK-NEXT: apiModeling.TrustReturnsNonnull
 // CHECK-NEXT: apiModeling.llvm.CastValue
 // CHECK-NEXT: apiModeling.llvm.ReturnValue
 // CHECK-NEXT: core.CallAndMessage

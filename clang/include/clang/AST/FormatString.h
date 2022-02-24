@@ -15,8 +15,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_AST_FORMATSTRING_H
-#define LLVM_CLANG_AST_FORMATSTRING_H
+#ifndef LLVM_CLANG_ANALYSIS_ANALYSES_FORMATSTRING_H
+#define LLVM_CLANG_ANALYSIS_ANALYSES_FORMATSTRING_H
 
 #include "clang/AST/CanonicalType.h"
 
@@ -332,11 +332,11 @@ public:
                  unsigned amountLength,
                  bool usesPositionalArg)
   : start(amountStart), length(amountLength), hs(howSpecified), amt(amount),
-  UsesPositionalArg(usesPositionalArg), UsesDotPrefix(false) {}
+  UsesPositionalArg(usesPositionalArg), UsesDotPrefix(0) {}
 
   OptionalAmount(bool valid = true)
   : start(nullptr),length(0), hs(valid ? NotSpecified : Invalid), amt(0),
-  UsesPositionalArg(false), UsesDotPrefix(false) {}
+  UsesPositionalArg(0), UsesDotPrefix(0) {}
 
   explicit OptionalAmount(unsigned Amount)
     : start(nullptr), length(0), hs(Constant), amt(Amount),
@@ -726,8 +726,7 @@ public:
 
   virtual bool HandlePrintfSpecifier(const analyze_printf::PrintfSpecifier &FS,
                                      const char *startSpecifier,
-                                     unsigned specifierLen,
-                                     const TargetInfo &Target) {
+                                     unsigned specifierLen) {
     return true;
   }
 

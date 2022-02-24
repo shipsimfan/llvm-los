@@ -10,11 +10,9 @@
 #define LLVM_SUPPORT_TIMEPROFILER_H
 
 #include "llvm/Support/Error.h"
-#include "llvm/ADT/STLFunctionalExtras.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
-
-class raw_pwrite_stream;
 
 struct TimeTraceProfiler;
 TimeTraceProfiler *getTimeTraceProfilerInstance();

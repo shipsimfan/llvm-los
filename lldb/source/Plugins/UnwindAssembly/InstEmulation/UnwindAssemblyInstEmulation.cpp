@@ -21,7 +21,6 @@
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/DataBufferHeap.h"
 #include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/StreamString.h"
@@ -73,7 +72,7 @@ bool UnwindAssemblyInstEmulation::GetNonCallSiteUnwindPlanFromAssembly(
         m_arch, nullptr, nullptr, range.GetBaseAddress(), opcode_data,
         opcode_size, 99999, prefer_file_cache));
 
-    Log *log = GetLog(LLDBLog::Unwind);
+    Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
 
     if (disasm_sp) {
 
@@ -334,6 +333,13 @@ UnwindAssemblyInstEmulation::CreateInstance(const ArchSpec &arch) {
   return nullptr;
 }
 
+// PluginInterface protocol in UnwindAssemblyParser_x86
+ConstString UnwindAssemblyInstEmulation::GetPluginName() {
+  return GetPluginNameStatic();
+}
+
+uint32_t UnwindAssemblyInstEmulation::GetPluginVersion() { return 1; }
+
 void UnwindAssemblyInstEmulation::Initialize() {
   PluginManager::RegisterPlugin(GetPluginNameStatic(),
                                 GetPluginDescriptionStatic(), CreateInstance);
@@ -343,7 +349,12 @@ void UnwindAssemblyInstEmulation::Terminate() {
   PluginManager::UnregisterPlugin(CreateInstance);
 }
 
-llvm::StringRef UnwindAssemblyInstEmulation::GetPluginDescriptionStatic() {
+ConstString UnwindAssemblyInstEmulation::GetPluginNameStatic() {
+  static ConstString g_name("inst-emulation");
+  return g_name;
+}
+
+const char *UnwindAssemblyInstEmulation::GetPluginDescriptionStatic() {
   return "Instruction emulation based unwind information.";
 }
 
@@ -380,7 +391,7 @@ size_t UnwindAssemblyInstEmulation::ReadMemory(
     EmulateInstruction *instruction, void *baton,
     const EmulateInstruction::Context &context, lldb::addr_t addr, void *dst,
     size_t dst_len) {
-  Log *log = GetLog(LLDBLog::Unwind);
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
 
   if (log && log->GetVerbose()) {
     StreamString strm;
@@ -412,7 +423,7 @@ size_t UnwindAssemblyInstEmulation::WriteMemory(
                      instruction->GetArchitecture().GetByteOrder(),
                      instruction->GetArchitecture().GetAddressByteSize());
 
-  Log *log = GetLog(LLDBLog::Unwind);
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
 
   if (log && log->GetVerbose()) {
     StreamString strm;
@@ -493,7 +504,7 @@ bool UnwindAssemblyInstEmulation::ReadRegister(EmulateInstruction *instruction,
                                                RegisterValue &reg_value) {
   bool synthetic = GetRegisterValue(*reg_info, reg_value);
 
-  Log *log = GetLog(LLDBLog::Unwind);
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
 
   if (log && log->GetVerbose()) {
 
@@ -519,7 +530,7 @@ bool UnwindAssemblyInstEmulation::WriteRegister(
 bool UnwindAssemblyInstEmulation::WriteRegister(
     EmulateInstruction *instruction, const EmulateInstruction::Context &context,
     const RegisterInfo *reg_info, const RegisterValue &reg_value) {
-  Log *log = GetLog(LLDBLog::Unwind);
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
 
   if (log && log->GetVerbose()) {
 

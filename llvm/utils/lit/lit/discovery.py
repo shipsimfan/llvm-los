@@ -53,7 +53,8 @@ def getTestSuite(item, litConfig, cache):
         config_map = litConfig.params.get('config_map')
         if config_map:
             cfgpath = os.path.realpath(cfgpath)
-            target = config_map.get(os.path.normcase(cfgpath))
+            cfgpath = os.path.normcase(cfgpath)
+            target = config_map.get(cfgpath)
             if target:
                 cfgpath = target
 

@@ -19,15 +19,13 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/TemplateBase.h"
 #include "clang/AST/Type.h"
-#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
 
 // Returns a desugared version of the QualType, and marks ShouldAKA as true
 // whenever we remove significant sugar from the type.
-QualType clang::desugarForDiagnostic(ASTContext &Context, QualType QT,
-                                     bool &ShouldAKA) {
+static QualType Desugar(ASTContext &Context, QualType QT, bool &ShouldAKA) {
   QualifierCollector QC;
 
   while (true) {
@@ -36,11 +34,6 @@ QualType clang::desugarForDiagnostic(ASTContext &Context, QualType QT,
     // Don't aka just because we saw an elaborated type...
     if (const ElaboratedType *ET = dyn_cast<ElaboratedType>(Ty)) {
       QT = ET->desugar();
-      continue;
-    }
-    // ... or a using type ...
-    if (const UsingType *UT = dyn_cast<UsingType>(Ty)) {
-      QT = UT->desugar();
       continue;
     }
     // ... or a paren type ...
@@ -82,7 +75,7 @@ QualType clang::desugarForDiagnostic(ASTContext &Context, QualType QT,
     if (const FunctionType *FT = dyn_cast<FunctionType>(Ty)) {
       bool DesugarReturn = false;
       QualType SugarRT = FT->getReturnType();
-      QualType RT = desugarForDiagnostic(Context, SugarRT, DesugarReturn);
+      QualType RT = Desugar(Context, SugarRT, DesugarReturn);
       if (auto nullability = AttributedType::stripOuterNullability(SugarRT)) {
         RT = Context.getAttributedType(
             AttributedType::getNullabilityAttrKind(*nullability), RT, RT);
@@ -93,7 +86,7 @@ QualType clang::desugarForDiagnostic(ASTContext &Context, QualType QT,
       const FunctionProtoType *FPT = dyn_cast<FunctionProtoType>(FT);
       if (FPT) {
         for (QualType SugarPT : FPT->param_types()) {
-          QualType PT = desugarForDiagnostic(Context, SugarPT, DesugarArgument);
+          QualType PT = Desugar(Context, SugarPT, DesugarArgument);
           if (auto nullability =
                   AttributedType::stripOuterNullability(SugarPT)) {
             PT = Context.getAttributedType(
@@ -121,8 +114,7 @@ QualType clang::desugarForDiagnostic(ASTContext &Context, QualType QT,
         for (unsigned I = 0, N = TST->getNumArgs(); I != N; ++I) {
           const TemplateArgument &Arg = TST->getArg(I);
           if (Arg.getKind() == TemplateArgument::Type)
-            Args.push_back(desugarForDiagnostic(Context, Arg.getAsType(),
-                                                DesugarArgument));
+            Args.push_back(Desugar(Context, Arg.getAsType(), DesugarArgument));
           else
             Args.push_back(Arg);
         }
@@ -134,29 +126,6 @@ QualType clang::desugarForDiagnostic(ASTContext &Context, QualType QT,
         }
         break;
       }
-    }
-
-    if (const auto *AT = dyn_cast<ArrayType>(Ty)) {
-      QualType ElementTy =
-          desugarForDiagnostic(Context, AT->getElementType(), ShouldAKA);
-      if (const auto *CAT = dyn_cast<ConstantArrayType>(AT))
-        QT = Context.getConstantArrayType(
-            ElementTy, CAT->getSize(), CAT->getSizeExpr(),
-            CAT->getSizeModifier(), CAT->getIndexTypeCVRQualifiers());
-      else if (const auto *VAT = dyn_cast<VariableArrayType>(AT))
-        QT = Context.getVariableArrayType(
-            ElementTy, VAT->getSizeExpr(), VAT->getSizeModifier(),
-            VAT->getIndexTypeCVRQualifiers(), VAT->getBracketsRange());
-      else if (const auto *DSAT = dyn_cast<DependentSizedArrayType>(AT))
-        QT = Context.getDependentSizedArrayType(
-            ElementTy, DSAT->getSizeExpr(), DSAT->getSizeModifier(),
-            DSAT->getIndexTypeCVRQualifiers(), DSAT->getBracketsRange());
-      else if (const auto *IAT = dyn_cast<IncompleteArrayType>(AT))
-        QT = Context.getIncompleteArrayType(ElementTy, IAT->getSizeModifier(),
-                                            IAT->getIndexTypeCVRQualifiers());
-      else
-        llvm_unreachable("Unhandled array type");
-      break;
     }
 
     // Don't desugar magic Objective-C types.
@@ -211,25 +180,24 @@ break; \
   // If we have a pointer-like type, desugar the pointee as well.
   // FIXME: Handle other pointer-like types.
   if (const PointerType *Ty = QT->getAs<PointerType>()) {
-    QT = Context.getPointerType(
-        desugarForDiagnostic(Context, Ty->getPointeeType(), ShouldAKA));
+    QT = Context.getPointerType(Desugar(Context, Ty->getPointeeType(),
+                                        ShouldAKA));
   } else if (const auto *Ty = QT->getAs<ObjCObjectPointerType>()) {
-    QT = Context.getObjCObjectPointerType(
-        desugarForDiagnostic(Context, Ty->getPointeeType(), ShouldAKA));
+    QT = Context.getObjCObjectPointerType(Desugar(Context, Ty->getPointeeType(),
+                                                  ShouldAKA));
   } else if (const LValueReferenceType *Ty = QT->getAs<LValueReferenceType>()) {
-    QT = Context.getLValueReferenceType(
-        desugarForDiagnostic(Context, Ty->getPointeeType(), ShouldAKA));
+    QT = Context.getLValueReferenceType(Desugar(Context, Ty->getPointeeType(),
+                                                ShouldAKA));
   } else if (const RValueReferenceType *Ty = QT->getAs<RValueReferenceType>()) {
-    QT = Context.getRValueReferenceType(
-        desugarForDiagnostic(Context, Ty->getPointeeType(), ShouldAKA));
+    QT = Context.getRValueReferenceType(Desugar(Context, Ty->getPointeeType(),
+                                                ShouldAKA));
   } else if (const auto *Ty = QT->getAs<ObjCObjectType>()) {
     if (Ty->getBaseType().getTypePtr() != Ty && !ShouldAKA) {
-      QualType BaseType =
-          desugarForDiagnostic(Context, Ty->getBaseType(), ShouldAKA);
-      QT = Context.getObjCObjectType(
-          BaseType, Ty->getTypeArgsAsWritten(),
-          llvm::makeArrayRef(Ty->qual_begin(), Ty->getNumProtocols()),
-          Ty->isKindOfTypeAsWritten());
+      QualType BaseType = Desugar(Context, Ty->getBaseType(), ShouldAKA);
+      QT = Context.getObjCObjectType(BaseType, Ty->getTypeArgsAsWritten(),
+                                     llvm::makeArrayRef(Ty->qual_begin(),
+                                                        Ty->getNumProtocols()),
+                                     Ty->isKindOfTypeAsWritten());
     }
   }
 
@@ -282,8 +250,7 @@ ConvertTypeToDiagnosticString(ASTContext &Context, QualType Ty,
       continue;  // Same canonical types
     std::string CompareS = CompareTy.getAsString(Context.getPrintingPolicy());
     bool ShouldAKA = false;
-    QualType CompareDesugar =
-        desugarForDiagnostic(Context, CompareTy, ShouldAKA);
+    QualType CompareDesugar = Desugar(Context, CompareTy, ShouldAKA);
     std::string CompareDesugarStr =
         CompareDesugar.getAsString(Context.getPrintingPolicy());
     if (CompareS != S && CompareDesugarStr != S)
@@ -318,7 +285,7 @@ ConvertTypeToDiagnosticString(ASTContext &Context, QualType Ty,
   // sugar gives us something "significantly different".
   if (!Repeated) {
     bool ShouldAKA = false;
-    QualType DesugaredTy = desugarForDiagnostic(Context, Ty, ShouldAKA);
+    QualType DesugaredTy = Desugar(Context, Ty, ShouldAKA);
     if (ShouldAKA || ForceAKA) {
       if (DesugaredTy == Ty) {
         DesugaredTy = Ty.getCanonicalType();
@@ -340,7 +307,7 @@ ConvertTypeToDiagnosticString(ASTContext &Context, QualType Ty,
       OS << "'" << S << "' (vector of " << VTy->getNumElements() << " '"
          << VTy->getElementType().getAsString(Context.getPrintingPolicy())
          << "' " << Values << ")";
-      return DecoratedString;
+      return OS.str();
     }
   }
 
@@ -1120,9 +1087,6 @@ class TemplateDiff {
             Ty->getAs<TemplateSpecializationType>())
       return TST;
 
-    if (const auto* SubstType = Ty->getAs<SubstTemplateTypeParmType>())
-      Ty = SubstType->getReplacementType();
-
     const RecordType *RT = Ty->getAs<RecordType>();
 
     if (!RT)
@@ -1792,7 +1756,7 @@ class TemplateDiff {
       if (FromIntType->isBooleanType()) {
         OS << ((FromInt == 0) ? "false" : "true");
       } else {
-        OS << toString(FromInt, 10);
+        OS << FromInt.toString(10);
       }
       return;
     }
@@ -1836,7 +1800,7 @@ class TemplateDiff {
       if (IntType->isBooleanType()) {
         OS << ((Val == 0) ? "false" : "true");
       } else {
-        OS << toString(Val, 10);
+        OS << Val.toString(10);
       }
     } else if (E) {
       PrintExpr(E);

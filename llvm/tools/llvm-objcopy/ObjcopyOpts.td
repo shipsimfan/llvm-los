@@ -50,8 +50,7 @@ defm rename_section
     : Eq<"rename-section",
          "Renames a section from old to new, optionally with specified flags. "
          "Flags supported for GNU compatibility: alloc, load, noload, "
-         "readonly, exclude, debug, code, data, rom, share, contents, merge, "
-         "strings.">,
+         "readonly, debug, code, data, rom, share, contents, merge, strings.">,
       MetaVarName<"old=new[,flag1,...]">;
 defm redefine_symbol
     : Eq<"redefine-sym", "Change the name of a symbol old to new">,
@@ -83,8 +82,8 @@ defm set_section_alignment
 defm set_section_flags
     : Eq<"set-section-flags",
          "Set section flags for a given section. Flags supported for GNU "
-         "compatibility: alloc, load, noload, readonly, exclude, debug, code, "
-         "data, rom, share, contents, merge, strings.">,
+         "compatibility: alloc, load, noload, readonly, debug, code, data, "
+         "rom, share, contents, merge, strings.">,
       MetaVarName<"section=flag1[,flag2,...]">;
 
 def S : Flag<["-"], "S">,
@@ -104,11 +103,6 @@ defm strip_unneeded_symbols
          "Reads a list of symbols from <filename> and removes them "
          "if they are not needed by relocations">,
       MetaVarName<"filename">;
-
-defm subsystem
-    : Eq<"subsystem",
-         "Set PE subsystem and version">,
-      MetaVarName<"name[:version]">;
 
 def extract_dwo
     : Flag<["--"], "extract-dwo">,
@@ -220,7 +214,3 @@ defm add_symbol
          "compatibility: debug, constructor, warning, indirect, synthetic, "
          "unique-object, before.">,
       MetaVarName<"name=[section:]value[,flags]">;
-
-defm update_section
-    : Eq<"update-section", "Add section <name> with contents from a file <file>.">,
-      MetaVarName<"name=file">;

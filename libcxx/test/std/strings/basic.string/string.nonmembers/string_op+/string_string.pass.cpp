@@ -36,28 +36,29 @@
 #include "min_allocator.h"
 
 template <class S>
-TEST_CONSTEXPR_CXX20 void test0(const S& lhs, const S& rhs, const S& x) {
+void test0(const S& lhs, const S& rhs, const S& x) {
   assert(lhs + rhs == x);
 }
 
 #if TEST_STD_VER >= 11
 template <class S>
-TEST_CONSTEXPR_CXX20 void test1(S&& lhs, const S& rhs, const S& x) {
-  assert(std::move(lhs) + rhs == x);
+void test1(S&& lhs, const S& rhs, const S& x) {
+  assert(move(lhs) + rhs == x);
 }
 
 template <class S>
-TEST_CONSTEXPR_CXX20 void test2(const S& lhs, S&& rhs, const S& x) {
-  assert(lhs + std::move(rhs) == x);
+void test2(const S& lhs, S&& rhs, const S& x) {
+  assert(lhs + move(rhs) == x);
 }
 
 template <class S>
-TEST_CONSTEXPR_CXX20 void test3(S&& lhs, S&& rhs, const S& x) {
-  assert(std::move(lhs) + std::move(rhs) == x);
+void test3(S&& lhs, S&& rhs, const S& x) {
+  assert(move(lhs) + move(rhs) == x);
 }
+
 #endif
 
-bool test() {
+int main(int, char**) {
   {
     typedef std::string S;
     test0(S(""), S(""), S(""));
@@ -244,15 +245,6 @@ bool test() {
           S("abcdefghijklmnopqrst12345678901234567890"));
   }
 #endif // TEST_STD_VER >= 11
-
-  return true;
-}
-
-int main(int, char**) {
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
-#endif
 
   return 0;
 }

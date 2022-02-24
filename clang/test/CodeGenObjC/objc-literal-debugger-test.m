@@ -21,7 +21,7 @@
 @end
 #endif
 
-int main(void) {
+int main() {
   // object literals.
   id l;
   l = @'a';

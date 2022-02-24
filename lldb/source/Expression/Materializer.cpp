@@ -19,7 +19,6 @@
 #include "lldb/Target/StackFrame.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/RegisterValue.h"
 
@@ -59,7 +58,7 @@ public:
   }
 
   void MakeAllocation(IRMemoryMap &map, Status &err) {
-    Log *log = GetLog(LLDBLog::Expressions);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
     // Allocate a spare memory area to store the persistent variable's
     // contents.
@@ -139,7 +138,7 @@ public:
 
   void Materialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
                    lldb::addr_t process_address, Status &err) override {
-    Log *log = GetLog(LLDBLog::Expressions);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
     const lldb::addr_t load_addr = process_address + m_offset;
 
@@ -191,7 +190,7 @@ public:
   void Dematerialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
                      lldb::addr_t process_address, lldb::addr_t frame_top,
                      lldb::addr_t frame_bottom, Status &err) override {
-    Log *log = GetLog(LLDBLog::Expressions);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
     const lldb::addr_t load_addr = process_address + m_offset;
 
@@ -426,7 +425,7 @@ public:
 
   void Materialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
                    lldb::addr_t process_address, Status &err) override {
-    Log *log = GetLog(LLDBLog::Expressions);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
     const lldb::addr_t load_addr = process_address + m_offset;
     if (log) {
@@ -595,7 +594,7 @@ public:
   void Dematerialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
                      lldb::addr_t process_address, lldb::addr_t frame_top,
                      lldb::addr_t frame_bottom, Status &err) override {
-    Log *log = GetLog(LLDBLog::Expressions);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
     const lldb::addr_t load_addr = process_address + m_offset;
     if (log) {
@@ -701,7 +700,7 @@ public:
         DumpHexBytes(&dump_stream, data.GetBytes(), data.GetByteSize(), 16,
                      load_addr);
 
-        lldb::offset_t offset = 0;
+        lldb::offset_t offset;
 
         ptr = extractor.GetAddress(&offset);
 
@@ -795,15 +794,13 @@ public:
 
       llvm::Optional<uint64_t> byte_size = m_type.GetByteSize(exe_scope);
       if (!byte_size) {
-        err.SetErrorStringWithFormat("can't get size of type \"%s\"",
-                                     m_type.GetTypeName().AsCString());
+        err.SetErrorString("can't get size of type");
         return;
       }
 
       llvm::Optional<size_t> opt_bit_align = m_type.GetTypeBitAlign(exe_scope);
       if (!opt_bit_align) {
-        err.SetErrorStringWithFormat("can't get the alignment of type  \"%s\"",
-                                     m_type.GetTypeName().AsCString());
+        err.SetErrorString("can't get the type alignment");
         return;
       }
 
@@ -979,7 +976,7 @@ public:
         DumpHexBytes(&dump_stream, data.GetBytes(), data.GetByteSize(), 16,
                      load_addr);
 
-        lldb::offset_t offset = 0;
+        lldb::offset_t offset;
 
         ptr = extractor.GetAddress(&offset);
 
@@ -1058,7 +1055,7 @@ public:
 
   void Materialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
                    lldb::addr_t process_address, Status &err) override {
-    Log *log = GetLog(LLDBLog::Expressions);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
     const lldb::addr_t load_addr = process_address + m_offset;
 
@@ -1107,7 +1104,7 @@ public:
   void Dematerialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
                      lldb::addr_t process_address, lldb::addr_t frame_top,
                      lldb::addr_t frame_bottom, Status &err) override {
-    Log *log = GetLog(LLDBLog::Expressions);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
     const lldb::addr_t load_addr = process_address + m_offset;
 
@@ -1177,7 +1174,7 @@ public:
 
   void Materialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
                    lldb::addr_t process_address, Status &err) override {
-    Log *log = GetLog(LLDBLog::Expressions);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
     const lldb::addr_t load_addr = process_address + m_offset;
 
@@ -1240,7 +1237,7 @@ public:
   void Dematerialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
                      lldb::addr_t process_address, lldb::addr_t frame_top,
                      lldb::addr_t frame_bottom, Status &err) override {
-    Log *log = GetLog(LLDBLog::Expressions);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
     const lldb::addr_t load_addr = process_address + m_offset;
 
@@ -1378,7 +1375,8 @@ Materializer::Materialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
       return DematerializerSP();
   }
 
-  if (Log *log = GetLog(LLDBLog::Expressions)) {
+  if (Log *log =
+          lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS)) {
     LLDB_LOGF(
         log,
         "Materializer::Materialize (frame_sp = %p, process_address = 0x%" PRIx64
@@ -1415,7 +1413,8 @@ void Materializer::Dematerializer::Dematerialize(Status &error,
     error.SetErrorToGenericError();
     error.SetErrorString("Couldn't dematerialize: target is gone");
   } else {
-    if (Log *log = GetLog(LLDBLog::Expressions)) {
+    if (Log *log =
+            lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS)) {
       LLDB_LOGF(log,
                 "Materializer::Dematerialize (frame_sp = %p, process_address "
                 "= 0x%" PRIx64 ") about to dematerialize:",

@@ -18,7 +18,6 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/Type.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/StringMap.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 
@@ -39,7 +38,6 @@ protected:
   llvm::Type *PipeROTy;
   llvm::Type *PipeWOTy;
   llvm::PointerType *SamplerTy;
-  llvm::StringMap<llvm::PointerType *> CachedTys;
 
   /// Structure for enqueued block information.
   struct EnqueuedBlockInfo {
@@ -52,7 +50,6 @@ protected:
 
   virtual llvm::Type *getPipeType(const PipeType *T, StringRef Name,
                                   llvm::Type *&PipeTy);
-  llvm::PointerType *getPointerType(const Type *T, StringRef Name);
 
 public:
   CGOpenCLRuntime(CodeGenModule &CGM) : CGM(CGM),

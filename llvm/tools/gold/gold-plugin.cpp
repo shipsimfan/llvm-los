@@ -19,11 +19,11 @@
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DiagnosticPrinter.h"
+#include "llvm/LTO/Caching.h"
 #include "llvm/LTO/LTO.h"
 #include "llvm/Object/Error.h"
 #include "llvm/Remarks/HotnessThresholdParser.h"
 #include "llvm/Support/CachePruning.h"
-#include "llvm/Support/Caching.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
@@ -623,10 +623,8 @@ static ld_plugin_status claim_file_hook(const ld_plugin_input_file *file,
     sym.comdat_key = nullptr;
     int CI = Sym.getComdatIndex();
     if (CI != -1) {
-      // Not setting comdat_key for nodeduplicate ensuress we don't deduplicate.
-      std::pair<StringRef, Comdat::SelectionKind> C = Obj->getComdatTable()[CI];
-      if (C.second != Comdat::NoDeduplicate)
-        sym.comdat_key = strdup(C.first.str().c_str());
+      StringRef C = Obj->getComdatTable()[CI];
+      sym.comdat_key = strdup(C.str().c_str());
     }
 
     sym.resolution = LDPR_UNKNOWN;
@@ -995,7 +993,7 @@ static void writeEmptyDistributedBuildOutputs(const std::string &ModulePath,
     if (SkipModule) {
       ModuleSummaryIndex Index(/*HaveGVs*/ false);
       Index.setSkipModuleByDistributedBackend();
-      writeIndexToFile(Index, OS, nullptr);
+      WriteIndexToFile(Index, OS, nullptr);
     }
   }
   if (options::thinlto_emit_imports_files) {
@@ -1081,11 +1079,12 @@ static std::vector<std::pair<SmallString<128>, bool>> runLTO() {
   size_t MaxTasks = Lto->getMaxTasks();
   std::vector<std::pair<SmallString<128>, bool>> Files(MaxTasks);
 
-  auto AddStream = [&](size_t Task) -> std::unique_ptr<CachedFileStream> {
+  auto AddStream =
+      [&](size_t Task) -> std::unique_ptr<lto::NativeObjectStream> {
     Files[Task].second = !SaveTemps;
     int FD = getOutputFileName(Filename, /* TempOutFile */ !SaveTemps,
                                Files[Task].first, Task);
-    return std::make_unique<CachedFileStream>(
+    return std::make_unique<lto::NativeObjectStream>(
         std::make_unique<llvm::raw_fd_ostream>(FD, true));
   };
 
@@ -1093,9 +1092,9 @@ static std::vector<std::pair<SmallString<128>, bool>> runLTO() {
     *AddStream(Task)->OS << MB->getBuffer();
   };
 
-  FileCache Cache;
+  NativeObjectCache Cache;
   if (!options::cache_dir.empty())
-    Cache = check(localCache("ThinLTO", "Thin", options::cache_dir, AddBuffer));
+    Cache = check(localCache(options::cache_dir, AddBuffer));
 
   check(Lto->run(AddStream, Cache));
 

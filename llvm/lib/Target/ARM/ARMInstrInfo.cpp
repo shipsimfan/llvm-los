@@ -28,7 +28,8 @@
 #include "llvm/MC/MCInst.h"
 using namespace llvm;
 
-ARMInstrInfo::ARMInstrInfo(const ARMSubtarget &STI) : ARMBaseInstrInfo(STI) {}
+ARMInstrInfo::ARMInstrInfo(const ARMSubtarget &STI)
+    : ARMBaseInstrInfo(STI), RI() {}
 
 /// Return the noop instruction to use for a noop.
 MCInst ARMInstrInfo::getNop() const {
@@ -94,17 +95,8 @@ void ARMInstrInfo::expandLoadStackGuard(MachineBasicBlock::iterator MI) const {
   MachineFunction &MF = *MI->getParent()->getParent();
   const ARMSubtarget &Subtarget = MF.getSubtarget<ARMSubtarget>();
   const TargetMachine &TM = MF.getTarget();
-  Module &M = *MF.getFunction().getParent();
 
-  if (M.getStackProtectorGuard() == "tls") {
-    expandLoadStackGuardBase(MI, ARM::MRC, ARM::LDRi12);
-    return;
-  }
-
-  const GlobalValue *GV =
-      cast<GlobalValue>((*MI->memoperands_begin())->getValue());
-
-  if (!Subtarget.useMovt() || Subtarget.isGVInGOT(GV)) {
+  if (!Subtarget.useMovt()) {
     if (TM.isPositionIndependent())
       expandLoadStackGuardBase(MI, ARM::LDRLIT_ga_pcrel, ARM::LDRi12);
     else
@@ -116,6 +108,9 @@ void ARMInstrInfo::expandLoadStackGuard(MachineBasicBlock::iterator MI) const {
     expandLoadStackGuardBase(MI, ARM::MOVi32imm, ARM::LDRi12);
     return;
   }
+
+  const GlobalValue *GV =
+      cast<GlobalValue>((*MI->memoperands_begin())->getValue());
 
   if (!Subtarget.isGVIndirectSymbol(GV)) {
     expandLoadStackGuardBase(MI, ARM::MOV_ga_pcrel, ARM::LDRi12);

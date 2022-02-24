@@ -1,4 +1,4 @@
-; RUN: opt < %s -passes=instsimplify
+; RUN: opt < %s -instsimplify
 
 ; The mul can be proved to always overflow (turning a negative value
 ; into a positive one) and thus results in undefined behaviour.  At

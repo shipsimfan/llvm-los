@@ -8,7 +8,7 @@
 
 #include "SymbolVendorMacOSX.h"
 
-#include <cstring>
+#include <string.h>
 
 #include "Plugins/ObjectFile/Mach-O/ObjectFileMachO.h"
 #include "lldb/Core/Module.h"
@@ -77,7 +77,12 @@ void SymbolVendorMacOSX::Terminate() {
   PluginManager::UnregisterPlugin(CreateInstance);
 }
 
-llvm::StringRef SymbolVendorMacOSX::GetPluginDescriptionStatic() {
+lldb_private::ConstString SymbolVendorMacOSX::GetPluginNameStatic() {
+  static ConstString g_name("macosx");
+  return g_name;
+}
+
+const char *SymbolVendorMacOSX::GetPluginDescriptionStatic() {
   return "Symbol vendor for MacOSX that looks for dSYM files that match "
          "executables.";
 }
@@ -239,7 +244,7 @@ SymbolVendorMacOSX::CreateInstance(const lldb::ModuleSP &module_sp,
                                 DBGSourcePath = resolved_source_path.GetPath();
                               }
                               module_sp->GetSourceMappingList().Append(
-                                  key.GetStringRef(), DBGSourcePath, true);
+                                  key, ConstString(DBGSourcePath), true);
                               // With version 2 of DBGSourcePathRemapping, we
                               // can chop off the last two filename parts
                               // from the source remapping and get a more
@@ -254,7 +259,8 @@ SymbolVendorMacOSX::CreateInstance(const lldb::ModuleSP &module_sp,
                                 source_path.RemoveLastPathComponent();
                                 source_path.RemoveLastPathComponent();
                                 module_sp->GetSourceMappingList().Append(
-                                    build_path.GetPath(), source_path.GetPath(),
+                                    ConstString(build_path.GetPath().c_str()),
+                                    ConstString(source_path.GetPath().c_str()),
                                     true);
                               }
                             }
@@ -275,7 +281,8 @@ SymbolVendorMacOSX::CreateInstance(const lldb::ModuleSP &module_sp,
                         DBGSourcePath = resolved_source_path.GetPath();
                       }
                       module_sp->GetSourceMappingList().Append(
-                          DBGBuildSourcePath, DBGSourcePath, true);
+                          ConstString(DBGBuildSourcePath),
+                          ConstString(DBGSourcePath), true);
                     }
                   }
                 }
@@ -303,3 +310,10 @@ SymbolVendorMacOSX::CreateInstance(const lldb::ModuleSP &module_sp,
   }
   return symbol_vendor;
 }
+
+// PluginInterface protocol
+ConstString SymbolVendorMacOSX::GetPluginName() {
+  return GetPluginNameStatic();
+}
+
+uint32_t SymbolVendorMacOSX::GetPluginVersion() { return 1; }

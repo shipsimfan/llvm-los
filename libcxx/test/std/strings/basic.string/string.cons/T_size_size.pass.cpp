@@ -25,7 +25,7 @@
 #include "min_allocator.h"
 
 template <class S, class SV>
-TEST_CONSTEXPR_CXX20 void
+void
 test(SV sv, std::size_t pos, std::size_t n)
 {
     typedef typename S::traits_type T;
@@ -59,7 +59,7 @@ test(SV sv, std::size_t pos, std::size_t n)
 }
 
 template <class S, class SV>
-TEST_CONSTEXPR_CXX20 void
+void
 test(SV sv, std::size_t pos, std::size_t n, const typename S::allocator_type& a)
 {
     typedef typename S::traits_type T;
@@ -91,8 +91,10 @@ test(SV sv, std::size_t pos, std::size_t n, const typename S::allocator_type& a)
 #endif
 }
 
-bool test() {
-  {
+int main(int, char**)
+{
+
+    {
     typedef test_allocator<char> A;
     typedef std::basic_string_view<char, std::char_traits<char> > SV;
     typedef std::basic_string     <char, std::char_traits<char>, A> S;
@@ -120,10 +122,10 @@ bool test() {
     test<S,SV>(SV("1234567890123456789012345678901234567890123456789012345678901234567890"), 50,   1, A(8));
     test<S,SV>(SV("1234567890123456789012345678901234567890123456789012345678901234567890"), 50,  10, A(8));
     test<S,SV>(SV("1234567890123456789012345678901234567890123456789012345678901234567890"), 50, 100, A(8));
-  }
+    }
 
 #if TEST_STD_VER >= 11
-  {
+    {
     typedef min_allocator<char> A;
     typedef std::basic_string_view<char, std::char_traits<char> > SV;
     typedef std::basic_string     <char, std::char_traits<char>, A> S;
@@ -151,9 +153,9 @@ bool test() {
     test<S,SV>(SV("1234567890123456789012345678901234567890123456789012345678901234567890"), 50, 1, A());
     test<S,SV>(SV("1234567890123456789012345678901234567890123456789012345678901234567890"), 50, 10, A());
     test<S,SV>(SV("1234567890123456789012345678901234567890123456789012345678901234567890"), 50, 100, A());
-  }
+    }
 #endif
-  {
+    {
     typedef std::string S;
     typedef std::string_view SV;
     S s = "ABCD";
@@ -180,17 +182,7 @@ bool test() {
 
     S s7(s.data(), 2);     // calls ctor(const char *, len)
     assert(s7 == "AB");
-  }
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
-#endif
+    }
 
   return 0;
 }

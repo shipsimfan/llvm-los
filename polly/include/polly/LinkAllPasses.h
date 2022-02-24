@@ -16,7 +16,6 @@
 
 #include "polly/CodeGen/PPCGCodeGeneration.h"
 #include "polly/Config/config.h"
-#include "polly/Support/DumpFunctionPass.h"
 #include "polly/Support/DumpModulePass.h"
 #include "llvm/ADT/StringRef.h"
 #include <cstdlib>
@@ -43,6 +42,7 @@ llvm::Pass *createPolyhedralInfoPass();
 llvm::Pass *createScopDetectionWrapperPassPass();
 llvm::Pass *createScopInfoRegionPassPass();
 llvm::Pass *createScopInfoWrapperPassPass();
+llvm::Pass *createRewriteByrefParamsPass();
 llvm::Pass *createIslAstInfoWrapperPassPass();
 llvm::Pass *createCodeGenerationPass();
 #ifdef GPU_CODEGEN
@@ -98,8 +98,7 @@ struct PollyForcePassLinking {
     polly::createFlattenSchedulePass();
     polly::createForwardOpTreeWrapperPass();
     polly::createDeLICMWrapperPass();
-    polly::createDumpModuleWrapperPass("", true);
-    polly::createDumpFunctionWrapperPass("");
+    polly::createDumpModulePass("", true);
     polly::createSimplifyWrapperPass(0);
     polly::createPruneUnprofitableWrapperPass();
   }
@@ -115,6 +114,7 @@ void initializeJSONExporterPass(llvm::PassRegistry &);
 void initializeJSONImporterPass(llvm::PassRegistry &);
 void initializeIslAstInfoWrapperPassPass(llvm::PassRegistry &);
 void initializeCodeGenerationPass(llvm::PassRegistry &);
+void initializeRewriteByrefParamsPass(llvm::PassRegistry &);
 #ifdef GPU_CODEGEN
 void initializePPCGCodeGenerationPass(llvm::PassRegistry &);
 void initializeManagedMemoryRewritePassPass(llvm::PassRegistry &);

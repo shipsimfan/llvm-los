@@ -19,7 +19,7 @@
 #include <type_traits>
 
 template <class R, class... Args>
-constexpr bool check_invocable() {
+[[nodiscard]] constexpr bool check_invocable() {
   constexpr bool result = std::invocable<R(Args...), Args...>;
   static_assert(std::invocable<R(Args...) noexcept, Args...> == result);
   static_assert(std::invocable<R (*)(Args...), Args...> == result);
@@ -237,10 +237,11 @@ static_assert(!std::invocable<multiple_overloads, multiple_overloads::O>);
 } // namespace function_objects
 
 namespace pointer_to_member_functions {
+// clang-format off
   template<class Member, class T, class... Args>
-  constexpr bool check_member_is_invocable()
+  [[nodiscard]] constexpr bool check_member_is_invocable()
   {
-    constexpr bool result = std::invocable<Member, T&&, Args...>;
+    constexpr bool result = std::invocable<Member, T, Args...>;
     using uncv_t = std::remove_cvref_t<T>;
     static_assert(std::invocable<Member, uncv_t*, Args...> == result);
     static_assert(std::invocable<Member, std::unique_ptr<uncv_t>, Args...> == result);
@@ -253,6 +254,7 @@ namespace pointer_to_member_functions {
     static_assert(!std::invocable<Member, S2*, Args...>);
     return result;
   }
+// clang-format on
 
 static_assert(check_member_is_invocable<int S::*, S>());
 static_assert(std::invocable<int S::*, S&>);
@@ -397,17 +399,30 @@ static_assert(std::invocable<rvalue_cv_unqualified, S const volatile&&>);
 } // namespace pointer_to_member_functions
 
 // std::invocable-specific
-static_assert(std::invocable<std::uniform_int_distribution<>, std::mt19937_64&>);
+static_assert(
+    std::invocable<std::uniform_int_distribution<>, std::mt19937_64&>);
 
-// Check the concept with closure types
+[[nodiscard]] constexpr bool check_lambda(auto, auto...) { return false; }
+
+// clang-format off
 template<class F, class... Args>
-constexpr bool is_invocable(F, Args&&...) {
-  return std::invocable<F, Args...>;
+requires std::invocable<F, Args...>
+[[nodiscard]] constexpr bool check_lambda(F, Args&&...)
+{
+  return true;
+}
+// clang-format on
+
+[[nodiscard]] constexpr bool check_lambdas() {
+  static_assert(check_lambda([] {}));
+  static_assert(check_lambda([](int) {}, 0));
+  static_assert(check_lambda([](int) {}, 0L));
+  static_assert(!check_lambda([](int) {}, nullptr));
+
+  int i = 0;
+  return check_lambda([](int&) {}, i);
 }
 
-static_assert(is_invocable([] {}));
-static_assert(is_invocable([](int) {}, 0));
-static_assert(is_invocable([](int) {}, 0L));
-static_assert(!is_invocable([](int) {}, nullptr));
-int i = 0;
-static_assert(is_invocable([](int&) {}, i));
+static_assert(check_lambdas());
+
+int main(int, char**) { return 0; }

@@ -31,7 +31,6 @@
 #include "OutputSection.h"
 #include "OutputSegment.h"
 #include "Symbols.h"
-#include "SyntheticSections.h"
 #include "Target.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/TimeProfiler.h"
@@ -41,32 +40,37 @@ using namespace llvm::sys;
 using namespace lld;
 using namespace lld::macho;
 
-using Symbols = std::vector<Defined *>;
-// Returns a pair where the left element is a container of all live Symbols and
-// the right element is a container of all dead symbols.
-static std::pair<Symbols, Symbols> getSymbols() {
-  Symbols liveSymbols, deadSymbols;
+using SymbolMapTy = DenseMap<const InputSection *, SmallVector<Defined *, 4>>;
+
+// Returns a map from sections to their symbols.
+static SymbolMapTy getSectionSyms(ArrayRef<Defined *> syms) {
+  SymbolMapTy ret;
+  for (Defined *dr : syms)
+    ret[dr->isec].push_back(dr);
+
+  // Sort symbols by address. We want to print out symbols in the
+  // order in the output file rather than the order they appeared
+  // in the input files.
+  for (auto &it : ret)
+    llvm::stable_sort(it.second, [](Defined *a, Defined *b) {
+      return a->getVA() < b->getVA();
+    });
+  return ret;
+}
+
+// Returns a list of all symbols that we want to print out.
+static std::vector<Defined *> getSymbols() {
+  std::vector<Defined *> v;
   for (InputFile *file : inputFiles)
     if (isa<ObjFile>(file))
-      for (Symbol *sym : file->symbols)
-        if (auto *d = dyn_cast_or_null<Defined>(sym))
-          if (d->isec && d->getFile() == file) {
-            if (d->isLive()) {
-              assert(!shouldOmitFromOutput(d->isec));
-              liveSymbols.push_back(d);
-            } else {
-              deadSymbols.push_back(d);
-            }
-          }
-  parallelSort(liveSymbols.begin(), liveSymbols.end(),
-               [](Defined *a, Defined *b) {
-                 return a->getVA() != b->getVA() ? a->getVA() < b->getVA()
-                                                 : a->getName() < b->getName();
-               });
-  parallelSort(
-      deadSymbols.begin(), deadSymbols.end(),
-      [](Defined *a, Defined *b) { return a->getName() < b->getName(); });
-  return {std::move(liveSymbols), std::move(deadSymbols)};
+      for (Symbol *sym : file->symbols) {
+        if (sym == nullptr)
+          continue;
+        if (auto *d = dyn_cast<Defined>(sym))
+          if (d->isec && d->getFile() == file)
+            v.push_back(d);
+      }
+  return v;
 }
 
 // Construct a map from symbols to their stringified representations.
@@ -77,27 +81,7 @@ getSymbolStrings(ArrayRef<Defined *> syms) {
   std::vector<std::string> str(syms.size());
   parallelForEachN(0, syms.size(), [&](size_t i) {
     raw_string_ostream os(str[i]);
-    Defined *sym = syms[i];
-
-    switch (sym->isec->kind()) {
-    case InputSection::CStringLiteralKind: {
-      // Output "literal string: <string literal>"
-      const auto *isec = cast<CStringInputSection>(sym->isec);
-      const StringPiece &piece = isec->getStringPiece(sym->value);
-      assert(
-          sym->value == piece.inSecOff &&
-          "We expect symbols to always point to the start of a StringPiece.");
-      StringRef str = isec->getStringRef(&piece - &(*isec->pieces.begin()));
-      assert(str.back() == '\000');
-      (os << "literal string: ")
-          // Remove null sequence at the end
-          .write_escaped(str.substr(0, str.size() - 1));
-      break;
-    }
-    case InputSection::ConcatKind:
-    case InputSection::WordLiteralKind:
-      os << toString(*sym);
-    }
+    os << toString(*syms[i]);
   });
 
   DenseMap<Symbol *, std::string> ret;
@@ -139,6 +123,11 @@ void macho::writeMapFile() {
     }
   }
 
+  // Collect symbol info that we want to print out.
+  std::vector<Defined *> syms = getSymbols();
+  SymbolMapTy sectionSyms = getSectionSyms(syms);
+  DenseMap<Symbol *, std::string> symStr = getSymbolStrings(syms);
+
   // Dump table of sections
   os << "# Sections:\n";
   os << "# Address\tSize    \tSegment\tSection\n";
@@ -152,29 +141,14 @@ void macho::writeMapFile() {
     }
 
   // Dump table of symbols
-  Symbols liveSymbols, deadSymbols;
-  std::tie(liveSymbols, deadSymbols) = getSymbols();
-
-  DenseMap<Symbol *, std::string> liveSymbolStrings =
-      getSymbolStrings(liveSymbols);
   os << "# Symbols:\n";
   os << "# Address\t    File  Name\n";
-  for (Symbol *sym : liveSymbols) {
-    assert(sym->isLive());
-    os << format("0x%08llX\t[%3u] %s\n", sym->getVA(),
-                 readerToFileOrdinal[sym->getFile()],
-                 liveSymbolStrings[sym].c_str());
-  }
-
-  if (config->deadStrip) {
-    DenseMap<Symbol *, std::string> deadSymbolStrings =
-        getSymbolStrings(deadSymbols);
-    os << "# Dead Stripped Symbols:\n";
-    os << "# Address\t    File  Name\n";
-    for (Symbol *sym : deadSymbols) {
-      assert(!sym->isLive());
-      os << format("<<dead>>\t[%3u] %s\n", readerToFileOrdinal[sym->getFile()],
-                   deadSymbolStrings[sym].c_str());
+  for (InputSection *isec : inputSections) {
+    for (Symbol *sym : sectionSyms[isec]) {
+      os << format("0x%08llX\t[%3u] %s\n", sym->getVA(),
+                   readerToFileOrdinal[sym->getFile()], symStr[sym].c_str());
     }
   }
+
+  // TODO: when we implement -dead_strip, we should dump dead stripped symbols
 }

@@ -14,13 +14,26 @@
 #define MLIR_TARGET_SPIRV_DESERIALIZER_H
 
 #include "mlir/Dialect/SPIRV/IR/SPIRVEnums.h"
+#include "mlir/Dialect/SPIRV/IR/SPIRVModule.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/ScopedPrinter.h"
 #include <cstdint>
+
+//===----------------------------------------------------------------------===//
+// Utility Functions
+//===----------------------------------------------------------------------===//
+
+/// Decodes a string literal in `words` starting at `wordIndex`. Update the
+/// latter to point to the position in words after the string literal.
+static inline llvm::StringRef
+decodeStringLiteral(llvm::ArrayRef<uint32_t> words, unsigned &wordIndex) {
+  llvm::StringRef str(reinterpret_cast<const char *>(words.data() + wordIndex));
+  wordIndex += str.size() / 4 + 1;
+  return str;
+}
 
 namespace mlir {
 namespace spirv {
@@ -38,7 +51,7 @@ struct BlockMergeInfo {
   Block *mergeBlock;
   Block *continueBlock; // nullptr for spv.mlir.selection
   Location loc;
-  uint32_t control; // Selection/loop control
+  uint32_t control;
 
   BlockMergeInfo(Location location, uint32_t control)
       : mergeBlock(nullptr), continueBlock(nullptr), loc(location),
@@ -52,7 +65,10 @@ struct BlockMergeInfo {
 struct DebugLine {
   uint32_t fileID;
   uint32_t line;
-  uint32_t column;
+  uint32_t col;
+
+  DebugLine(uint32_t fileIDNum, uint32_t lineNum, uint32_t colNum)
+      : fileID(fileIDNum), line(lineNum), col(colNum) {}
 };
 
 /// Map from a selection/loop's header block to its merge (and continue) target.
@@ -126,7 +142,7 @@ public:
   LogicalResult deserialize();
 
   /// Collects the final SPIR-V ModuleOp.
-  OwningOpRef<spirv::ModuleOp> collect();
+  spirv::OwningSPIRVModuleRef collect();
 
 private:
   //===--------------------------------------------------------------------===//
@@ -134,7 +150,7 @@ private:
   //===--------------------------------------------------------------------===//
 
   /// Initializes the `module` ModuleOp in this deserializer instance.
-  OwningOpRef<spirv::ModuleOp> createModuleOp();
+  spirv::OwningSPIRVModuleRef createModuleOp();
 
   /// Processes SPIR-V module header in `binary`.
   LogicalResult processHeader();
@@ -310,7 +326,7 @@ private:
 
   /// Discontinues any source-level location information that might be active
   /// from a previous OpLine instruction.
-  void clearDebugLine();
+  LogicalResult clearDebugLine();
 
   /// Creates a FileLineColLoc with the OpLine location information.
   Location createFileLineColLoc(OpBuilder opBuilder);
@@ -348,8 +364,9 @@ private:
   //    guarantees that we enter and exit in structured ways and the construct
   //    is nestable.
   // 3. Put the new spv.mlir.selection/spv.mlir.loop op at the beginning of the
-  //    old merge block and redirect all branches to the old header block to the
-  //    old merge block (which contains the spv.mlir.selection/spv.mlir.loop op
+  // old merge
+  //    block and redirect all branches to the old header block to the old
+  //    merge block (which contains the spv.mlir.selection/spv.mlir.loop op
   //    now).
 
   /// For OpPhi instructions, we use block arguments to represent them. OpPhi
@@ -490,7 +507,7 @@ private:
   Location unknownLoc;
 
   /// The SPIR-V ModuleOp.
-  OwningOpRef<spirv::ModuleOp> module;
+  spirv::OwningSPIRVModuleRef module;
 
   /// The current function under construction.
   Optional<spirv::FuncOp> curFunction;
@@ -500,7 +517,7 @@ private:
 
   OpBuilder opBuilder;
 
-  spirv::Version version = spirv::Version::V_1_0;
+  spirv::Version version;
 
   /// The list of capabilities used by the module.
   llvm::SmallSetVector<spirv::Capability, 4> capabilities;
@@ -544,10 +561,8 @@ private:
   // Header block to its merge (and continue) target mapping.
   BlockMergeInfoMap blockMergeInfo;
 
-  // For each pair of {predecessor, target} blocks, maps the pair of blocks to
-  // the list of phi arguments passed from predecessor to target.
-  DenseMap<std::pair<Block * /*predecessor*/, Block * /*target*/>, BlockPhiInfo>
-      blockPhiInfo;
+  // Block to its phi (block argument) mapping.
+  DenseMap<Block *, BlockPhiInfo> blockPhiInfo;
 
   // Result <id> to value mapping.
   DenseMap<uint32_t, Value> valueMap;
@@ -597,11 +612,6 @@ private:
 
   /// A list of all structs which have unresolved member types.
   SmallVector<DeferredStructTypeInfo, 0> deferredStructTypesInfos;
-
-#ifndef NDEBUG
-  /// A logger used to emit information during the deserialzation process.
-  llvm::ScopedPrinter logger;
-#endif
 };
 
 } // namespace spirv

@@ -162,7 +162,7 @@ class ScopPass : public RegionPass {
   Scop *S;
 
 protected:
-  explicit ScopPass(char &ID) : RegionPass(ID), S(nullptr) {}
+  explicit ScopPass(char &ID) : RegionPass(ID), S(0) {}
 
   /// runOnScop - This method must be overloaded to perform the
   /// desired Polyhedral transformation or analysis.
@@ -255,7 +255,7 @@ public:
 
     while (!Worklist.empty()) {
       Region *R = Worklist.pop_back_val();
-      if (!SD.isMaxRegionInScop(*R, /*Verify=*/false))
+      if (!SD.isMaxRegionInScop(*R, /*Verifying=*/false))
         continue;
       Scop *scop = SI.getScop(R);
       if (!scop)

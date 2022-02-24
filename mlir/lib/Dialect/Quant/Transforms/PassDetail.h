@@ -16,6 +16,6 @@ namespace mlir {
 #define GEN_PASS_CLASSES
 #include "mlir/Dialect/Quant/Passes.h.inc"
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // DIALECT_QUANT_TRANSFORMS_PASSDETAIL_H_

@@ -68,17 +68,18 @@ TEST(Dialect, DelayedInterfaceRegistration) {
   MLIRContext context(registry);
 
   // Load the TestDialect and check that the interface got registered for it.
-  Dialect *testDialect = context.getOrLoadDialect<TestDialect>();
+  auto *testDialect = context.getOrLoadDialect<TestDialect>();
   ASSERT_TRUE(testDialect != nullptr);
-  auto *testDialectInterface = dyn_cast<TestDialectInterfaceBase>(testDialect);
+  auto *testDialectInterface =
+      testDialect->getRegisteredInterface<TestDialectInterfaceBase>();
   EXPECT_TRUE(testDialectInterface != nullptr);
 
   // Load the SecondTestDialect and check that the interface is not registered
   // for it.
-  Dialect *secondTestDialect = context.getOrLoadDialect<SecondTestDialect>();
+  auto *secondTestDialect = context.getOrLoadDialect<SecondTestDialect>();
   ASSERT_TRUE(secondTestDialect != nullptr);
   auto *secondTestDialectInterface =
-      dyn_cast<SecondTestDialectInterface>(secondTestDialect);
+      secondTestDialect->getRegisteredInterface<SecondTestDialectInterface>();
   EXPECT_TRUE(secondTestDialectInterface == nullptr);
 
   // Use the same mechanism as for delayed registration but for an already
@@ -89,7 +90,7 @@ TEST(Dialect, DelayedInterfaceRegistration) {
       .addDialectInterface<SecondTestDialect, SecondTestDialectInterface>();
   context.appendDialectRegistry(secondRegistry);
   secondTestDialectInterface =
-      dyn_cast<SecondTestDialectInterface>(secondTestDialect);
+      secondTestDialect->getRegisteredInterface<SecondTestDialectInterface>();
   EXPECT_TRUE(secondTestDialectInterface != nullptr);
 }
 
@@ -101,9 +102,10 @@ TEST(Dialect, RepeatedDelayedRegistration) {
   MLIRContext context(registry);
 
   // Load the TestDialect and check that the interface got registered for it.
-  Dialect *testDialect = context.getOrLoadDialect<TestDialect>();
+  auto *testDialect = context.getOrLoadDialect<TestDialect>();
   ASSERT_TRUE(testDialect != nullptr);
-  auto *testDialectInterface = dyn_cast<TestDialectInterfaceBase>(testDialect);
+  auto *testDialectInterface =
+      testDialect->getRegisteredInterface<TestDialectInterfaceBase>();
   EXPECT_TRUE(testDialectInterface != nullptr);
 
   // Try adding the same dialect interface again and check that we don't crash
@@ -112,7 +114,8 @@ TEST(Dialect, RepeatedDelayedRegistration) {
   secondRegistry.insert<TestDialect>();
   secondRegistry.addDialectInterface<TestDialect, TestDialectInterface>();
   context.appendDialectRegistry(secondRegistry);
-  testDialectInterface = dyn_cast<TestDialectInterfaceBase>(testDialect);
+  testDialectInterface =
+      testDialect->getRegisteredInterface<TestDialectInterfaceBase>();
   EXPECT_TRUE(testDialectInterface != nullptr);
 }
 
@@ -139,4 +142,4 @@ TEST(Dialect, RepeatedInterfaceRegistrationDeath) {
 #endif
 }
 
-} // namespace
+} // end namespace

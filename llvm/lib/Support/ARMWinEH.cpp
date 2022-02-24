@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/ARMWinEH.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
 namespace ARM {

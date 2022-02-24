@@ -91,7 +91,7 @@
 
 // CHECK: @__const.unit15.a = private unnamed_addr constant %struct.U15A { [3 x i32] [i32 1, i32 2, i32 3] }, align 4
 // CHECK-NEXT: [[STRUCT_STR_U15:@[0-9]+]] = private unnamed_addr constant [15 x i8] c"struct U15A {\0A\00"
-// CHECK-NEXT: [[FIELD_U15:@[0-9]+]] = private unnamed_addr constant [12 x i8] c"int[3] a : \00"
+// CHECK-NEXT: [[FIELD_U15:@[0-9]+]] = private unnamed_addr constant [13 x i8] c"int [3] a : \00"
 // CHECK-NEXT: [[FORMAT_U15:@[0-9]+]] = private unnamed_addr constant [4 x i8] c"%p\0A\00"
 // CHECK-NEXT: [[END_STRUCT_U15:@[0-9]+]] = private unnamed_addr constant [3 x i8] c"}\0A\00"
 
@@ -117,7 +117,7 @@ int printf(const char *fmt, ...) {
     return 0;
 }
 
-void unit1(void) {
+void unit1() {
   struct U1A {
     short a;
   };
@@ -134,7 +134,7 @@ void unit1(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit2(void) {
+void unit2() {
   struct U2A {
     unsigned short a;
   };
@@ -152,7 +152,7 @@ void unit2(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit3(void) {
+void unit3() {
   struct U3A {
     int a;
   };
@@ -170,7 +170,7 @@ void unit3(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit4(void) {
+void unit4() {
   struct U4A {
     unsigned int a;
   };
@@ -188,7 +188,7 @@ void unit4(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit5(void) {
+void unit5() {
   struct U5A {
     long a;
   };
@@ -206,7 +206,7 @@ void unit5(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit6(void) {
+void unit6() {
   struct U6A {
     unsigned long a;
   };
@@ -224,7 +224,7 @@ void unit6(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit7(void) {
+void unit7() {
   struct U7A {
     long long a;
   };
@@ -242,7 +242,7 @@ void unit7(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit8(void) {
+void unit8() {
   struct U8A {
     unsigned long long a;
   };
@@ -260,7 +260,7 @@ void unit8(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit9(void) {
+void unit9() {
   struct U9A {
     char a;
   };
@@ -278,7 +278,7 @@ void unit9(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit10(void) {
+void unit10() {
   struct U10A {
     char *a;
   };
@@ -296,7 +296,7 @@ void unit10(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit11(void) {
+void unit11() {
   struct U11A {
     void *a;
   };
@@ -314,7 +314,7 @@ void unit11(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit12(void) {
+void unit12() {
   struct U12A {
     const char *a;
   };
@@ -332,7 +332,7 @@ void unit12(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit13(void) {
+void unit13() {
   typedef char *charstar;
   struct U13A {
     const charstar a;
@@ -351,7 +351,7 @@ void unit13(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit14(void) {
+void unit14() {
   struct U14A {
     double a;
   };
@@ -369,7 +369,7 @@ void unit14(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit15(void) {
+void unit15() {
   struct U15A {
     int a[3];
   };
@@ -380,14 +380,14 @@ void unit15(void) {
 
   // CHECK: call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([15 x i8], [15 x i8]* [[STRUCT_STR_U15]], i32 0, i32 0))
   // CHECK: [[RES1:%[0-9]+]] = getelementptr inbounds %struct.U15A, %struct.U15A* %a, i32 0, i32 0
-  // CHECK: call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([12 x i8], [12 x i8]* [[FIELD_U15]], i32 0, i32 0))
+  // CHECK: call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([13 x i8], [13 x i8]* [[FIELD_U15]], i32 0, i32 0))
   // CHECK: [[LOAD1:%[0-9]+]] = load [3 x i32], [3 x i32]* [[RES1]],
   // CHECK: call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* [[FORMAT_U15]], i32 0, i32 0), [3 x i32] [[LOAD1]])
   // CHECK: call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([3 x i8], [3 x i8]* [[END_STRUCT_U15]], i32 0, i32 0)
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit16(void) {
+void unit16() {
   struct U16A {
     uint8_t a;
   };
@@ -405,7 +405,7 @@ void unit16(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit17(void) {
+void unit17() {
   struct U17A {
     int8_t a;
   };
@@ -423,7 +423,7 @@ void unit17(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void unit18(void) {
+void unit18() {
   struct U18A {
     long double a;
   };
@@ -441,7 +441,7 @@ void unit18(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void test1(void) {
+void test1() {
   struct T1A {
     int a;
     char *b;
@@ -465,7 +465,7 @@ void test1(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void test2(void) {
+void test2() {
   struct T2A {
     int a;
   };
@@ -497,7 +497,7 @@ void test2(void) {
   __builtin_dump_struct(&b, &printf);
 }
 
-void test3(void) {
+void test3() {
   struct T3A {
     union {
       int a;
@@ -522,7 +522,7 @@ void test3(void) {
   __builtin_dump_struct(&a, &printf);
 }
 
-void test4(void) {
+void test4() {
   struct T4A {
     union {
       struct {

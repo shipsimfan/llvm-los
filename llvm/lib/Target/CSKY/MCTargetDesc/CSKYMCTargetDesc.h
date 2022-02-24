@@ -35,6 +35,7 @@ MCAsmBackend *createCSKYAsmBackend(const Target &T, const MCSubtargetInfo &STI,
                                    const MCTargetOptions &Options);
 
 MCCodeEmitter *createCSKYMCCodeEmitter(const MCInstrInfo &MCII,
+                                       const MCRegisterInfo &MRI,
                                        MCContext &Ctx);
 } // namespace llvm
 
@@ -43,8 +44,5 @@ MCCodeEmitter *createCSKYMCCodeEmitter(const MCInstrInfo &MCII,
 
 #define GET_INSTRINFO_ENUM
 #include "CSKYGenInstrInfo.inc"
-
-#define GET_SUBTARGETINFO_ENUM
-#include "CSKYGenSubtargetInfo.inc"
 
 #endif // LLVM_LIB_TARGET_CSKY_MCTARGETDESC_CSKYMCTARGETDESC_H

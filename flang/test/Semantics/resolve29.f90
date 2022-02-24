@@ -1,5 +1,5 @@
-! RUN: %python %S/test_errors.py %s %flang_fc1
-module m1
+! RUN: %S/test_errors.sh %s %t %flang_fc1
+module m
   type t1
   end type
   type t3
@@ -42,15 +42,3 @@ contains
     call s5()
   end
 end module
-module m2
-  integer, parameter :: ck = kind('a')
-end module
-program main
-  use m2
-  interface
-    subroutine s0(x)
-      import :: ck
-      character(kind=ck) :: x ! no error
-    end subroutine
-  end interface
-end program

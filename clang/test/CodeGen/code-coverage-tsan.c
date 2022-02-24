@@ -9,4 +9,4 @@
 // CHECK-NEXT:    atomicrmw sub i32*
 
 _Atomic(int) cnt;
-void foo(void) { cnt--; }
+void foo() { cnt--; }

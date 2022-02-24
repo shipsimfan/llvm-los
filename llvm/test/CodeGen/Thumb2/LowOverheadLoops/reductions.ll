@@ -30,6 +30,7 @@ entry:
 vector.ph:                                        ; preds = %entry
   %n.rnd.up = add i32 %N, 15
   %n.vec = and i32 %n.rnd.up, -16
+  %trip.count.minus.1 = add i32 %N, -1
   br label %vector.body
 
 vector.body:                                      ; preds = %vector.body, %vector.ph
@@ -78,11 +79,12 @@ define dso_local arm_aapcs_vfpcc signext i16 @one_loop_add_add_v8i16(i8* nocaptu
 ; CHECK-NEXT:    @ =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    vctp.16 r2
 ; CHECK-NEXT:    vmov q0, q1
-; CHECK-NEXT:    vpstt
+; CHECK-NEXT:    vpst
 ; CHECK-NEXT:    vldrbt.u16 q1, [r0], #8
-; CHECK-NEXT:    vldrbt.u16 q2, [r1], #8
 ; CHECK-NEXT:    subs r2, #8
 ; CHECK-NEXT:    vadd.i16 q1, q0, q1
+; CHECK-NEXT:    vpst
+; CHECK-NEXT:    vldrbt.u16 q2, [r1], #8
 ; CHECK-NEXT:    vadd.i16 q1, q1, q2
 ; CHECK-NEXT:    le lr, .LBB1_2
 ; CHECK-NEXT:  @ %bb.3: @ %middle.block
@@ -98,6 +100,7 @@ entry:
 vector.ph:                                        ; preds = %entry
   %n.rnd.up = add i32 %N, 7
   %n.vec = and i32 %n.rnd.up, -8
+  %trip.count.minus.1 = add i32 %N, -1
   br label %vector.body
 
 vector.body:                                      ; preds = %vector.body, %vector.ph
@@ -169,6 +172,7 @@ entry:
 vector.ph:                                        ; preds = %entry
   %n.rnd.up = add i32 %N, 15
   %n.vec = and i32 %n.rnd.up, -16
+  %trip.count.minus.1 = add i32 %N, -1
   br label %vector.body
 
 vector.body:                                      ; preds = %vector.body, %vector.ph
@@ -238,6 +242,7 @@ entry:
 vector.ph:                                        ; preds = %entry
   %n.rnd.up = add i32 %N, 7
   %n.vec = and i32 %n.rnd.up, -8
+  %trip.count.minus.1 = add i32 %N, -1
   br label %vector.body
 
 vector.body:                                      ; preds = %vector.body, %vector.ph
@@ -309,6 +314,7 @@ entry:
 vector.ph:                                        ; preds = %entry
   %n.rnd.up = add i32 %N, 15
   %n.vec = and i32 %n.rnd.up, -16
+  %trip.count.minus.1 = add i32 %N, -1
   br label %vector.body
 
 vector.body:                                      ; preds = %vector.body, %vector.ph
@@ -378,6 +384,7 @@ entry:
 vector.ph:                                        ; preds = %entry
   %n.rnd.up = add i32 %N, 7
   %n.vec = and i32 %n.rnd.up, -8
+  %trip.count.minus.1 = add i32 %N, -1
   br label %vector.body
 
 vector.body:                                      ; preds = %vector.body, %vector.ph
@@ -474,6 +481,7 @@ entry:
 vector.ph:                                        ; preds = %entry
   %n.rnd.up = add i32 %N, 3
   %n.vec = and i32 %n.rnd.up, -4
+  %trip.count.minus.1 = add i32 %N, -1
   br label %vector.body
 
 vector.body:                                      ; preds = %vector.body, %vector.ph
@@ -502,6 +510,7 @@ middle.block:                                     ; preds = %vector.body
 vector.ph47:                                      ; preds = %middle.block
   %n.rnd.up48 = add i32 %N, 3
   %n.vec50 = and i32 %n.rnd.up48, -4
+  %trip.count.minus.154 = add i32 %N, -1
   %i11 = insertelement <4 x i32> <i32 undef, i32 0, i32 0, i32 0>, i32 %i10, i32 0
   br label %vector.body46
 
@@ -558,9 +567,9 @@ define dso_local arm_aapcs_vfpcc void @two_reductions_mul_add_v8i16(i8* nocaptur
 ; CHECK-NEXT:    vldrbt.u16 q1, [r3], #8
 ; CHECK-NEXT:    vldrbt.u16 q4, [r4], #8
 ; CHECK-NEXT:    vmov q2, q3
-; CHECK-NEXT:    subs r2, #8
 ; CHECK-NEXT:    vsub.i16 q3, q4, q1
 ; CHECK-NEXT:    vmul.i16 q1, q4, q1
+; CHECK-NEXT:    subs r2, #8
 ; CHECK-NEXT:    vadd.i16 q3, q3, q2
 ; CHECK-NEXT:    vadd.i16 q1, q1, q0
 ; CHECK-NEXT:    le lr, .LBB7_2
@@ -585,6 +594,7 @@ entry:
 vector.ph:                                        ; preds = %entry
   %n.rnd.up = add i32 %N, 7
   %n.vec = and i32 %n.rnd.up, -8
+  %trip.count.minus.1 = add i32 %N, -1
   br label %vector.body
 
 vector.body:                                      ; preds = %vector.body, %vector.ph
@@ -709,6 +719,7 @@ lor.end:                                          ; preds = %entry, %lor.rhs
 vector.ph:                                        ; preds = %lor.end
   %n.rnd.up = add i32 %4, 3
   %n.vec = and i32 %n.rnd.up, -4
+  %trip.count.minus.1 = add i32 %4, -1
   %5 = insertelement <4 x i32> <i32 undef, i32 0, i32 0, i32 0>, i32 %0, i32 0
   br label %vector.body
 

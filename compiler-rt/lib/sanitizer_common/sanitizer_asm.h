@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Various support for assembler.
+// Various support for assemebler.
 //
 //===----------------------------------------------------------------------===//
 
@@ -61,15 +61,8 @@
 #if defined(__ELF__) && (defined(__GNU__) || defined(__FreeBSD__) || \
                          defined(__Fuchsia__) || defined(__linux__))
 // clang-format off
-#define NO_EXEC_STACK_DIRECTIVE .section .note.GNU-stack,"",%progbits
+#define NO_EXEC_STACK_DIRECTIVE .section .note.GNU-stack,"",%progbits  // NOLINT
 // clang-format on
 #else
 #define NO_EXEC_STACK_DIRECTIVE
-#endif
-
-#if (defined(__x86_64__) || defined(__i386__)) && defined(__has_include) && __has_include(<cet.h>)
-#include <cet.h>
-#endif
-#ifndef _CET_ENDBR
-#define _CET_ENDBR
 #endif

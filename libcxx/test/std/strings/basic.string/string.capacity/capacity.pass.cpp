@@ -18,13 +18,11 @@
 
 #include "test_macros.h"
 
-test_allocator_statistics alloc_stats;
-
 template <class S>
-TEST_CONSTEXPR_CXX20 void
+void
 test(S s)
 {
-    alloc_stats.throw_after = 0;
+    S::allocator_type::throw_after = 0;
 #ifndef TEST_HAS_NO_EXCEPTIONS
     try
 #endif
@@ -39,13 +37,14 @@ test(S s)
         assert(false);
     }
 #endif
-    alloc_stats.throw_after = INT_MAX;
+    S::allocator_type::throw_after = INT_MAX;
 }
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     typedef std::basic_string<char, std::char_traits<char>, test_allocator<char> > S;
-    S s((test_allocator<char>(&alloc_stats)));
+    S s;
     test(s);
     s.assign(10, 'a');
     s.erase(5);
@@ -53,23 +52,13 @@ bool test() {
     s.assign(100, 'a');
     s.erase(50);
     test(s);
-  }
+    }
 #if TEST_STD_VER >= 11
-  {
+    {
     typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
     S s;
     assert(s.capacity() > 0);
-  }
-#endif
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
+    }
 #endif
 
   return 0;

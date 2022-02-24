@@ -27,15 +27,15 @@ namespace {
 
 struct CheckDebugMachineModule : public ModulePass {
   bool runOnModule(Module &M) override {
+    MachineModuleInfo &MMI =
+        getAnalysis<MachineModuleInfoWrapperPass>().getMMI();
+
     NamedMDNode *NMD = M.getNamedMetadata("llvm.mir.debugify");
     if (!NMD) {
       errs() << "WARNING: Please run mir-debugify to generate "
                 "llvm.mir.debugify metadata first.\n";
       return false;
     }
-
-    MachineModuleInfo &MMI =
-        getAnalysis<MachineModuleInfoWrapperPass>().getMMI();
 
     auto getDebugifyOperand = [&](unsigned Idx) -> unsigned {
       return mdconst::extract<ConstantInt>(NMD->getOperand(Idx)->getOperand(0))
@@ -106,7 +106,8 @@ struct CheckDebugMachineModule : public ModulePass {
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<MachineModuleInfoWrapperPass>();
-    AU.setPreservesAll();
+    AU.addPreserved<MachineModuleInfoWrapperPass>();
+    AU.setPreservesCFG();
   }
 
   static char ID; // Pass identification.

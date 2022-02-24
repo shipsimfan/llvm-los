@@ -37,7 +37,7 @@ MyClass * myObject;
 
 static int getMe;
 
-static int test(void) {
+static int test() {
   return 0;
 }
 

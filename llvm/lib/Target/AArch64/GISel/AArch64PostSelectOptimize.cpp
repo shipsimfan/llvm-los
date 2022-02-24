@@ -180,7 +180,7 @@ bool AArch64PostSelectOptimize::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
   for (auto &BB : MF)
     Changed |= optimizeNZCVDefs(BB);
-  return Changed;
+  return true;
 }
 
 char AArch64PostSelectOptimize::ID = 0;

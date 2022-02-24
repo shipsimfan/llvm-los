@@ -138,8 +138,8 @@ bool FalkorMarkStridedAccesses::run() {
   bool MadeChange = false;
 
   for (Loop *L : LI)
-    for (Loop *LIt : depth_first(L))
-      MadeChange |= runOnLoop(*LIt);
+    for (auto LIt = df_begin(L), LE = df_end(L); LIt != LE; ++LIt)
+      MadeChange |= runOnLoop(**LIt);
 
   return MadeChange;
 }
@@ -828,10 +828,10 @@ bool FalkorHWPFFix::runOnMachineFunction(MachineFunction &Fn) {
   Modified = false;
 
   for (MachineLoop *I : LI)
-    for (MachineLoop *L : depth_first(I))
+    for (auto L = df_begin(I), LE = df_end(I); L != LE; ++L)
       // Only process inner-loops
       if (L->isInnermost())
-        runOnLoop(*L, Fn);
+        runOnLoop(**L, Fn);
 
   return Modified;
 }

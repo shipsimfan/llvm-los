@@ -4,9 +4,8 @@
 // CHECK-SAME: cores
 // REQUIRES: affinity
 
-#include "omp_testsuite.h"
-
 int main() {
-  go_parallel();
-  return get_exit_value();
+  #pragma omp parallel
+  {}
+  return 0;
 }

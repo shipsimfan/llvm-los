@@ -20,6 +20,7 @@ class OperationPass;
 class MLIRContext;
 class TypeConverter;
 class RewritePatternSet;
+using OwningRewritePatternList = RewritePatternSet;
 
 /// Create a pass to convert Async operations to the LLVM dialect.
 std::unique_ptr<OperationPass<ModuleOp>> createConvertAsyncToLLVMPass();

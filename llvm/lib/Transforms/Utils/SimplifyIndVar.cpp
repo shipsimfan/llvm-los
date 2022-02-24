@@ -58,7 +58,7 @@ namespace {
     SCEVExpander     &Rewriter;
     SmallVectorImpl<WeakTrackingVH> &DeadInsts;
 
-    bool Changed = false;
+    bool Changed;
 
   public:
     SimplifyIndvar(Loop *Loop, ScalarEvolution *SE, DominatorTree *DT,
@@ -66,7 +66,7 @@ namespace {
                    SCEVExpander &Rewriter,
                    SmallVectorImpl<WeakTrackingVH> &Dead)
         : L(Loop), LI(LI), SE(SE), DT(DT), TTI(TTI), Rewriter(Rewriter),
-          DeadInsts(Dead) {
+          DeadInsts(Dead), Changed(false) {
       assert(LI && "IV simplification requires LoopInfo");
     }
 
@@ -422,10 +422,46 @@ void SimplifyIndvar::simplifyIVRemainder(BinaryOperator *Rem, Value *IVOperand,
   replaceSRemWithURem(Rem);
 }
 
+static bool willNotOverflow(ScalarEvolution *SE, Instruction::BinaryOps BinOp,
+                            bool Signed, const SCEV *LHS, const SCEV *RHS) {
+  const SCEV *(ScalarEvolution::*Operation)(const SCEV *, const SCEV *,
+                                            SCEV::NoWrapFlags, unsigned);
+  switch (BinOp) {
+  default:
+    llvm_unreachable("Unsupported binary op");
+  case Instruction::Add:
+    Operation = &ScalarEvolution::getAddExpr;
+    break;
+  case Instruction::Sub:
+    Operation = &ScalarEvolution::getMinusSCEV;
+    break;
+  case Instruction::Mul:
+    Operation = &ScalarEvolution::getMulExpr;
+    break;
+  }
+
+  const SCEV *(ScalarEvolution::*Extension)(const SCEV *, Type *, unsigned) =
+      Signed ? &ScalarEvolution::getSignExtendExpr
+             : &ScalarEvolution::getZeroExtendExpr;
+
+  // Check ext(LHS op RHS) == ext(LHS) op ext(RHS)
+  auto *NarrowTy = cast<IntegerType>(LHS->getType());
+  auto *WideTy =
+    IntegerType::get(NarrowTy->getContext(), NarrowTy->getBitWidth() * 2);
+
+  const SCEV *A =
+      (SE->*Extension)((SE->*Operation)(LHS, RHS, SCEV::FlagAnyWrap, 0),
+                       WideTy, 0);
+  const SCEV *B =
+      (SE->*Operation)((SE->*Extension)(LHS, WideTy, 0),
+                       (SE->*Extension)(RHS, WideTy, 0), SCEV::FlagAnyWrap, 0);
+  return A == B;
+}
+
 bool SimplifyIndvar::eliminateOverflowIntrinsic(WithOverflowInst *WO) {
   const SCEV *LHS = SE->getSCEV(WO->getLHS());
   const SCEV *RHS = SE->getSCEV(WO->getRHS());
-  if (!SE->willNotOverflow(WO->getBinaryOp(), WO->isSigned(), LHS, RHS))
+  if (!willNotOverflow(SE, WO->getBinaryOp(), WO->isSigned(), LHS, RHS))
     return false;
 
   // Proved no overflow, nuke the overflow check and, if possible, the overflow
@@ -466,7 +502,7 @@ bool SimplifyIndvar::eliminateOverflowIntrinsic(WithOverflowInst *WO) {
 bool SimplifyIndvar::eliminateSaturatingIntrinsic(SaturatingInst *SI) {
   const SCEV *LHS = SE->getSCEV(SI->getLHS());
   const SCEV *RHS = SE->getSCEV(SI->getRHS());
-  if (!SE->willNotOverflow(SI->getBinaryOp(), SI->isSigned(), LHS, RHS))
+  if (!willNotOverflow(SE, SI->getBinaryOp(), SI->isSigned(), LHS, RHS))
     return false;
 
   BinaryOperator *BO = BinaryOperator::Create(
@@ -720,25 +756,34 @@ bool SimplifyIndvar::eliminateIdentitySCEV(Instruction *UseInst,
 /// unsigned-overflow.  Returns true if anything changed, false otherwise.
 bool SimplifyIndvar::strengthenOverflowingOperation(BinaryOperator *BO,
                                                     Value *IVOperand) {
-  SCEV::NoWrapFlags Flags;
-  bool Deduced;
-  std::tie(Flags, Deduced) = SE->getStrengthenedNoWrapFlagsFromBinOp(
-      cast<OverflowingBinaryOperator>(BO));
+  // Fastpath: we don't have any work to do if `BO` is `nuw` and `nsw`.
+  if (BO->hasNoUnsignedWrap() && BO->hasNoSignedWrap())
+    return false;
 
-  if (!Deduced)
-    return Deduced;
+  if (BO->getOpcode() != Instruction::Add &&
+      BO->getOpcode() != Instruction::Sub &&
+      BO->getOpcode() != Instruction::Mul)
+    return false;
 
-  BO->setHasNoUnsignedWrap(ScalarEvolution::maskFlags(Flags, SCEV::FlagNUW) ==
-                           SCEV::FlagNUW);
-  BO->setHasNoSignedWrap(ScalarEvolution::maskFlags(Flags, SCEV::FlagNSW) ==
-                         SCEV::FlagNSW);
+  const SCEV *LHS = SE->getSCEV(BO->getOperand(0));
+  const SCEV *RHS = SE->getSCEV(BO->getOperand(1));
+  bool Changed = false;
 
-  // The getStrengthenedNoWrapFlagsFromBinOp() check inferred additional nowrap
-  // flags on addrecs while performing zero/sign extensions. We could call
-  // forgetValue() here to make sure those flags also propagate to any other
-  // SCEV expressions based on the addrec. However, this can have pathological
-  // compile-time impact, see https://bugs.llvm.org/show_bug.cgi?id=50384.
-  return Deduced;
+  if (!BO->hasNoUnsignedWrap() &&
+      willNotOverflow(SE, BO->getOpcode(), /* Signed */ false, LHS, RHS)) {
+    BO->setHasNoUnsignedWrap();
+    SE->forgetValue(BO);
+    Changed = true;
+  }
+
+  if (!BO->hasNoSignedWrap() &&
+      willNotOverflow(SE, BO->getOpcode(), /* Signed */ true, LHS, RHS)) {
+    BO->setHasNoSignedWrap();
+    SE->forgetValue(BO);
+    Changed = true;
+  }
+
+  return Changed;
 }
 
 /// Annotate the Shr in (X << IVOperand) >> C as exact using the
@@ -942,7 +987,6 @@ bool simplifyLoopIVs(Loop *L, ScalarEvolution *SE, DominatorTree *DT,
 
 } // namespace llvm
 
-namespace {
 //===----------------------------------------------------------------------===//
 // Widen Induction Variables - Extend the width of an IV to cover its
 // widest uses.
@@ -1073,7 +1117,7 @@ protected:
 private:
   SmallVector<NarrowIVDefUse, 8> NarrowIVUsers;
 };
-} // namespace
+
 
 /// Determine the insertion point for this user. By default, insert immediately
 /// before the user. SCEVExpander or LICM will hoist loop invariants out of the
@@ -1360,7 +1404,7 @@ WidenIV::getExtendedOperandRecurrence(WidenIV::NarrowIVDefUse DU) {
 /// so, return the extended recurrence and the kind of extension used. Otherwise
 /// return {nullptr, Unknown}.
 WidenIV::WidenedRecTy WidenIV::getWideRecurrence(WidenIV::NarrowIVDefUse DU) {
-  if (!DU.NarrowUse->getType()->isIntegerTy())
+  if (!SE->isSCEVable(DU.NarrowUse->getType()))
     return {nullptr, Unknown};
 
   const SCEV *NarrowExpr = SE->getSCEV(DU.NarrowUse);

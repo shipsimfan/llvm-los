@@ -8,17 +8,13 @@
 
 #include "llvm/DebugInfo/PDB/Native/NativeEnumTypes.h"
 
-#include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/DebugInfo/CodeView/CVRecord.h"
-#include "llvm/DebugInfo/CodeView/LazyRandomTypeCollection.h"
+#include "llvm/DebugInfo/CodeView/TypeDeserializer.h"
 #include "llvm/DebugInfo/CodeView/TypeRecordHelpers.h"
 #include "llvm/DebugInfo/PDB/IPDBEnumChildren.h"
 #include "llvm/DebugInfo/PDB/Native/NativeSession.h"
-#include "llvm/DebugInfo/PDB/Native/SymbolCache.h"
+#include "llvm/DebugInfo/PDB/Native/NativeTypeEnum.h"
 #include "llvm/DebugInfo/PDB/PDBSymbol.h"
-#include "llvm/DebugInfo/PDB/PDBTypes.h"
-#include "llvm/Support/ErrorHandling.h"
+#include "llvm/DebugInfo/PDB/PDBSymbolTypeEnum.h"
 
 using namespace llvm;
 using namespace llvm::codeview;
@@ -27,7 +23,7 @@ using namespace llvm::pdb;
 NativeEnumTypes::NativeEnumTypes(NativeSession &PDBSession,
                                  LazyRandomTypeCollection &Types,
                                  std::vector<codeview::TypeLeafKind> Kinds)
-    : Index(0), Session(PDBSession) {
+    : Matches(), Index(0), Session(PDBSession) {
   Optional<TypeIndex> TI = Types.getFirst();
   while (TI) {
     CVType CVT = Types.getType(*TI);

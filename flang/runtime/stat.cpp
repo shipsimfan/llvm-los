@@ -1,4 +1,4 @@
-//===-- runtime/stat.cpp --------------------------------------------------===//
+//===-- runtime/stat.cpp ----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "stat.h"
+#include "descriptor.h"
 #include "terminator.h"
-#include "flang/Runtime/descriptor.h"
 
 namespace Fortran::runtime {
 const char *StatErrorString(int stat) {
@@ -49,16 +49,6 @@ const char *StatErrorString(int stat) {
     return "Unlocked";
   case StatUnlockedFailedImage:
     return "Failed image unlocked";
-
-  case StatInvalidArgumentNumber:
-    return "Invalid argument number";
-  case StatMissingArgument:
-    return "Missing argument";
-  case StatValueTooShort:
-    return "Value too short";
-
-  case StatMissingEnvVariable:
-    return "Missing environment variable";
 
   default:
     return nullptr;

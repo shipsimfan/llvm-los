@@ -207,13 +207,13 @@ bool ByteCodeExprGen<Emitter>::VisitBinaryOperator(const BinaryOperator *BO) {
 
 template <class Emitter>
 bool ByteCodeExprGen<Emitter>::discard(const Expr *E) {
-  OptionScope<Emitter> Scope(this, /*NewDiscardResult=*/true);
+  OptionScope<Emitter> Scope(this, /*discardResult=*/true);
   return this->Visit(E);
 }
 
 template <class Emitter>
 bool ByteCodeExprGen<Emitter>::visit(const Expr *E) {
-  OptionScope<Emitter> Scope(this, /*NewDiscardResult=*/false);
+  OptionScope<Emitter> Scope(this, /*discardResult=*/false);
   return this->Visit(E);
 }
 

@@ -181,7 +181,7 @@ struct S {
   };
 };
 
-void test2(void) {
+void test2() {
   struct S *btkr;
   
   *btkr = (struct S) {

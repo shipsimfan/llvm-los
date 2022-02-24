@@ -41,6 +41,6 @@ adium_media_ready_cb(RDR10087620 *InObj)
 
 
 // PR16690
-_Bool testLocAsIntegerToBool(void) {
+_Bool testLocAsIntegerToBool() {
   return (long long)&testLocAsIntegerToBool;
 }

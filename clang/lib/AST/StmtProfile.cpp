@@ -38,10 +38,6 @@ namespace {
 
     void VisitStmt(const Stmt *S);
 
-    void VisitStmtNoChildren(const Stmt *S) {
-      HandleStmtClass(S->getStmtClass());
-    }
-
     virtual void HandleStmtClass(Stmt::StmtClass SC) = 0;
 
 #define STMT(Node, Base) void Visit##Node(const Node *S);
@@ -222,7 +218,7 @@ namespace {
 void StmtProfiler::VisitStmt(const Stmt *S) {
   assert(S && "Requires non-null Stmt pointer");
 
-  VisitStmtNoChildren(S);
+  HandleStmtClass(S->getStmtClass());
 
   for (const Stmt *SubStmt : S->children()) {
     if (SubStmt)
@@ -456,11 +452,6 @@ void OMPClauseProfiler::VisitOMPNumThreadsClause(const OMPNumThreadsClause *C) {
     Profiler->VisitStmt(C->getNumThreads());
 }
 
-void OMPClauseProfiler::VisitOMPAlignClause(const OMPAlignClause *C) {
-  if (C->getAlignment())
-    Profiler->VisitStmt(C->getAlignment());
-}
-
 void OMPClauseProfiler::VisitOMPSafelenClause(const OMPSafelenClause *C) {
   if (C->getSafelen())
     Profiler->VisitStmt(C->getSafelen());
@@ -475,13 +466,6 @@ void OMPClauseProfiler::VisitOMPSizesClause(const OMPSizesClause *C) {
   for (auto E : C->getSizesRefs())
     if (E)
       Profiler->VisitExpr(E);
-}
-
-void OMPClauseProfiler::VisitOMPFullClause(const OMPFullClause *C) {}
-
-void OMPClauseProfiler::VisitOMPPartialClause(const OMPPartialClause *C) {
-  if (const Expr *Factor = C->getFactor())
-    Profiler->VisitExpr(Factor);
 }
 
 void OMPClauseProfiler::VisitOMPAllocatorClause(const OMPAllocatorClause *C) {
@@ -554,8 +538,6 @@ void OMPClauseProfiler::VisitOMPWriteClause(const OMPWriteClause *) {}
 void OMPClauseProfiler::VisitOMPUpdateClause(const OMPUpdateClause *) {}
 
 void OMPClauseProfiler::VisitOMPCaptureClause(const OMPCaptureClause *) {}
-
-void OMPClauseProfiler::VisitOMPCompareClause(const OMPCompareClause *) {}
 
 void OMPClauseProfiler::VisitOMPSeqCstClause(const OMPSeqCstClause *) {}
 
@@ -889,7 +871,6 @@ void OMPClauseProfiler::VisitOMPAffinityClause(const OMPAffinityClause *C) {
     Profiler->VisitStmt(E);
 }
 void OMPClauseProfiler::VisitOMPOrderClause(const OMPOrderClause *C) {}
-void OMPClauseProfiler::VisitOMPBindClause(const OMPBindClause *C) {}
 } // namespace
 
 void
@@ -915,10 +896,6 @@ void StmtProfiler::VisitOMPLoopDirective(const OMPLoopDirective *S) {
   VisitOMPLoopBasedDirective(S);
 }
 
-void StmtProfiler::VisitOMPMetaDirective(const OMPMetaDirective *S) {
-  VisitOMPExecutableDirective(S);
-}
-
 void StmtProfiler::VisitOMPParallelDirective(const OMPParallelDirective *S) {
   VisitOMPExecutableDirective(S);
 }
@@ -927,17 +904,8 @@ void StmtProfiler::VisitOMPSimdDirective(const OMPSimdDirective *S) {
   VisitOMPLoopDirective(S);
 }
 
-void StmtProfiler::VisitOMPLoopTransformationDirective(
-    const OMPLoopTransformationDirective *S) {
-  VisitOMPLoopBasedDirective(S);
-}
-
 void StmtProfiler::VisitOMPTileDirective(const OMPTileDirective *S) {
-  VisitOMPLoopTransformationDirective(S);
-}
-
-void StmtProfiler::VisitOMPUnrollDirective(const OMPUnrollDirective *S) {
-  VisitOMPLoopTransformationDirective(S);
+  VisitOMPLoopBasedDirective(S);
 }
 
 void StmtProfiler::VisitOMPForDirective(const OMPForDirective *S) {
@@ -1202,11 +1170,6 @@ void StmtProfiler::VisitOMPMaskedDirective(const OMPMaskedDirective *S) {
   VisitOMPExecutableDirective(S);
 }
 
-void StmtProfiler::VisitOMPGenericLoopDirective(
-    const OMPGenericLoopDirective *S) {
-  VisitOMPLoopDirective(S);
-}
-
 void StmtProfiler::VisitExpr(const Expr *S) {
   VisitStmt(S);
 }
@@ -1225,12 +1188,6 @@ void StmtProfiler::VisitDeclRefExpr(const DeclRefExpr *S) {
     if (S->hasExplicitTemplateArgs())
       VisitTemplateArguments(S->getTemplateArgs(), S->getNumTemplateArgs());
   }
-}
-
-void StmtProfiler::VisitSYCLUniqueStableNameExpr(
-    const SYCLUniqueStableNameExpr *S) {
-  VisitExpr(S);
-  VisitType(S->getTypeSourceInfo()->getType());
 }
 
 void StmtProfiler::VisitPredefinedExpr(const PredefinedExpr *S) {
@@ -1949,14 +1906,31 @@ StmtProfiler::VisitCXXTemporaryObjectExpr(const CXXTemporaryObjectExpr *S) {
 
 void
 StmtProfiler::VisitLambdaExpr(const LambdaExpr *S) {
-  // Do not recursively visit the children of this expression. Profiling the
-  // body would result in unnecessary work, and is not safe to do during
-  // deserialization.
-  VisitStmtNoChildren(S);
+  VisitExpr(S);
+  for (LambdaExpr::capture_iterator C = S->explicit_capture_begin(),
+                                 CEnd = S->explicit_capture_end();
+       C != CEnd; ++C) {
+    if (C->capturesVLAType())
+      continue;
 
-  // C++20 [temp.over.link]p5:
-  //   Two lambda-expressions are never considered equivalent.
-  VisitDecl(S->getLambdaClass());
+    ID.AddInteger(C->getCaptureKind());
+    switch (C->getCaptureKind()) {
+    case LCK_StarThis:
+    case LCK_This:
+      break;
+    case LCK_ByRef:
+    case LCK_ByCopy:
+      VisitDecl(C->getCapturedVar());
+      ID.AddBoolean(C->isPackExpansion());
+      break;
+    case LCK_VLAType:
+      llvm_unreachable("VLA type in explicit captures.");
+    }
+  }
+  // Note: If we actually needed to be able to match lambda
+  // expressions, we would have to consider parameters and return type
+  // here, among other things.
+  VisitStmt(S->getBody());
 }
 
 void

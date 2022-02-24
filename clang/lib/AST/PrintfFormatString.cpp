@@ -428,7 +428,7 @@ bool clang::analyze_format_string::ParsePrintfString(FormatStringHandler &H,
       continue;
     // We have a format specifier.  Pass it to the callback.
     if (!H.HandlePrintfSpecifier(FSR.getValue(), FSR.getStart(),
-                                 I - FSR.getStart(), Target))
+                                 I - FSR.getStart()))
       return true;
   }
   assert(I == E && "Format string not exhausted");
@@ -711,8 +711,8 @@ bool PrintfSpecifier::fixType(QualType QT, const LangOptions &LangOpt,
     CS.setKind(ConversionSpecifier::sArg);
 
     // Disable irrelevant flags
-    HasAlternativeForm = false;
-    HasLeadingZeroes = false;
+    HasAlternativeForm = 0;
+    HasLeadingZeroes = 0;
 
     // Set the long length modifier for wide characters
     if (QT->getPointeeType()->isWideCharType())
@@ -755,7 +755,6 @@ bool PrintfSpecifier::fixType(QualType QT, const LangOptions &LangOpt,
   case BuiltinType::BFloat16:
   case BuiltinType::Float16:
   case BuiltinType::Float128:
-  case BuiltinType::Ibm128:
   case BuiltinType::ShortAccum:
   case BuiltinType::Accum:
   case BuiltinType::LongAccum:
@@ -878,9 +877,9 @@ bool PrintfSpecifier::fixType(QualType QT, const LangOptions &LangOpt,
     CS.setKind(ConversionSpecifier::cArg);
     LM.setKind(LengthModifier::None);
     Precision.setHowSpecified(OptionalAmount::NotSpecified);
-    HasAlternativeForm = false;
-    HasLeadingZeroes = false;
-    HasPlusPrefix = false;
+    HasAlternativeForm = 0;
+    HasLeadingZeroes = 0;
+    HasPlusPrefix = 0;
   }
   // Test for Floating type first as LongDouble can pass isUnsignedIntegerType
   else if (QT->isRealFloatingType()) {
@@ -888,12 +887,12 @@ bool PrintfSpecifier::fixType(QualType QT, const LangOptions &LangOpt,
   }
   else if (QT->isSignedIntegerType()) {
     CS.setKind(ConversionSpecifier::dArg);
-    HasAlternativeForm = false;
+    HasAlternativeForm = 0;
   }
   else if (QT->isUnsignedIntegerType()) {
     CS.setKind(ConversionSpecifier::uArg);
-    HasAlternativeForm = false;
-    HasPlusPrefix = false;
+    HasAlternativeForm = 0;
+    HasPlusPrefix = 0;
   } else {
     llvm_unreachable("Unexpected type");
   }

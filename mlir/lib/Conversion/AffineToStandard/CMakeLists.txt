@@ -12,13 +12,10 @@ add_mlir_conversion_library(MLIRAffineToStandard
 
   LINK_LIBS PUBLIC
   MLIRAffine
-  MLIRAffineUtils
-  MLIRArithmetic
-  MLIRIR
   MLIRMemRef
   MLIRSCF
   MLIRPass
   MLIRStandard
   MLIRTransforms
-  MLIRVector
+  MLIRIR
   )

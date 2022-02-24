@@ -271,10 +271,15 @@ void ScheduleDAGInstrs::addPhysRegDataDeps(SUnit *SU, unsigned OperIdx) {
       if (!ImplicitPseudoDef && !ImplicitPseudoUse) {
         Dep.setLatency(SchedModel.computeOperandLatency(SU->getInstr(), OperIdx,
                                                         RegUse, UseOp));
+        ST.adjustSchedDependency(SU, OperIdx, UseSU, UseOp, Dep);
       } else {
         Dep.setLatency(0);
+        // FIXME: We could always let target to adjustSchedDependency(), and
+        // remove this condition, but that currently asserts in Hexagon BE.
+        if (SU->getInstr()->isBundle() || (RegUse && RegUse->isBundle()))
+          ST.adjustSchedDependency(SU, OperIdx, UseSU, UseOp, Dep);
       }
-      ST.adjustSchedDependency(SU, OperIdx, UseSU, UseOp, Dep);
+
       UseSU->addPred(Dep);
     }
   }
@@ -406,10 +411,11 @@ void ScheduleDAGInstrs::addVRegDefDeps(SUnit *SU, unsigned OperIdx) {
       // register in later operands. The lanes of other defs will now be live
       // after this instruction, so these should not be treated as killed by the
       // instruction even though they appear to be killed in this one operand.
-      for (const MachineOperand &OtherMO :
-           llvm::drop_begin(MI->operands(), OperIdx + 1))
+      for (int I = OperIdx + 1, E = MI->getNumOperands(); I != E; ++I) {
+        const MachineOperand &OtherMO = MI->getOperand(I);
         if (OtherMO.isReg() && OtherMO.isDef() && OtherMO.getReg() == Reg)
           KillLaneMask &= ~getLaneMaskForMO(OtherMO);
+      }
     }
 
     // Clear undef flag, we'll re-add it later once we know which subregister
@@ -801,12 +807,14 @@ void ScheduleDAGInstrs::buildSchedGraph(AAResults *AA,
       DbgMI = nullptr;
     }
 
-    if (MI.isDebugValue() || MI.isDebugPHI()) {
+    if (MI.isDebugValue() || MI.isDebugRef()) {
       DbgMI = &MI;
       continue;
     }
+    if (MI.isDebugLabel())
+      continue;
 
-    if (MI.isDebugLabel() || MI.isDebugRef() || MI.isPseudoProbe())
+    if (MI.isPseudoProbe())
       continue;
 
     SUnit *SU = MISUnitMap[&MI];
@@ -1111,7 +1119,7 @@ void ScheduleDAGInstrs::fixupKills(MachineBasicBlock &MBB) {
   LiveRegs.addLiveOuts(MBB);
 
   // Examine block from end to start...
-  for (MachineInstr &MI : llvm::reverse(MBB)) {
+  for (MachineInstr &MI : make_range(MBB.rbegin(), MBB.rend())) {
     if (MI.isDebugOrPseudoInstr())
       continue;
 

@@ -1,5 +1,5 @@
 #define NULL 0
-void *foo(void) {
+void *foo() {
   return NULL;
 }
 

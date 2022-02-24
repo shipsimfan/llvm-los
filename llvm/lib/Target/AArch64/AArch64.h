@@ -26,6 +26,7 @@ class AArch64Subtarget;
 class AArch64TargetMachine;
 class FunctionPass;
 class InstructionSelector;
+class MachineFunctionPass;
 
 FunctionPass *createAArch64DeadRegisterDefinitions();
 FunctionPass *createAArch64RedundantCopyEliminationPass();
@@ -50,7 +51,6 @@ FunctionPass *createAArch64A53Fix835769();
 FunctionPass *createFalkorHWPFFixPass();
 FunctionPass *createFalkorMarkStridedAccessesPass();
 FunctionPass *createAArch64BranchTargetsPass();
-FunctionPass *createAArch64MIPeepholeOptPass();
 
 FunctionPass *createAArch64CleanupLocalDynamicTLSPass();
 
@@ -59,8 +59,7 @@ ModulePass *createSVEIntrinsicOptsPass();
 InstructionSelector *
 createAArch64InstructionSelector(const AArch64TargetMachine &,
                                  AArch64Subtarget &, AArch64RegisterBankInfo &);
-FunctionPass *createAArch64O0PreLegalizerCombiner();
-FunctionPass *createAArch64PreLegalizerCombiner();
+FunctionPass *createAArch64PreLegalizerCombiner(bool IsOptNone);
 FunctionPass *createAArch64PostLegalizerCombiner(bool IsOptNone);
 FunctionPass *createAArch64PostLegalizerLowering();
 FunctionPass *createAArch64PostSelectOptimize();
@@ -82,9 +81,7 @@ void initializeAArch64SLSHardeningPass(PassRegistry&);
 void initializeAArch64SpeculationHardeningPass(PassRegistry&);
 void initializeAArch64LoadStoreOptPass(PassRegistry&);
 void initializeAArch64LowerHomogeneousPrologEpilogPass(PassRegistry &);
-void initializeAArch64MIPeepholeOptPass(PassRegistry &);
 void initializeAArch64SIMDInstrOptPass(PassRegistry&);
-void initializeAArch64O0PreLegalizerCombinerPass(PassRegistry &);
 void initializeAArch64PreLegalizerCombinerPass(PassRegistry&);
 void initializeAArch64PostLegalizerCombinerPass(PassRegistry &);
 void initializeAArch64PostLegalizerLoweringPass(PassRegistry &);

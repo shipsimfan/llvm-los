@@ -17,22 +17,19 @@ using namespace llvm;
 using namespace lld;
 using namespace lld::macho;
 
-static_assert(sizeof(void *) != 8 || sizeof(Reloc) == 24,
-              "Try to minimize Reloc's size; we create many instances");
-
 bool macho::validateSymbolRelocation(const Symbol *sym,
                                      const InputSection *isec, const Reloc &r) {
   const RelocAttrs &relocAttrs = target->getRelocAttrs(r.type);
   bool valid = true;
-  auto message = [&](const Twine &diagnostic) {
+  auto message = [relocAttrs, sym, isec, &valid](const Twine &diagnostic) {
     valid = false;
-    return (isec->getLocation(r.offset) + ": " + relocAttrs.name +
-            " relocation " + diagnostic)
+    return (relocAttrs.name + " relocation " + diagnostic + " for `" +
+            sym->getName() + "' in " + toString(isec))
         .str();
   };
 
   if (relocAttrs.hasAttr(RelocAttrBits::TLV) != sym->isTlv())
-    error(message(Twine("requires that symbol ") + sym->getName() + " " +
+    error(message(Twine("requires that variable ") +
                   (sym->isTlv() ? "not " : "") + "be thread-local"));
 
   return valid;

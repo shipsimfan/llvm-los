@@ -76,7 +76,7 @@ namespace {
     // OrigAlignments - Alignments of stack objects before coloring.
     SmallVector<Align, 16> OrigAlignments;
 
-    // OrigSizes - Sizes of stack objects before coloring.
+    // OrigSizes - Sizess of stack objects before coloring.
     SmallVector<unsigned, 16> OrigSizes;
 
     // AllColors - If index is set, it's a spill slot, i.e. color.
@@ -159,7 +159,8 @@ void StackSlotColoring::ScanForSpillSlotRefs(MachineFunction &MF) {
   // FIXME: Need the equivalent of MachineRegisterInfo for frameindex operands.
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB) {
-      for (const MachineOperand &MO : MI.operands()) {
+      for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
+        MachineOperand &MO = MI.getOperand(i);
         if (!MO.isFI())
           continue;
         int FI = MO.getIndex();
@@ -168,7 +169,7 @@ void StackSlotColoring::ScanForSpillSlotRefs(MachineFunction &MF) {
         if (!LS->hasInterval(FI))
           continue;
         LiveInterval &li = LS->getInterval(FI);
-        if (!MI.isDebugInstr())
+        if (!MI.isDebugValue())
           li.incrementWeight(
               LiveIntervals::getSpillWeight(false, true, MBFI, MI));
       }
@@ -325,7 +326,8 @@ bool StackSlotColoring::ColorSlots(MachineFunction &MF) {
 
   LLVM_DEBUG(dbgs() << "Color spill slot intervals:\n");
   bool Changed = false;
-  for (LiveInterval *li : SSIntervals) {
+  for (unsigned i = 0, e = SSIntervals.size(); i != e; ++i) {
+    LiveInterval *li = SSIntervals[i];
     int SS = Register::stackSlot2Index(li->reg());
     int NewSS = ColorSlot(li);
     assert(NewSS >= 0 && "Stack coloring failed?");
@@ -337,7 +339,8 @@ bool StackSlotColoring::ColorSlots(MachineFunction &MF) {
   }
 
   LLVM_DEBUG(dbgs() << "\nSpill slots after coloring:\n");
-  for (LiveInterval *li : SSIntervals) {
+  for (unsigned i = 0, e = SSIntervals.size(); i != e; ++i) {
+    LiveInterval *li = SSIntervals[i];
     int SS = Register::stackSlot2Index(li->reg());
     li->setWeight(SlotWeights[SS]);
   }
@@ -345,8 +348,8 @@ bool StackSlotColoring::ColorSlots(MachineFunction &MF) {
   llvm::stable_sort(SSIntervals, IntervalSorter());
 
 #ifndef NDEBUG
-  for (LiveInterval *li : SSIntervals)
-    LLVM_DEBUG(li->dump());
+  for (unsigned i = 0, e = SSIntervals.size(); i != e; ++i)
+    LLVM_DEBUG(SSIntervals[i]->dump());
   LLVM_DEBUG(dbgs() << '\n');
 #endif
 
@@ -391,7 +394,8 @@ void StackSlotColoring::RewriteInstruction(MachineInstr &MI,
                                            SmallVectorImpl<int> &SlotMapping,
                                            MachineFunction &MF) {
   // Update the operands.
-  for (MachineOperand &MO : MI.operands()) {
+  for (unsigned i = 0, ee = MI.getNumOperands(); i != ee; ++i) {
+    MachineOperand &MO = MI.getOperand(i);
     if (!MO.isFI())
       continue;
     int OldFI = MO.getIndex();

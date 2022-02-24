@@ -55,7 +55,7 @@ def SPV_CooperativeMatrixLengthNVOp : SPV_Op<"CooperativeMatrixLengthNV",
   let results = (outs
     SPV_Int32:$result
   );
-  let hasVerifier = 0;
+  let verifier = [{ return success(); }];
 }
 
 // -----
@@ -132,6 +132,11 @@ def SPV_CooperativeMatrixLoadNVOp : SPV_Op<"CooperativeMatrixLoadNV", []> {
   let results = (outs
     SPV_AnyCooperativeMatrix:$result
   );
+
+  let verifier = [{
+    return verifyPointerAndCoopMatrixType(*this, pointer().getType(),
+                                          result().getType());
+  }];
 }
 
 // -----
@@ -206,6 +211,8 @@ def SPV_CooperativeMatrixMulAddNVOp : SPV_Op<"CooperativeMatrixMulAddNV",
   let results = (outs
     SPV_AnyCooperativeMatrix:$result
   );
+
+  let verifier = [{ return verifyCoopMatrixMulAdd(*this); }];
 }
 
 // -----
@@ -267,6 +274,11 @@ def SPV_CooperativeMatrixStoreNVOp : SPV_Op<"CooperativeMatrixStoreNV", []> {
   );
 
   let results = (outs);
+
+  let verifier = [{
+    return verifyPointerAndCoopMatrixType(*this, pointer().getType(),
+                                          object().getType());
+  }];
 }
 
 // -----

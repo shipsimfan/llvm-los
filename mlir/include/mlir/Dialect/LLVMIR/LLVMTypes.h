@@ -15,7 +15,6 @@
 #define MLIR_DIALECT_LLVMIR_LLVMTYPES_H_
 
 #include "mlir/IR/Types.h"
-#include "mlir/Interfaces/DataLayoutInterfaces.h"
 
 namespace llvm {
 class ElementCount;
@@ -24,8 +23,8 @@ class TypeSize;
 
 namespace mlir {
 
-class AsmParser;
-class AsmPrinter;
+class DialectAsmParser;
+class DialectAsmPrinter;
 
 namespace LLVM {
 class LLVMDialect;
@@ -36,13 +35,6 @@ struct LLVMPointerTypeStorage;
 struct LLVMStructTypeStorage;
 struct LLVMTypeAndSizeStorage;
 } // namespace detail
-} // namespace LLVM
-} // namespace mlir
-
-#include "mlir/Dialect/LLVMIR/LLVMTypeInterfaces.h.inc"
-
-namespace mlir {
-namespace LLVM {
 
 //===----------------------------------------------------------------------===//
 // Trivial types.
@@ -71,9 +63,8 @@ DEFINE_TRIVIAL_LLVM_TYPE(LLVMMetadataType);
 /// LLVM dialect array type. It is an aggregate type representing consecutive
 /// elements in memory, parameterized by the number of elements and the element
 /// type.
-class LLVMArrayType
-    : public Type::TypeBase<LLVMArrayType, Type, detail::LLVMTypeAndSizeStorage,
-                            DataLayoutTypeInterface::Trait> {
+class LLVMArrayType : public Type::TypeBase<LLVMArrayType, Type,
+                                            detail::LLVMTypeAndSizeStorage> {
 public:
   /// Inherit base constructors.
   using Base::Base;
@@ -89,28 +80,14 @@ public:
                                   Type elementType, unsigned numElements);
 
   /// Returns the element type of the array.
-  Type getElementType() const;
+  Type getElementType();
 
   /// Returns the number of elements in the array type.
-  unsigned getNumElements() const;
+  unsigned getNumElements();
 
   /// Verifies that the type about to be constructed is well-formed.
   static LogicalResult verify(function_ref<InFlightDiagnostic()> emitError,
                               Type elementType, unsigned numElements);
-
-  /// Hooks for DataLayoutTypeInterface. Should not be called directly. Obtain a
-  /// DataLayout instance and query it instead.
-  unsigned getTypeSizeInBits(const DataLayout &dataLayout,
-                             DataLayoutEntryListRef params) const;
-
-  unsigned getTypeSize(const DataLayout &dataLayout,
-                       DataLayoutEntryListRef params) const;
-
-  unsigned getABIAlignment(const DataLayout &dataLayout,
-                           DataLayoutEntryListRef params) const;
-
-  unsigned getPreferredAlignment(const DataLayout &dataLayout,
-                                 DataLayoutEntryListRef params) const;
 };
 
 //===----------------------------------------------------------------------===//
@@ -135,7 +112,7 @@ public:
   static bool isValidResultType(Type type);
 
   /// Returns whether the function is variadic.
-  bool isVarArg() const;
+  bool isVarArg();
 
   /// Gets or creates an instance of LLVM dialect function in the same context
   /// as the `result` type.
@@ -145,16 +122,8 @@ public:
   getChecked(function_ref<InFlightDiagnostic()> emitError, Type result,
              ArrayRef<Type> arguments, bool isVarArg = false);
 
-  /// Returns a clone of this function type with the given argument
-  /// and result types.
-  LLVMFunctionType clone(TypeRange inputs, TypeRange results) const;
-
   /// Returns the result type of the function.
   Type getReturnType();
-
-  /// Returns the result type of the function as an ArrayRef, enabling better
-  /// integration with generic MLIR utilities.
-  ArrayRef<Type> getReturnTypes();
 
   /// Returns the number of arguments to the function.
   unsigned getNumParams();
@@ -179,8 +148,7 @@ public:
 /// object in memory. It is parameterized by the element type and the address
 /// space.
 class LLVMPointerType : public Type::TypeBase<LLVMPointerType, Type,
-                                              detail::LLVMPointerTypeStorage,
-                                              DataLayoutTypeInterface::Trait> {
+                                              detail::LLVMPointerTypeStorage> {
 public:
   /// Inherit base constructors.
   using Base::Base;
@@ -198,27 +166,14 @@ public:
              unsigned addressSpace = 0);
 
   /// Returns the pointed-to type.
-  Type getElementType() const;
+  Type getElementType();
 
   /// Returns the address space of the pointer.
-  unsigned getAddressSpace() const;
+  unsigned getAddressSpace();
 
   /// Verifies that the type about to be constructed is well-formed.
   static LogicalResult verify(function_ref<InFlightDiagnostic()> emitError,
                               Type pointee, unsigned);
-
-  /// Hooks for DataLayoutTypeInterface. Should not be called directly. Obtain a
-  /// DataLayout instance and query it instead.
-  unsigned getTypeSizeInBits(const DataLayout &dataLayout,
-                             DataLayoutEntryListRef params) const;
-  unsigned getABIAlignment(const DataLayout &dataLayout,
-                           DataLayoutEntryListRef params) const;
-  unsigned getPreferredAlignment(const DataLayout &dataLayout,
-                                 DataLayoutEntryListRef params) const;
-  bool areCompatible(DataLayoutEntryListRef oldLayout,
-                     DataLayoutEntryListRef newLayout) const;
-  LogicalResult verifyEntries(DataLayoutEntryListRef entries,
-                              Location loc) const;
 };
 
 //===----------------------------------------------------------------------===//
@@ -249,9 +204,8 @@ public:
 ///
 /// Note that the packedness of the struct takes place in uniquing of literal
 /// structs, but does not in uniquing of identified structs.
-class LLVMStructType
-    : public Type::TypeBase<LLVMStructType, Type, detail::LLVMStructTypeStorage,
-                            DataLayoutTypeInterface::Trait> {
+class LLVMStructType : public Type::TypeBase<LLVMStructType, Type,
+                                             detail::LLVMStructTypeStorage> {
 public:
   /// Inherit base constructors.
   using Base::Base;
@@ -306,10 +260,10 @@ public:
   LogicalResult setBody(ArrayRef<Type> types, bool isPacked);
 
   /// Checks if a struct is packed.
-  bool isPacked() const;
+  bool isPacked();
 
   /// Checks if a struct is identified.
-  bool isIdentified() const;
+  bool isIdentified();
 
   /// Checks if a struct is opaque.
   bool isOpaque();
@@ -321,30 +275,13 @@ public:
   StringRef getName();
 
   /// Returns the list of element types contained in a non-opaque struct.
-  ArrayRef<Type> getBody() const;
+  ArrayRef<Type> getBody();
 
   /// Verifies that the type about to be constructed is well-formed.
   static LogicalResult verify(function_ref<InFlightDiagnostic()> emitError,
                               StringRef, bool);
   static LogicalResult verify(function_ref<InFlightDiagnostic()> emitError,
                               ArrayRef<Type> types, bool);
-
-  /// Hooks for DataLayoutTypeInterface. Should not be called directly. Obtain a
-  /// DataLayout instance and query it instead.
-  unsigned getTypeSizeInBits(const DataLayout &dataLayout,
-                             DataLayoutEntryListRef params) const;
-
-  unsigned getABIAlignment(const DataLayout &dataLayout,
-                           DataLayoutEntryListRef params) const;
-
-  unsigned getPreferredAlignment(const DataLayout &dataLayout,
-                                 DataLayoutEntryListRef params) const;
-
-  bool areCompatible(DataLayoutEntryListRef oldLayout,
-                     DataLayoutEntryListRef newLayout) const;
-
-  LogicalResult verifyEntries(DataLayoutEntryListRef entries,
-                              Location loc) const;
 };
 
 //===----------------------------------------------------------------------===//
@@ -460,7 +397,7 @@ namespace detail {
 Type parseType(DialectAsmParser &parser);
 
 /// Prints an LLVM Dialect type.
-void printType(Type type, AsmPrinter &printer);
+void printType(Type type, DialectAsmPrinter &printer);
 } // namespace detail
 
 //===----------------------------------------------------------------------===//
@@ -469,10 +406,6 @@ void printType(Type type, AsmPrinter &printer);
 
 /// Returns `true` if the given type is compatible with the LLVM dialect.
 bool isCompatibleType(Type type);
-
-/// Returns `true` if the given outer type is compatible with the LLVM dialect
-/// without checking its potential nested types such as struct elements.
-bool isCompatibleOuterType(Type type);
 
 /// Returns `true` if the given type is a floating-point type compatible with
 /// the LLVM dialect.
@@ -491,21 +424,9 @@ Type getVectorElementType(Type type);
 /// Returns the element count of any LLVM-compatible vector type.
 llvm::ElementCount getVectorNumElements(Type type);
 
-/// Returns whether a vector type is scalable or not.
-bool isScalableVectorType(Type vectorType);
-
-/// Creates an LLVM dialect-compatible vector type with the given element type
-/// and length.
-Type getVectorType(Type elementType, unsigned numElements,
-                   bool isScalable = false);
-
 /// Creates an LLVM dialect-compatible type with the given element type and
 /// length.
 Type getFixedVectorType(Type elementType, unsigned numElements);
-
-/// Creates an LLVM dialect-compatible type with the given element type and
-/// length.
-Type getScalableVectorType(Type elementType, unsigned numElements);
 
 /// Returns the size of the given primitive LLVM dialect-compatible type
 /// (including vectors) in bits, for example, the size of i16 is 16 and

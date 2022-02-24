@@ -1,6 +1,3 @@
-include(GNUInstallDirs)
-include(LLVMDistributionSupport)
-
 macro(add_lld_library name)
   cmake_parse_arguments(ARG
     "SHARED"
@@ -14,13 +11,18 @@ macro(add_lld_library name)
   set_target_properties(${name} PROPERTIES FOLDER "lld libraries")
 
   if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
-    get_target_export_arg(${name} LLD export_to_lldtargets)
+    if(${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
+        NOT LLVM_DISTRIBUTION_COMPONENTS)
+      set(export_to_lldtargets EXPORT LLDTargets)
+      set_property(GLOBAL PROPERTY LLD_HAS_EXPORTS True)
+    endif()
+
     install(TARGETS ${name}
       COMPONENT ${name}
       ${export_to_lldtargets}
       LIBRARY DESTINATION lib${LLVM_LIBDIR_SUFFIX}
       ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX}
-      RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+      RUNTIME DESTINATION bin)
 
     if (${ARG_SHARED} AND NOT CMAKE_CONFIGURATION_TYPES)
       add_llvm_install_targets(install-${name}
@@ -44,10 +46,15 @@ macro(add_lld_tool name)
   add_lld_executable(${name} ${ARGN})
 
   if (LLD_BUILD_TOOLS)
-    get_target_export_arg(${name} LLD export_to_lldtargets)
+    if(${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
+        NOT LLVM_DISTRIBUTION_COMPONENTS)
+      set(export_to_lldtargets EXPORT LLDTargets)
+      set_property(GLOBAL PROPERTY LLD_HAS_EXPORTS True)
+    endif()
+
     install(TARGETS ${name}
       ${export_to_lldtargets}
-      RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+      RUNTIME DESTINATION bin
       COMPONENT ${name})
 
     if(NOT CMAKE_CONFIGURATION_TYPES)

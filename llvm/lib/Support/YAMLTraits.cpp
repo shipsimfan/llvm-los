@@ -18,12 +18,13 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/LineIterator.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/VersionTuple.h"
+#include "llvm/Support/Unicode.h"
 #include "llvm/Support/YAMLParser.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -299,7 +300,7 @@ void Input::endEnumScalar() {
 bool Input::beginBitSetScalar(bool &DoClear) {
   BitValuesUsed.clear();
   if (SequenceHNode *SQ = dyn_cast<SequenceHNode>(CurrentNode)) {
-    BitValuesUsed.resize(SQ->Entries.size());
+    BitValuesUsed.insert(BitValuesUsed.begin(), SQ->Entries.size(), false);
   } else {
     setError(CurrentNode, "expected sequence of bit values");
   }
@@ -526,9 +527,8 @@ std::vector<StringRef> Output::keys() {
 }
 
 bool Output::preflightKey(const char *Key, bool Required, bool SameAsDefault,
-                          bool &UseDefault, void *&SaveInfo) {
+                          bool &UseDefault, void *&) {
   UseDefault = false;
-  SaveInfo = nullptr;
   if (Required || !SameAsDefault || WriteDefaultValues) {
     auto State = StateStack.back();
     if (State == inFlowMapFirstKey || State == inFlowMapOtherKey) {
@@ -599,8 +599,7 @@ void Output::endSequence() {
   StateStack.pop_back();
 }
 
-bool Output::preflightElement(unsigned, void *&SaveInfo) {
-  SaveInfo = nullptr;
+bool Output::preflightElement(unsigned, void *&) {
   return true;
 }
 
@@ -628,7 +627,7 @@ void Output::endFlowSequence() {
   outputUpToEndOfLine(" ]");
 }
 
-bool Output::preflightFlowElement(unsigned, void *&SaveInfo) {
+bool Output::preflightFlowElement(unsigned, void *&) {
   if (NeedFlowSequenceComma)
     output(", ");
   if (WrapColumn && Column > WrapColumn) {
@@ -638,7 +637,6 @@ bool Output::preflightFlowElement(unsigned, void *&SaveInfo) {
     Column = ColumnAtFlowStart;
     output("  ");
   }
-  SaveInfo = nullptr;
   return true;
 }
 

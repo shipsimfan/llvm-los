@@ -53,8 +53,7 @@ Expected<SimpleCompiler::CompileResult> SimpleCompiler::operator()(Module &M) {
   }
 
   auto ObjBuffer = std::make_unique<SmallVectorMemoryBuffer>(
-      std::move(ObjBufferSV), M.getModuleIdentifier() + "-jitted-objectbuffer",
-      /*RequiresNullTerminator=*/false);
+      std::move(ObjBufferSV), M.getModuleIdentifier() + "-jitted-objectbuffer");
 
   auto Obj = object::ObjectFile::createObjectFile(ObjBuffer->getMemBufferRef());
 

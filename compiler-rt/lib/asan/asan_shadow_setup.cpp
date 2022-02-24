@@ -13,11 +13,12 @@
 
 #include "sanitizer_common/sanitizer_platform.h"
 
-// asan_fuchsia.cpp has their own InitializeShadowMemory implementation.
-#if !SANITIZER_FUCHSIA
+// asan_fuchsia.cpp and asan_rtems.cpp have their own
+// InitializeShadowMemory implementation.
+#if !SANITIZER_FUCHSIA && !SANITIZER_RTEMS
 
-#  include "asan_internal.h"
-#  include "asan_mapping.h"
+#include "asan_internal.h"
+#include "asan_mapping.h"
 
 namespace __asan {
 
@@ -33,7 +34,7 @@ static void ProtectGap(uptr addr, uptr size) {
           "protect_shadow_gap=0:"
           " not protecting shadow gap, allocating gap's shadow\n"
           "|| `[%p, %p]` || ShadowGap's shadow ||\n",
-          (void*)GapShadowBeg, (void*)GapShadowEnd);
+          GapShadowBeg, GapShadowEnd);
     ReserveShadowMemoryRange(GapShadowBeg, GapShadowEnd,
                              "unprotected gap shadow");
     return;
@@ -113,7 +114,7 @@ void InitializeShadowMemory() {
         "Shadow memory range interleaves with an existing memory mapping. "
         "ASan cannot proceed correctly. ABORTING.\n");
     Report("ASan shadow was supposed to be located in the [%p-%p] range.\n",
-           (void*)shadow_start, (void*)kHighShadowEnd);
+           shadow_start, kHighShadowEnd);
     MaybeReportLinuxPIEBug();
     DumpProcessMap();
     Die();
@@ -122,4 +123,4 @@ void InitializeShadowMemory() {
 
 }  // namespace __asan
 
-#endif  // !SANITIZER_FUCHSIA
+#endif  // !SANITIZER_FUCHSIA && !SANITIZER_RTEMS

@@ -83,12 +83,6 @@ static std::string MangleName(StringRef Str) {
     default:
       Mangled += Str[i];
       break;
-    case '(':
-      Mangled += "lparen";
-      break;
-    case ')':
-      Mangled += "rparen";
-      break;
     case '[':
       Mangled += "lsquare";
       break;

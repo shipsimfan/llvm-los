@@ -251,7 +251,7 @@ static void PrintAccessAndVarIntersection(const StackVarDescr &var, uptr addr,
   }
   str.append("'");
   if (var.line > 0) {
-    str.append(" (line %zd)", var.line);
+    str.append(" (line %d)", var.line);
   }
   if (pos_descr) {
     Decorator d;
@@ -318,8 +318,7 @@ bool DescribeAddressIfGlobal(uptr addr, uptr access_size,
 }
 
 void ShadowAddressDescription::Print() const {
-  Printf("Address %p is located in the %s area.\n", (void *)addr,
-         ShadowNames[kind]);
+  Printf("Address %p is located in the %s area.\n", addr, ShadowNames[kind]);
 }
 
 void GlobalAddressDescription::Print(const char *bug_type) const {
@@ -357,7 +356,7 @@ bool GlobalAddressDescription::PointsInsideTheSameVariable(
 void StackAddressDescription::Print() const {
   Decorator d;
   Printf("%s", d.Location());
-  Printf("Address %p is located in stack of thread %s", (void *)addr,
+  Printf("Address %p is located in stack of thread %s", addr,
          AsanThreadIdAndName(tid).c_str());
 
   if (!frame_descr) {
@@ -470,7 +469,7 @@ AddressDescription::AddressDescription(uptr addr, uptr access_size,
 
 void WildAddressDescription::Print() const {
   Printf("Address %p is a wild pointer inside of access range of size %p.\n",
-         (void *)addr, (void *)access_size);
+         addr, access_size);
 }
 
 void PrintAddressDescription(uptr addr, uptr access_size,

@@ -342,15 +342,6 @@ TEST_F(TargetDeclTest, Types) {
   Flags.clear();
 
   Code = R"cpp(
-  template<template<typename> class ...T>
-  class C {
-    C<[[T...]]> foo;
-    };
-  )cpp";
-  EXPECT_DECLS("TemplateArgumentLoc", {"template <typename> class ...T"});
-  Flags.clear();
-
-  Code = R"cpp(
     struct S{};
     S X;
     [[decltype]](X) Y;
@@ -473,7 +464,7 @@ TEST_F(TargetDeclTest, Concept) {
   )cpp";
   EXPECT_DECLS(
       "ConceptSpecializationExpr",
-      {"template <typename T> concept Fooable = requires (T t) { t.foo(); }"});
+      {"template <typename T> concept Fooable = requires (T t) { t.foo(); };"});
 
   // trailing requires clause
   Code = R"cpp(
@@ -484,7 +475,7 @@ TEST_F(TargetDeclTest, Concept) {
       void foo() requires [[Fooable]]<T>;
   )cpp";
   EXPECT_DECLS("ConceptSpecializationExpr",
-               {"template <typename T> concept Fooable = true"});
+               {"template <typename T> concept Fooable = true;"});
 
   // constrained-parameter
   Code = R"cpp(
@@ -495,7 +486,7 @@ TEST_F(TargetDeclTest, Concept) {
     void bar(T t);
   )cpp";
   EXPECT_DECLS("ConceptSpecializationExpr",
-               {"template <typename T> concept Fooable = true"});
+               {"template <typename T> concept Fooable = true;"});
 
   // partial-concept-id
   Code = R"cpp(
@@ -506,7 +497,7 @@ TEST_F(TargetDeclTest, Concept) {
     void bar(T t);
   )cpp";
   EXPECT_DECLS("ConceptSpecializationExpr",
-               {"template <typename T, typename U> concept Fooable = true"});
+               {"template <typename T, typename U> concept Fooable = true;"});
 }
 
 TEST_F(TargetDeclTest, FunctionTemplate) {
@@ -946,9 +937,11 @@ TEST_F(TargetDeclTest, ObjC) {
   EXPECT_DECLS("ObjCCategoryImplDecl", "@interface Foo(Ext)");
 
   Code = R"cpp(
-    void test(id</*error-ok*/[[InvalidProtocol]]> p);
+    @protocol Foo
+    @end
+    void test([[id<Foo>]] p);
   )cpp";
-  EXPECT_DECLS("ParmVarDecl", "id p");
+  EXPECT_DECLS("ObjCObjectTypeLoc", "@protocol Foo");
 
   Code = R"cpp(
     @class C;
@@ -964,7 +957,7 @@ TEST_F(TargetDeclTest, ObjC) {
     @end
     void test(C<[[Foo]]> *p);
   )cpp";
-  EXPECT_DECLS("ObjCProtocolLoc", "@protocol Foo");
+  EXPECT_DECLS("ObjCObjectTypeLoc", "@protocol Foo");
 
   Code = R"cpp(
     @class C;
@@ -974,17 +967,8 @@ TEST_F(TargetDeclTest, ObjC) {
     @end
     void test(C<[[Foo]], Bar> *p);
   )cpp";
-  EXPECT_DECLS("ObjCProtocolLoc", "@protocol Foo");
-
-  Code = R"cpp(
-    @class C;
-    @protocol Foo
-    @end
-    @protocol Bar
-    @end
-    void test(C<Foo, [[Bar]]> *p);
-  )cpp";
-  EXPECT_DECLS("ObjCProtocolLoc", "@protocol Bar");
+  // FIXME: We currently can't disambiguate between multiple protocols.
+  EXPECT_DECLS("ObjCObjectTypeLoc", "@protocol Foo", "@protocol Bar");
 
   Code = R"cpp(
     @interface Foo
@@ -997,7 +981,8 @@ TEST_F(TargetDeclTest, ObjC) {
       id value = [[Foo]].sharedInstance;
     }
   )cpp";
-  EXPECT_DECLS("ObjCInterfaceTypeLoc", "@interface Foo");
+  // FIXME: We currently can't identify the interface here.
+  EXPECT_DECLS("ObjCPropertyRefExpr", "+ (id)sharedInstance");
 
   Code = R"cpp(
     @interface Foo
@@ -1011,20 +996,6 @@ TEST_F(TargetDeclTest, ObjC) {
     }
   )cpp";
   EXPECT_DECLS("ObjCPropertyRefExpr", "+ (id)sharedInstance");
-
-  Code = R"cpp(
-    @interface Foo
-    + ([[id]])sharedInstance;
-    @end
-  )cpp";
-  EXPECT_DECLS("TypedefTypeLoc");
-
-  Code = R"cpp(
-    @interface Foo
-    + ([[instancetype]])sharedInstance;
-    @end
-  )cpp";
-  EXPECT_DECLS("TypedefTypeLoc");
 }
 
 class FindExplicitReferencesTest : public ::testing::Test {
@@ -1290,7 +1261,11 @@ TEST_F(FindExplicitReferencesTest, All) {
         "0: targets = {x}, decl\n"
         "1: targets = {vector}\n"
         "2: targets = {x}\n"},
-       // Handle UnresolvedLookupExpr.
+// Handle UnresolvedLookupExpr.
+// FIXME
+// This case fails when expensive checks are enabled.
+// Seems like the order of ns1::func and ns2::func isn't defined.
+#ifndef EXPENSIVE_CHECKS
        {R"cpp(
             namespace ns1 { void func(char*); }
             namespace ns2 { void func(int*); }
@@ -1304,6 +1279,7 @@ TEST_F(FindExplicitReferencesTest, All) {
         )cpp",
         "0: targets = {ns1::func, ns2::func}\n"
         "1: targets = {t}\n"},
+#endif
        // Handle UnresolvedMemberExpr.
        {R"cpp(
             struct X {
@@ -1631,21 +1607,6 @@ TEST_F(FindExplicitReferencesTest, All) {
            "5: targets = {t}, decl\n"
            "6: targets = {t}\n"
            "7: targets = {}\n"},
-       // Objective-C: instance variables
-       {
-           R"cpp(
-            @interface I {
-            @public
-              I *_z;
-            }
-            @end
-            I *f;
-            void foo() {
-              $0^f->$1^_z = 0;
-            }
-          )cpp",
-           "0: targets = {f}\n"
-           "1: targets = {I::_z}\n"},
        // Objective-C: properties
        {
            R"cpp(

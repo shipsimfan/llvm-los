@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#define DEBUG_TYPE "hexagon-sdata"
+
 #include "HexagonTargetObjectFile.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
@@ -29,8 +31,6 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
-
-#define DEBUG_TYPE "hexagon-sdata"
 
 using namespace llvm;
 
@@ -90,8 +90,9 @@ static bool isSmallDataSection(StringRef Sec) {
     return true;
   // If either ".sdata." or ".sbss." is a substring of the section name
   // then put the symbol in small data.
-  return Sec.contains(".sdata.") || Sec.contains(".sbss.") ||
-         Sec.contains(".scommon.");
+  return Sec.find(".sdata.") != StringRef::npos ||
+         Sec.find(".sbss.") != StringRef::npos ||
+         Sec.find(".scommon.") != StringRef::npos;
 }
 
 static const char *getSectionSuffixForSize(unsigned Size) {
@@ -177,10 +178,10 @@ MCSection *HexagonTargetObjectFile::getExplicitSectionGlobal(
 
   if (GO->hasSection()) {
     StringRef Section = GO->getSection();
-    if (Section.contains(".access.text.group"))
+    if (Section.find(".access.text.group") != StringRef::npos)
       return getContext().getELFSection(GO->getSection(), ELF::SHT_PROGBITS,
                                         ELF::SHF_ALLOC | ELF::SHF_EXECINSTR);
-    if (Section.contains(".access.data.group"))
+    if (Section.find(".access.data.group") != StringRef::npos)
       return getContext().getELFSection(GO->getSection(), ELF::SHT_PROGBITS,
                                         ELF::SHF_WRITE | ELF::SHF_ALLOC);
   }

@@ -18,7 +18,8 @@ namespace lldb_private {
 class HostInfoOpenBSD : public HostInfoPosix {
 public:
   static llvm::VersionTuple GetOSVersion();
-  static llvm::Optional<std::string> GetOSBuildString();
+  static bool GetOSBuildString(std::string &s);
+  static bool GetOSKernelDescription(std::string &s);
   static FileSpec GetProgramFileSpec();
 };
 }

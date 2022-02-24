@@ -11,7 +11,6 @@
 
 #include "lldb/Core/PluginInterface.h"
 #include "lldb/Symbol/UnwindPlan.h"
-#include "lldb/Target/DynamicRegisterInfo.h"
 #include "lldb/Utility/Status.h"
 #include "lldb/lldb-private.h"
 
@@ -128,8 +127,7 @@ public:
 
   llvm::MCRegisterInfo &GetMCRegisterInfo() { return *m_mc_register_info_up; }
 
-  virtual void
-  AugmentRegisterInfo(std::vector<DynamicRegisterInfo::Register> &regs) = 0;
+  virtual void AugmentRegisterInfo(RegisterInfo &info) = 0;
 
   virtual bool GetPointerReturnRegister(const char *&name) { return false; }
 
@@ -161,8 +159,7 @@ private:
 
 class RegInfoBasedABI : public ABI {
 public:
-  void AugmentRegisterInfo(
-      std::vector<DynamicRegisterInfo::Register> &regs) override;
+  void AugmentRegisterInfo(RegisterInfo &info) override;
 
 protected:
   using ABI::ABI;
@@ -174,14 +171,12 @@ protected:
 
 class MCBasedABI : public ABI {
 public:
-  void AugmentRegisterInfo(
-      std::vector<DynamicRegisterInfo::Register> &regs) override;
+  void AugmentRegisterInfo(RegisterInfo &info) override;
 
   /// If the register name is of the form "<from_prefix>[<number>]" then change
   /// the name to "<to_prefix>[<number>]". Otherwise, leave the name unchanged.
   static void MapRegisterName(std::string &reg, llvm::StringRef from_prefix,
-                              llvm::StringRef to_prefix);
-
+               llvm::StringRef to_prefix);
 protected:
   using ABI::ABI;
 

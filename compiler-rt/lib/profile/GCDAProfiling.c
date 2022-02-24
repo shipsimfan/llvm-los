@@ -461,9 +461,8 @@ void llvm_gcda_summary_info() {
 
   if (val != (uint32_t)-1) {
     /* There are counters present in the file. Merge them. */
-    uint32_t gcov_tag =
-        gcov_version >= 90 ? GCOV_TAG_OBJECT_SUMMARY : GCOV_TAG_PROGRAM_SUMMARY;
-    if (val != gcov_tag) {
+    if (val != (gcov_version >= 90 ? GCOV_TAG_OBJECT_SUMMARY
+                                   : GCOV_TAG_PROGRAM_SUMMARY)) {
       fprintf(stderr,
               "profiling: %s: cannot merge previous run count: "
               "corrupt object tag (0x%08x)\n",

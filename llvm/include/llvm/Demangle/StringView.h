@@ -1,5 +1,5 @@
-//===--- StringView.h ----------------*- mode:c++;eval:(read-only-mode) -*-===//
-//       Do not edit! See README.txt.
+//===--- StringView.h -------------------------------------------*- C++ -*-===//
+//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -7,16 +7,14 @@
 //===----------------------------------------------------------------------===//
 //
 // FIXME: Use std::string_view instead when we support C++17.
-// There are two copies of this file in the source tree.  The one under
-// libcxxabi is the original and the one under llvm is the copy.  Use
-// cp-to-llvm.sh to update the copy.  See README.txt for more details.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef DEMANGLE_STRINGVIEW_H
-#define DEMANGLE_STRINGVIEW_H
+#ifndef LLVM_DEMANGLE_STRINGVIEW_H
+#define LLVM_DEMANGLE_STRINGVIEW_H
 
 #include "DemangleConfig.h"
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 
@@ -40,16 +38,15 @@ public:
 
   StringView substr(size_t Pos, size_t Len = npos) const {
     assert(Pos <= size());
-    if (Len > size() - Pos)
-      Len = size() - Pos;
-    return StringView(begin() + Pos, Len);
+    return StringView(begin() + Pos, std::min(Len, size() - Pos));
   }
 
   size_t find(char C, size_t From = 0) const {
+    size_t FindBegin = std::min(From, size());
     // Avoid calling memchr with nullptr.
-    if (From < size()) {
+    if (FindBegin < size()) {
       // Just forward to memchr, which is faster than a hand-rolled loop.
-      if (const void *P = ::memchr(First + From, C, size() - From))
+      if (const void *P = ::memchr(First + FindBegin, C, size() - FindBegin))
         return size_t(static_cast<const char *>(P) - First);
     }
     return npos;
@@ -101,7 +98,7 @@ public:
   bool startsWith(StringView Str) const {
     if (Str.size() > size())
       return false;
-    return std::strncmp(Str.begin(), begin(), Str.size()) == 0;
+    return std::equal(Str.begin(), Str.end(), begin());
   }
 
   const char &operator[](size_t Idx) const { return *(begin() + Idx); }
@@ -114,7 +111,7 @@ public:
 
 inline bool operator==(const StringView &LHS, const StringView &RHS) {
   return LHS.size() == RHS.size() &&
-         std::strncmp(LHS.begin(), RHS.begin(), LHS.size()) == 0;
+         std::equal(LHS.begin(), LHS.end(), RHS.begin());
 }
 
 DEMANGLE_NAMESPACE_END

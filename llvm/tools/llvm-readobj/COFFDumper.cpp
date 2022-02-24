@@ -52,7 +52,6 @@
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/Support/Win64EH.h"
 #include "llvm/Support/raw_ostream.h"
-#include <ctime>
 
 using namespace llvm;
 using namespace llvm::object;
@@ -127,7 +126,7 @@ private:
   void printCOFFTLSDirectory(const coff_tls_directory<IntTy> *TlsTable);
   typedef void (*PrintExtraCB)(raw_ostream &, const uint8_t *);
   void printRVATable(uint64_t TableVA, uint64_t Count, uint64_t EntrySize,
-                     PrintExtraCB PrintExtra = nullptr);
+                     PrintExtraCB PrintExtra = 0);
 
   void printCodeViewSymbolSection(StringRef SectionName, const SectionRef &Section);
   void printCodeViewTypeSection(StringRef SectionName, const SectionRef &Section);
@@ -338,7 +337,7 @@ void COFFDumper::printBinaryBlockWithRelocs(StringRef Label,
   }
 }
 
-const EnumEntry<COFF::MachineTypes> ImageFileMachineType[] = {
+static const EnumEntry<COFF::MachineTypes> ImageFileMachineType[] = {
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_FILE_MACHINE_UNKNOWN  ),
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_FILE_MACHINE_AM33     ),
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_FILE_MACHINE_AMD64    ),
@@ -363,7 +362,7 @@ const EnumEntry<COFF::MachineTypes> ImageFileMachineType[] = {
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_FILE_MACHINE_WCEMIPSV2)
 };
 
-const EnumEntry<COFF::Characteristics> ImageFileCharacteristics[] = {
+static const EnumEntry<COFF::Characteristics> ImageFileCharacteristics[] = {
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_FILE_RELOCS_STRIPPED        ),
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_FILE_EXECUTABLE_IMAGE       ),
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_FILE_LINE_NUMS_STRIPPED     ),
@@ -381,7 +380,7 @@ const EnumEntry<COFF::Characteristics> ImageFileCharacteristics[] = {
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_FILE_BYTES_REVERSED_HI      )
 };
 
-const EnumEntry<COFF::WindowsSubsystem> PEWindowsSubsystem[] = {
+static const EnumEntry<COFF::WindowsSubsystem> PEWindowsSubsystem[] = {
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_SUBSYSTEM_UNKNOWN                ),
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_SUBSYSTEM_NATIVE                 ),
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_SUBSYSTEM_WINDOWS_GUI            ),
@@ -395,7 +394,7 @@ const EnumEntry<COFF::WindowsSubsystem> PEWindowsSubsystem[] = {
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_SUBSYSTEM_XBOX                   ),
 };
 
-const EnumEntry<COFF::DLLCharacteristics> PEDLLCharacteristics[] = {
+static const EnumEntry<COFF::DLLCharacteristics> PEDLLCharacteristics[] = {
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_DLL_CHARACTERISTICS_HIGH_ENTROPY_VA      ),
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_DLL_CHARACTERISTICS_DYNAMIC_BASE         ),
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_DLL_CHARACTERISTICS_FORCE_INTEGRITY      ),
@@ -454,7 +453,7 @@ ImageSectionCharacteristics[] = {
   LLVM_READOBJ_ENUM_ENT(COFF, IMAGE_SCN_MEM_WRITE             )
 };
 
-const EnumEntry<COFF::SymbolBaseType> ImageSymType[] = {
+static const EnumEntry<COFF::SymbolBaseType> ImageSymType[] = {
   { "Null"  , COFF::IMAGE_SYM_TYPE_NULL   },
   { "Void"  , COFF::IMAGE_SYM_TYPE_VOID   },
   { "Char"  , COFF::IMAGE_SYM_TYPE_CHAR   },
@@ -473,14 +472,14 @@ const EnumEntry<COFF::SymbolBaseType> ImageSymType[] = {
   { "DWord" , COFF::IMAGE_SYM_TYPE_DWORD  }
 };
 
-const EnumEntry<COFF::SymbolComplexType> ImageSymDType[] = {
+static const EnumEntry<COFF::SymbolComplexType> ImageSymDType[] = {
   { "Null"    , COFF::IMAGE_SYM_DTYPE_NULL     },
   { "Pointer" , COFF::IMAGE_SYM_DTYPE_POINTER  },
   { "Function", COFF::IMAGE_SYM_DTYPE_FUNCTION },
   { "Array"   , COFF::IMAGE_SYM_DTYPE_ARRAY    }
 };
 
-const EnumEntry<COFF::SymbolStorageClass> ImageSymClass[] = {
+static const EnumEntry<COFF::SymbolStorageClass> ImageSymClass[] = {
   { "EndOfFunction"  , COFF::IMAGE_SYM_CLASS_END_OF_FUNCTION  },
   { "Null"           , COFF::IMAGE_SYM_CLASS_NULL             },
   { "Automatic"      , COFF::IMAGE_SYM_CLASS_AUTOMATIC        },
@@ -510,7 +509,7 @@ const EnumEntry<COFF::SymbolStorageClass> ImageSymClass[] = {
   { "CLRToken"       , COFF::IMAGE_SYM_CLASS_CLR_TOKEN        }
 };
 
-const EnumEntry<COFF::COMDATType> ImageCOMDATSelect[] = {
+static const EnumEntry<COFF::COMDATType> ImageCOMDATSelect[] = {
   { "NoDuplicates", COFF::IMAGE_COMDAT_SELECT_NODUPLICATES },
   { "Any"         , COFF::IMAGE_COMDAT_SELECT_ANY          },
   { "SameSize"    , COFF::IMAGE_COMDAT_SELECT_SAME_SIZE    },
@@ -520,7 +519,7 @@ const EnumEntry<COFF::COMDATType> ImageCOMDATSelect[] = {
   { "Newest"      , COFF::IMAGE_COMDAT_SELECT_NEWEST       }
 };
 
-const EnumEntry<COFF::DebugType> ImageDebugType[] = {
+static const EnumEntry<COFF::DebugType> ImageDebugType[] = {
     {"Unknown", COFF::IMAGE_DEBUG_TYPE_UNKNOWN},
     {"COFF", COFF::IMAGE_DEBUG_TYPE_COFF},
     {"CodeView", COFF::IMAGE_DEBUG_TYPE_CODEVIEW},
@@ -549,7 +548,7 @@ WeakExternalCharacteristics[] = {
   { "Alias"    , COFF::IMAGE_WEAK_EXTERN_SEARCH_ALIAS     }
 };
 
-const EnumEntry<uint32_t> SubSectionTypes[] = {
+static const EnumEntry<uint32_t> SubSectionTypes[] = {
     LLVM_READOBJ_ENUM_CLASS_ENT(DebugSubsectionKind, Symbols),
     LLVM_READOBJ_ENUM_CLASS_ENT(DebugSubsectionKind, Lines),
     LLVM_READOBJ_ENUM_CLASS_ENT(DebugSubsectionKind, StringTable),
@@ -565,13 +564,13 @@ const EnumEntry<uint32_t> SubSectionTypes[] = {
     LLVM_READOBJ_ENUM_CLASS_ENT(DebugSubsectionKind, CoffSymbolRVA),
 };
 
-const EnumEntry<uint32_t> FrameDataFlags[] = {
+static const EnumEntry<uint32_t> FrameDataFlags[] = {
     LLVM_READOBJ_ENUM_ENT(FrameData, HasSEH),
     LLVM_READOBJ_ENUM_ENT(FrameData, HasEH),
     LLVM_READOBJ_ENUM_ENT(FrameData, IsFunctionStart),
 };
 
-const EnumEntry<uint8_t> FileChecksumKindNames[] = {
+static const EnumEntry<uint8_t> FileChecksumKindNames[] = {
   LLVM_READOBJ_ENUM_CLASS_ENT(FileChecksumKind, None),
   LLVM_READOBJ_ENUM_CLASS_ENT(FileChecksumKind, MD5),
   LLVM_READOBJ_ENUM_CLASS_ENT(FileChecksumKind, SHA1),
@@ -710,10 +709,7 @@ void COFFDumper::printPEHeader(const PEHeader *Hdr) {
     };
 
     for (uint32_t i = 0; i < Hdr->NumberOfRvaAndSize; ++i)
-      if (i < sizeof(directory) / sizeof(char *))
-        printDataDirectory(i, directory[i]);
-      else
-        printDataDirectory(i, "Unknown");
+      printDataDirectory(i, directory[i]);
   }
 }
 
@@ -1878,7 +1874,7 @@ void COFFDumper::printResourceDirectoryTable(
         OS << ": (ID " << Entry.Identifier.ID << ")";
       }
     }
-    Name = IDStr;
+    Name = StringRef(IDStr);
     ListScope ResourceType(W, Level.str() + Name.str());
     if (Entry.Offset.isSubDir()) {
       W.printHex("Table Offset", Entry.Offset.value());

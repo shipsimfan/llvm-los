@@ -13,8 +13,7 @@
 #include "llvm/Object/TapiUniversal.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Object/Error.h"
-#include "llvm/Object/TapiFile.h"
-#include "llvm/TextAPI/ArchitectureSet.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/TextAPI/TextAPIReader.h"
 
 using namespace llvm;

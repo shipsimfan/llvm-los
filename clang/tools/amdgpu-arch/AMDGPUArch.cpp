@@ -11,24 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if defined(__has_include)
-#if __has_include("hsa.h")
-#define HSA_HEADER_FOUND 1
-#include "hsa.h"
-#elif __has_include("hsa/hsa.h")
-#define HSA_HEADER_FOUND 1
-#include "hsa/hsa.h"
-#else
-#define HSA_HEADER_FOUND 0
-#endif
-#else
-#define HSA_HEADER_FOUND 0
-#endif
-
-#if !HSA_HEADER_FOUND
-int main() { return 1; }
-#else
-
+#include <hsa.h>
 #include <string>
 #include <vector>
 
@@ -74,5 +57,3 @@ int main() {
   hsa_shut_down();
   return 0;
 }
-
-#endif

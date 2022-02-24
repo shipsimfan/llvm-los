@@ -13,7 +13,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "AsmParser/WebAssemblyAsmTypeCheck.h"
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
 #include "MCTargetDesc/WebAssemblyTargetStreamer.h"
 #include "TargetInfo/WebAssemblyTargetInfo.h"
@@ -24,7 +23,6 @@
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
-#include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/MC/MCSectionWasm.h"
@@ -32,9 +30,8 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCSymbolWasm.h"
-#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Endian.h"
-#include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/TargetRegistry.h"
 
 using namespace llvm;
 
@@ -228,36 +225,17 @@ class WebAssemblyAsmParser final : public MCTargetAsmParser {
     Else,
     Undefined,
   };
-  struct Nested {
-    NestingType NT;
-    wasm::WasmSignature Sig;
-  };
-  std::vector<Nested> NestingStack;
+  std::vector<NestingType> NestingStack;
 
   MCSymbolWasm *DefaultFunctionTable = nullptr;
   MCSymbol *LastFunctionLabel = nullptr;
-
-  bool is64;
-
-  WebAssemblyAsmTypeCheck TC;
-  // Don't type check if -no-type-check was set.
-  bool SkipTypeCheck;
 
 public:
   WebAssemblyAsmParser(const MCSubtargetInfo &STI, MCAsmParser &Parser,
                        const MCInstrInfo &MII, const MCTargetOptions &Options)
       : MCTargetAsmParser(Options, STI, MII), Parser(Parser),
-        Lexer(Parser.getLexer()),
-        is64(STI.getTargetTriple().isArch64Bit()),
-        TC(Parser, MII, is64), SkipTypeCheck(Options.MCNoTypeCheck) {
+        Lexer(Parser.getLexer()) {
     setAvailableFeatures(ComputeAvailableFeatures(STI.getFeatureBits()));
-    // Don't type check if this is inline asm, since that is a naked sequence of
-    // instructions without a function/locals decl.
-    auto &SM = Parser.getSourceManager();
-    auto BufferName =
-      SM.getBufferInfo(SM.getMainFileID()).Buffer->getBufferIdentifier();
-    if (BufferName == "<inline asm>")
-      SkipTypeCheck = true;
   }
 
   void Initialize(MCAsmParser &Parser) override {
@@ -322,16 +300,15 @@ public:
     }
   }
 
-  void push(NestingType NT) { NestingStack.push_back({NT, wasm::WasmSignature()}); }
+  void push(NestingType NT) { NestingStack.push_back(NT); }
 
   bool pop(StringRef Ins, NestingType NT1, NestingType NT2 = Undefined) {
     if (NestingStack.empty())
       return error(Twine("End of block construct with no start: ") + Ins);
     auto Top = NestingStack.back();
-    if (Top.NT != NT1 && Top.NT != NT2)
+    if (Top != NT1 && Top != NT2)
       return error(Twine("Block construct type mismatch, expected: ") +
-                   nestingString(Top.NT).second + ", instead got: " + Ins);
-    TC.setLastSig(Top.Sig);
+                   nestingString(Top).second + ", instead got: " + Ins);
     NestingStack.pop_back();
     return false;
   }
@@ -340,7 +317,7 @@ public:
     auto Err = !NestingStack.empty();
     while (!NestingStack.empty()) {
       error(Twine("Unmatched block construct(s) at function end: ") +
-            nestingString(NestingStack.back().NT).first);
+            nestingString(NestingStack.back()).first);
       NestingStack.pop_back();
     }
     return Err;
@@ -414,9 +391,9 @@ public:
     auto &Flt = Lexer.getTok();
     auto S = Flt.getString();
     double Val;
-    if (S.compare_insensitive("infinity") == 0) {
+    if (S.compare_lower("infinity") == 0) {
       Val = std::numeric_limits<double>::infinity();
-    } else if (S.compare_insensitive("nan") == 0) {
+    } else if (S.compare_lower("nan") == 0) {
       Val = std::numeric_limits<double>::quiet_NaN();
     } else {
       return true;
@@ -432,10 +409,10 @@ public:
 
   bool checkForP2AlignIfLoadStore(OperandVector &Operands, StringRef InstName) {
     // FIXME: there is probably a cleaner way to do this.
-    auto IsLoadStore = InstName.contains(".load") ||
-                       InstName.contains(".store") ||
-                       InstName.contains("prefetch");
-    auto IsAtomic = InstName.contains("atomic.");
+    auto IsLoadStore = InstName.find(".load") != StringRef::npos ||
+                       InstName.find(".store") != StringRef::npos ||
+                       InstName.find("prefetch") != StringRef::npos;
+    auto IsAtomic = InstName.find("atomic.") != StringRef::npos;
     if (IsLoadStore || IsAtomic) {
       // Parse load/store operands of the form: offset:p2align=align
       if (IsLoadStore && isNext(AsmToken::Colon)) {
@@ -451,7 +428,7 @@ public:
         // v128.{load,store}{8,16,32,64}_lane has both a memarg and a lane
         // index. We need to avoid parsing an extra alignment operand for the
         // lane index.
-        auto IsLoadStoreLane = InstName.contains("_lane");
+        auto IsLoadStoreLane = InstName.find("_lane") != StringRef::npos;
         if (IsLoadStoreLane && Operands.size() == 4)
           return false;
         // Alignment not specified (or atomics, must use default alignment).
@@ -469,11 +446,6 @@ public:
 
   void addBlockTypeOperand(OperandVector &Operands, SMLoc NameLoc,
                            WebAssembly::BlockType BT) {
-    if (BT != WebAssembly::BlockType::Void) {
-      wasm::WasmSignature Sig({static_cast<wasm::ValType>(BT)}, {});
-      TC.setLastSig(Sig);
-      NestingStack.back().Sig = Sig;
-    }
     Operands.push_back(std::make_unique<WebAssemblyOperand>(
         WebAssemblyOperand::Integer, NameLoc, NameLoc,
         WebAssemblyOperand::IntOp{static_cast<int64_t>(BT)}));
@@ -572,6 +544,7 @@ public:
     // proper nesting.
     bool ExpectBlockType = false;
     bool ExpectFuncType = false;
+    bool ExpectHeapType = false;
     std::unique_ptr<WebAssemblyOperand> FunctionTable;
     if (Name == "block") {
       push(Block);
@@ -624,6 +597,8 @@ public:
       if (parseFunctionTableOperand(&FunctionTable))
         return true;
       ExpectFuncType = true;
+    } else if (Name == "ref.null") {
+      ExpectHeapType = true;
     }
 
     if (ExpectFuncType || (ExpectBlockType && Lexer.is(AsmToken::LParen))) {
@@ -637,9 +612,6 @@ public:
         return true;
       // Got signature as block type, don't need more
       ExpectBlockType = false;
-      TC.setLastSig(*Signature.get());
-      if (ExpectBlockType)
-        NestingStack.back().Sig = *Signature.get();
       auto &Ctx = getContext();
       // The "true" here will cause this to be a nameless symbol.
       MCSymbol *Sym = Ctx.createTempSymbol("typeindex", true);
@@ -667,6 +639,15 @@ public:
           if (BT == WebAssembly::BlockType::Invalid)
             return error("Unknown block type: ", Id);
           addBlockTypeOperand(Operands, NameLoc, BT);
+          Parser.Lex();
+        } else if (ExpectHeapType) {
+          auto HeapType = WebAssembly::parseHeapType(Id.getString());
+          if (HeapType == WebAssembly::HeapType::Invalid) {
+            return error("Expected a heap type: ", Id);
+          }
+          Operands.push_back(std::make_unique<WebAssemblyOperand>(
+              WebAssemblyOperand::Integer, Id.getLoc(), Id.getEndLoc(),
+              WebAssemblyOperand::IntOp{static_cast<int64_t>(HeapType)}));
           Parser.Lex();
         } else {
           // Assume this identifier is a label.
@@ -874,7 +855,6 @@ public:
       auto Signature = std::make_unique<wasm::WasmSignature>();
       if (parseSignature(Signature.get()))
         return true;
-      TC.funcDecl(*Signature);
       WasmSym->setSignature(Signature.get());
       addSignature(std::move(Signature));
       WasmSym->setType(wasm::WASM_SYMBOL_TYPE_FUNCTION);
@@ -919,7 +899,7 @@ public:
       TOut.emitImportName(WasmSym, ImportName);
     }
 
-    if (DirectiveID.getString() == ".tagtype") {
+    if (DirectiveID.getString() == ".eventtype") {
       auto SymName = expectIdent();
       if (SymName.empty())
         return true;
@@ -929,8 +909,8 @@ public:
         return true;
       WasmSym->setSignature(Signature.get());
       addSignature(std::move(Signature));
-      WasmSym->setType(wasm::WASM_SYMBOL_TYPE_TAG);
-      TOut.emitTagType(WasmSym);
+      WasmSym->setType(wasm::WASM_SYMBOL_TYPE_EVENT);
+      TOut.emitEventType(WasmSym);
       // TODO: backend also calls TOut.emitIndIdx, but that is not implemented.
       return expect(AsmToken::EndOfStatement, "EOL");
     }
@@ -942,7 +922,6 @@ public:
       SmallVector<wasm::ValType, 4> Locals;
       if (parseRegTypeList(Locals))
         return true;
-      TC.localDecl(Locals);
       TOut.emitLocal(Locals);
       CurrentState = FunctionLocals;
       return expect(AsmToken::EndOfStatement, "EOL");
@@ -1007,7 +986,7 @@ public:
         if (Op0.getImm() == -1)
           Op0.setImm(Align);
       }
-      if (is64) {
+      if (getSTI().getTargetTriple().isArch64Bit()) {
         // Upgrade 32-bit loads/stores to 64-bit. These mostly differ by having
         // an offset64 arg instead of offset32, but to the assembler matcher
         // they're both immediates so don't get selected for.
@@ -1017,11 +996,9 @@ public:
           Inst.setOpcode(Opc64);
         }
       }
-      if (!SkipTypeCheck && TC.typeCheck(IDLoc, Inst))
-        return true;
       Out.emitInstruction(Inst, getSTI());
       if (CurrentState == EndFunction) {
-        onEndOfFunction(IDLoc);
+        onEndOfFunction();
       } else {
         CurrentState = Instructions;
       }
@@ -1093,7 +1070,7 @@ public:
     if (Group)
       WasmSym->setComdat(true);
     auto *WS =
-        getContext().getWasmSection(SecName, SectionKind::getText(), 0, Group,
+        getContext().getWasmSection(SecName, SectionKind::getText(), Group,
                                     MCContext::GenericSectionID, nullptr);
     getStreamer().SwitchSection(WS);
     // Also generate DWARF for this section if requested.
@@ -1101,11 +1078,7 @@ public:
       getContext().addGenDwarfSection(WS);
   }
 
-  void onEndOfFunction(SMLoc ErrorLoc) {
-    TC.endOfFunction(ErrorLoc);
-    // Reset the type checker state.
-    TC.Clear();
-
+  void onEndOfFunction() {
     // Automatically output a .size directive, so it becomes optional for the
     // user.
     if (!LastFunctionLabel) return;
@@ -1132,14 +1105,3 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeWebAssemblyAsmParser() {
 #define GET_SUBTARGET_FEATURE_NAME
 #define GET_MATCHER_IMPLEMENTATION
 #include "WebAssemblyGenAsmMatcher.inc"
-
-StringRef GetMnemonic(unsigned Opc) {
-  // FIXME: linear search!
-  for (auto &ME : MatchTable0) {
-    if (ME.Opcode == Opc) {
-      return ME.getMnemonic();
-    }
-  }
-  assert(false && "mnemonic not found");
-  return StringRef();
-}

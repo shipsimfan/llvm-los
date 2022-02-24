@@ -9,7 +9,6 @@
 #include "../ClangTidy.h"
 #include "../ClangTidyModule.h"
 #include "../ClangTidyModuleRegistry.h"
-#include "IdDependentBackwardBranchCheck.h"
 #include "KernelNameRestrictionCheck.h"
 #include "SingleWorkItemBarrierCheck.h"
 #include "StructPackAlignCheck.h"
@@ -24,8 +23,6 @@ namespace altera {
 class AlteraModule : public ClangTidyModule {
 public:
   void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
-    CheckFactories.registerCheck<IdDependentBackwardBranchCheck>(
-        "altera-id-dependent-backward-branch");
     CheckFactories.registerCheck<KernelNameRestrictionCheck>(
         "altera-kernel-name-restriction");
     CheckFactories.registerCheck<SingleWorkItemBarrierCheck>(

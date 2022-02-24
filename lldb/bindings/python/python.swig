@@ -121,7 +121,6 @@ def lldb_iter(obj, getsize, getelem):
 
 %{
 #include "../source/Plugins/ScriptInterpreter/Python/PythonDataObjects.h"
-#include "../source/Plugins/ScriptInterpreter/Python/SWIGPythonBridge.h"
 #include "../bindings/python/python-swigsafecast.swig"
 using namespace lldb_private;
 using namespace lldb_private::python;
@@ -133,8 +132,15 @@ using namespace lldb;
 %include "python-wrapper.swig"
 
 %pythoncode%{
+_initialize = True
+try:
+   import lldbconfig
+   _initialize = lldbconfig.INITIALIZE
+except ImportError:
+   pass
 debugger_unique_id = 0
-SBDebugger.Initialize()
+if _initialize:
+   SBDebugger.Initialize()
 debugger = None
 target = None
 process = None

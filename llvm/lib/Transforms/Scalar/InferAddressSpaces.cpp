@@ -96,13 +96,10 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
-#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstIterator.h"
@@ -118,7 +115,6 @@
 #include "llvm/IR/User.h"
 #include "llvm/IR/Value.h"
 #include "llvm/IR/ValueHandle.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
@@ -150,14 +146,6 @@ static const unsigned UninitializedAddressSpace =
 namespace {
 
 using ValueToAddrSpaceMapTy = DenseMap<const Value *, unsigned>;
-// Different from ValueToAddrSpaceMapTy, where a new addrspace is inferred on
-// the *def* of a value, PredicatedAddrSpaceMapTy is map where a new
-// addrspace is inferred on the *use* of a pointer. This map is introduced to
-// infer addrspace from the addrspace predicate assumption built from assume
-// intrinsic. In that scenario, only specific uses (under valid assumption
-// context) could be inferred with a new addrspace.
-using PredicatedAddrSpaceMapTy =
-    DenseMap<std::pair<const Value *, const Value *>, unsigned>;
 using PostorderStackTy = llvm::SmallVector<PointerIntPair<Value *, 1, bool>, 4>;
 
 class InferAddressSpaces : public FunctionPass {
@@ -172,8 +160,6 @@ public:
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
-    AU.addPreserved<DominatorTreeWrapperPass>();
-    AU.addRequired<AssumptionCacheTracker>();
     AU.addRequired<TargetTransformInfoWrapperPass>();
   }
 
@@ -181,8 +167,6 @@ public:
 };
 
 class InferAddressSpacesImpl {
-  AssumptionCache &AC;
-  DominatorTree *DT = nullptr;
   const TargetTransformInfo *TTI = nullptr;
   const DataLayout *DL = nullptr;
 
@@ -190,24 +174,21 @@ class InferAddressSpacesImpl {
   /// possible.
   unsigned FlatAddrSpace = 0;
 
-  // Try to update the address space of V. If V is updated, returns true and
-  // false otherwise.
-  bool updateAddressSpace(const Value &V,
-                          ValueToAddrSpaceMapTy &InferredAddrSpace,
-                          PredicatedAddrSpaceMapTy &PredicatedAS) const;
+  // Returns the new address space of V if updated; otherwise, returns None.
+  Optional<unsigned>
+  updateAddressSpace(const Value &V,
+                     const ValueToAddrSpaceMapTy &InferredAddrSpace) const;
 
   // Tries to infer the specific address space of each address expression in
   // Postorder.
   void inferAddressSpaces(ArrayRef<WeakTrackingVH> Postorder,
-                          ValueToAddrSpaceMapTy &InferredAddrSpace,
-                          PredicatedAddrSpaceMapTy &PredicatedAS) const;
+                          ValueToAddrSpaceMapTy *InferredAddrSpace) const;
 
   bool isSafeToCastConstAddrSpace(Constant *C, unsigned NewAS) const;
 
   Value *cloneInstructionWithNewAddressSpace(
       Instruction *I, unsigned NewAddrSpace,
       const ValueToValueMapTy &ValueWithNewAddrSpace,
-      const PredicatedAddrSpaceMapTy &PredicatedAS,
       SmallVectorImpl<const Use *> *UndefUsesToFix) const;
 
   // Changes the flat address expressions in function F to point to specific
@@ -215,8 +196,7 @@ class InferAddressSpacesImpl {
   // all flat expressions in the use-def graph of function F.
   bool rewriteWithNewAddressSpaces(
       const TargetTransformInfo &TTI, ArrayRef<WeakTrackingVH> Postorder,
-      const ValueToAddrSpaceMapTy &InferredAddrSpace,
-      const PredicatedAddrSpaceMapTy &PredicatedAS, Function *F) const;
+      const ValueToAddrSpaceMapTy &InferredAddrSpace, Function *F) const;
 
   void appendsFlatAddressExpressionToPostorderStack(
       Value *V, PostorderStackTy &PostorderStack,
@@ -231,18 +211,14 @@ class InferAddressSpacesImpl {
   std::vector<WeakTrackingVH> collectFlatAddressExpressions(Function &F) const;
 
   Value *cloneValueWithNewAddressSpace(
-      Value *V, unsigned NewAddrSpace,
-      const ValueToValueMapTy &ValueWithNewAddrSpace,
-      const PredicatedAddrSpaceMapTy &PredicatedAS,
-      SmallVectorImpl<const Use *> *UndefUsesToFix) const;
+    Value *V, unsigned NewAddrSpace,
+    const ValueToValueMapTy &ValueWithNewAddrSpace,
+    SmallVectorImpl<const Use *> *UndefUsesToFix) const;
   unsigned joinAddressSpaces(unsigned AS1, unsigned AS2) const;
 
-  unsigned getPredicatedAddrSpace(const Value &V, Value *Opnd) const;
-
 public:
-  InferAddressSpacesImpl(AssumptionCache &AC, DominatorTree *DT,
-                         const TargetTransformInfo *TTI, unsigned FlatAddrSpace)
-      : AC(AC), DT(DT), TTI(TTI), FlatAddrSpace(FlatAddrSpace) {}
+  InferAddressSpacesImpl(const TargetTransformInfo *TTI, unsigned FlatAddrSpace)
+      : TTI(TTI), FlatAddrSpace(FlatAddrSpace) {}
   bool run(Function &F);
 };
 
@@ -250,12 +226,14 @@ public:
 
 char InferAddressSpaces::ID = 0;
 
-INITIALIZE_PASS_BEGIN(InferAddressSpaces, DEBUG_TYPE, "Infer address spaces",
-                      false, false)
-INITIALIZE_PASS_DEPENDENCY(AssumptionCacheTracker)
-INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
-INITIALIZE_PASS_END(InferAddressSpaces, DEBUG_TYPE, "Infer address spaces",
-                    false, false)
+namespace llvm {
+
+void initializeInferAddressSpacesPass(PassRegistry &);
+
+} // end namespace llvm
+
+INITIALIZE_PASS(InferAddressSpaces, DEBUG_TYPE, "Infer address spaces",
+                false, false)
 
 // Check whether that's no-op pointer bicast using a pair of
 // `ptrtoint`/`inttoptr` due to the missing no-op pointer bitcast over
@@ -493,7 +471,7 @@ InferAddressSpacesImpl::collectFlatAddressExpressions(Function &F) const {
     } else if (auto *I2P = dyn_cast<IntToPtrInst>(&I)) {
       if (isNoopPtrIntCastPair(cast<Operator>(I2P), *DL, TTI))
         PushPtrOperand(
-            cast<Operator>(I2P->getOperand(0))->getOperand(0));
+            cast<PtrToIntInst>(I2P->getOperand(0))->getPointerOperand());
     }
   }
 
@@ -527,30 +505,17 @@ InferAddressSpacesImpl::collectFlatAddressExpressions(Function &F) const {
 static Value *operandWithNewAddressSpaceOrCreateUndef(
     const Use &OperandUse, unsigned NewAddrSpace,
     const ValueToValueMapTy &ValueWithNewAddrSpace,
-    const PredicatedAddrSpaceMapTy &PredicatedAS,
     SmallVectorImpl<const Use *> *UndefUsesToFix) {
   Value *Operand = OperandUse.get();
 
-  Type *NewPtrTy = PointerType::getWithSamePointeeType(
-      cast<PointerType>(Operand->getType()), NewAddrSpace);
+  Type *NewPtrTy =
+      Operand->getType()->getPointerElementType()->getPointerTo(NewAddrSpace);
 
   if (Constant *C = dyn_cast<Constant>(Operand))
     return ConstantExpr::getAddrSpaceCast(C, NewPtrTy);
 
   if (Value *NewOperand = ValueWithNewAddrSpace.lookup(Operand))
     return NewOperand;
-
-  Instruction *Inst = cast<Instruction>(OperandUse.getUser());
-  auto I = PredicatedAS.find(std::make_pair(Inst, Operand));
-  if (I != PredicatedAS.end()) {
-    // Insert an addrspacecast on that operand before the user.
-    unsigned NewAS = I->second;
-    Type *NewPtrTy = PointerType::getWithSamePointeeType(
-        cast<PointerType>(Operand->getType()), NewAS);
-    auto *NewI = new AddrSpaceCastInst(Operand, NewPtrTy);
-    NewI->insertBefore(Inst);
-    return NewI;
-  }
 
   UndefUsesToFix->push_back(&OperandUse);
   return UndefValue::get(NewPtrTy);
@@ -571,10 +536,9 @@ static Value *operandWithNewAddressSpaceOrCreateUndef(
 Value *InferAddressSpacesImpl::cloneInstructionWithNewAddressSpace(
     Instruction *I, unsigned NewAddrSpace,
     const ValueToValueMapTy &ValueWithNewAddrSpace,
-    const PredicatedAddrSpaceMapTy &PredicatedAS,
     SmallVectorImpl<const Use *> *UndefUsesToFix) const {
-  Type *NewPtrType = PointerType::getWithSamePointeeType(
-      cast<PointerType>(I->getType()), NewAddrSpace);
+  Type *NewPtrType =
+      I->getType()->getPointerElementType()->getPointerTo(NewAddrSpace);
 
   if (I->getOpcode() == Instruction::AddrSpaceCast) {
     Value *Src = I->getOperand(0);
@@ -593,7 +557,7 @@ Value *InferAddressSpacesImpl::cloneInstructionWithNewAddressSpace(
     assert(II->getIntrinsicID() == Intrinsic::ptrmask);
     Value *NewPtr = operandWithNewAddressSpaceOrCreateUndef(
         II->getArgOperandUse(0), NewAddrSpace, ValueWithNewAddrSpace,
-        PredicatedAS, UndefUsesToFix);
+        UndefUsesToFix);
     Value *Rewrite =
         TTI->rewriteIntrinsicWithAddressSpace(II, II->getArgOperand(0), NewPtr);
     if (Rewrite) {
@@ -608,8 +572,7 @@ Value *InferAddressSpacesImpl::cloneInstructionWithNewAddressSpace(
   if (AS != UninitializedAddressSpace) {
     // For the assumed address space, insert an `addrspacecast` to make that
     // explicit.
-    Type *NewPtrTy = PointerType::getWithSamePointeeType(
-        cast<PointerType>(I->getType()), AS);
+    auto *NewPtrTy = I->getType()->getPointerElementType()->getPointerTo(AS);
     auto *NewI = new AddrSpaceCastInst(I, NewPtrTy);
     NewI->insertAfter(I);
     return NewI;
@@ -622,8 +585,7 @@ Value *InferAddressSpacesImpl::cloneInstructionWithNewAddressSpace(
       NewPointerOperands.push_back(nullptr);
     else
       NewPointerOperands.push_back(operandWithNewAddressSpaceOrCreateUndef(
-          OperandUse, NewAddrSpace, ValueWithNewAddrSpace, PredicatedAS,
-          UndefUsesToFix));
+                                     OperandUse, NewAddrSpace, ValueWithNewAddrSpace, UndefUsesToFix));
   }
 
   switch (I->getOpcode()) {
@@ -655,13 +617,10 @@ Value *InferAddressSpacesImpl::cloneInstructionWithNewAddressSpace(
   case Instruction::IntToPtr: {
     assert(isNoopPtrIntCastPair(cast<Operator>(I), *DL, TTI));
     Value *Src = cast<Operator>(I->getOperand(0))->getOperand(0);
-    if (Src->getType() == NewPtrType)
-      return Src;
-
-    // If we had a no-op inttoptr/ptrtoint pair, we may still have inferred a
-    // source address space from a generic pointer source need to insert a cast
-    // back.
-    return CastInst::CreatePointerBitCastOrAddrSpaceCast(Src, NewPtrType);
+    assert(Src->getType()->getPointerAddressSpace() == NewAddrSpace);
+    if (Src->getType() != NewPtrType)
+      return new BitCastInst(Src, NewPtrType);
+    return Src;
   }
   default:
     llvm_unreachable("Unexpected opcode");
@@ -675,10 +634,8 @@ static Value *cloneConstantExprWithNewAddressSpace(
     ConstantExpr *CE, unsigned NewAddrSpace,
     const ValueToValueMapTy &ValueWithNewAddrSpace, const DataLayout *DL,
     const TargetTransformInfo *TTI) {
-  Type *TargetType = CE->getType()->isPointerTy()
-                         ? PointerType::getWithSamePointeeType(
-                               cast<PointerType>(CE->getType()), NewAddrSpace)
-                         : CE->getType();
+  Type *TargetType =
+    CE->getType()->getPointerElementType()->getPointerTo(NewAddrSpace);
 
   if (CE->getOpcode() == Instruction::AddrSpaceCast) {
     // Because CE is flat, the source address space must be specific.
@@ -748,8 +705,9 @@ static Value *cloneConstantExprWithNewAddressSpace(
   if (CE->getOpcode() == Instruction::GetElementPtr) {
     // Needs to specify the source type while constructing a getelementptr
     // constant expression.
-    return CE->getWithOperands(NewOperands, TargetType, /*OnlyIfReduced=*/false,
-                               cast<GEPOperator>(CE)->getSourceElementType());
+    return CE->getWithOperands(
+      NewOperands, TargetType, /*OnlyIfReduced=*/false,
+      NewOperands[0]->getType()->getPointerElementType());
   }
 
   return CE->getWithOperands(NewOperands, TargetType);
@@ -763,7 +721,6 @@ static Value *cloneConstantExprWithNewAddressSpace(
 Value *InferAddressSpacesImpl::cloneValueWithNewAddressSpace(
     Value *V, unsigned NewAddrSpace,
     const ValueToValueMapTy &ValueWithNewAddrSpace,
-    const PredicatedAddrSpaceMapTy &PredicatedAS,
     SmallVectorImpl<const Use *> *UndefUsesToFix) const {
   // All values in Postorder are flat address expressions.
   assert(V->getType()->getPointerAddressSpace() == FlatAddrSpace &&
@@ -771,7 +728,7 @@ Value *InferAddressSpacesImpl::cloneValueWithNewAddressSpace(
 
   if (Instruction *I = dyn_cast<Instruction>(V)) {
     Value *NewV = cloneInstructionWithNewAddressSpace(
-        I, NewAddrSpace, ValueWithNewAddrSpace, PredicatedAS, UndefUsesToFix);
+      I, NewAddrSpace, ValueWithNewAddrSpace, UndefUsesToFix);
     if (Instruction *NewI = dyn_cast_or_null<Instruction>(NewV)) {
       if (NewI->getParent() == nullptr) {
         NewI->insertBefore(I);
@@ -819,43 +776,46 @@ bool InferAddressSpacesImpl::run(Function &F) {
   // Runs a data-flow analysis to refine the address spaces of every expression
   // in Postorder.
   ValueToAddrSpaceMapTy InferredAddrSpace;
-  PredicatedAddrSpaceMapTy PredicatedAS;
-  inferAddressSpaces(Postorder, InferredAddrSpace, PredicatedAS);
+  inferAddressSpaces(Postorder, &InferredAddrSpace);
 
   // Changes the address spaces of the flat address expressions who are inferred
   // to point to a specific address space.
-  return rewriteWithNewAddressSpaces(*TTI, Postorder, InferredAddrSpace,
-                                     PredicatedAS, &F);
+  return rewriteWithNewAddressSpaces(*TTI, Postorder, InferredAddrSpace, &F);
 }
 
 // Constants need to be tracked through RAUW to handle cases with nested
 // constant expressions, so wrap values in WeakTrackingVH.
 void InferAddressSpacesImpl::inferAddressSpaces(
     ArrayRef<WeakTrackingVH> Postorder,
-    ValueToAddrSpaceMapTy &InferredAddrSpace,
-    PredicatedAddrSpaceMapTy &PredicatedAS) const {
+    ValueToAddrSpaceMapTy *InferredAddrSpace) const {
   SetVector<Value *> Worklist(Postorder.begin(), Postorder.end());
   // Initially, all expressions are in the uninitialized address space.
   for (Value *V : Postorder)
-    InferredAddrSpace[V] = UninitializedAddressSpace;
+    (*InferredAddrSpace)[V] = UninitializedAddressSpace;
 
   while (!Worklist.empty()) {
     Value *V = Worklist.pop_back_val();
 
-    // Try to update the address space of the stack top according to the
+    // Tries to update the address space of the stack top according to the
     // address spaces of its operands.
-    if (!updateAddressSpace(*V, InferredAddrSpace, PredicatedAS))
+    LLVM_DEBUG(dbgs() << "Updating the address space of\n  " << *V << '\n');
+    Optional<unsigned> NewAS = updateAddressSpace(*V, *InferredAddrSpace);
+    if (!NewAS.hasValue())
       continue;
+    // If any updates are made, grabs its users to the worklist because
+    // their address spaces can also be possibly updated.
+    LLVM_DEBUG(dbgs() << "  to " << NewAS.getValue() << '\n');
+    (*InferredAddrSpace)[V] = NewAS.getValue();
 
     for (Value *User : V->users()) {
       // Skip if User is already in the worklist.
       if (Worklist.count(User))
         continue;
 
-      auto Pos = InferredAddrSpace.find(User);
+      auto Pos = InferredAddrSpace->find(User);
       // Our algorithm only updates the address spaces of flat address
       // expressions, which are those in InferredAddrSpace.
-      if (Pos == InferredAddrSpace.end())
+      if (Pos == InferredAddrSpace->end())
         continue;
 
       // Function updateAddressSpace moves the address space down a lattice
@@ -869,36 +829,9 @@ void InferAddressSpacesImpl::inferAddressSpaces(
   }
 }
 
-unsigned InferAddressSpacesImpl::getPredicatedAddrSpace(const Value &V,
-                                                        Value *Opnd) const {
-  const Instruction *I = dyn_cast<Instruction>(&V);
-  if (!I)
-    return UninitializedAddressSpace;
-
-  Opnd = Opnd->stripInBoundsOffsets();
-  for (auto &AssumeVH : AC.assumptionsFor(Opnd)) {
-    if (!AssumeVH)
-      continue;
-    CallInst *CI = cast<CallInst>(AssumeVH);
-    if (!isValidAssumeForContext(CI, I, DT))
-      continue;
-
-    const Value *Ptr;
-    unsigned AS;
-    std::tie(Ptr, AS) = TTI->getPredicatedAddrSpace(CI->getArgOperand(0));
-    if (Ptr)
-      return AS;
-  }
-
-  return UninitializedAddressSpace;
-}
-
-bool InferAddressSpacesImpl::updateAddressSpace(
-    const Value &V, ValueToAddrSpaceMapTy &InferredAddrSpace,
-    PredicatedAddrSpaceMapTy &PredicatedAS) const {
+Optional<unsigned> InferAddressSpacesImpl::updateAddressSpace(
+    const Value &V, const ValueToAddrSpaceMapTy &InferredAddrSpace) const {
   assert(InferredAddrSpace.count(&V));
-
-  LLVM_DEBUG(dbgs() << "Updating the address space of\n  " << V << '\n');
 
   // The new inferred address space equals the join of the address spaces
   // of all its pointer operands.
@@ -925,7 +858,7 @@ bool InferAddressSpacesImpl::updateAddressSpace(
     // address space is known.
     if ((C1 && Src0AS == UninitializedAddressSpace) ||
         (C0 && Src1AS == UninitializedAddressSpace))
-      return false;
+      return None;
 
     if (C0 && isSafeToCastConstAddrSpace(C0, Src1AS))
       NewAS = Src1AS;
@@ -942,23 +875,10 @@ bool InferAddressSpacesImpl::updateAddressSpace(
       // Otherwise, infer the address space from its pointer operands.
       for (Value *PtrOperand : getPointerOperands(V, *DL, TTI)) {
         auto I = InferredAddrSpace.find(PtrOperand);
-        unsigned OperandAS;
-        if (I == InferredAddrSpace.end()) {
-          OperandAS = PtrOperand->getType()->getPointerAddressSpace();
-          if (OperandAS == FlatAddrSpace) {
-            // Check AC for assumption dominating V.
-            unsigned AS = getPredicatedAddrSpace(V, PtrOperand);
-            if (AS != UninitializedAddressSpace) {
-              LLVM_DEBUG(dbgs()
-                         << "  deduce operand AS from the predicate addrspace "
-                         << AS << '\n');
-              OperandAS = AS;
-              // Record this use with the predicated AS.
-              PredicatedAS[std::make_pair(&V, PtrOperand)] = OperandAS;
-            }
-          }
-        } else
-          OperandAS = I->second;
+        unsigned OperandAS =
+            I != InferredAddrSpace.end()
+                ? I->second
+                : PtrOperand->getType()->getPointerAddressSpace();
 
         // join(flat, *) = flat. So we can break if NewAS is already flat.
         NewAS = joinAddressSpaces(NewAS, OperandAS);
@@ -971,13 +891,8 @@ bool InferAddressSpacesImpl::updateAddressSpace(
   unsigned OldAS = InferredAddrSpace.lookup(&V);
   assert(OldAS != FlatAddrSpace);
   if (OldAS == NewAS)
-    return false;
-
-  // If any updates are made, grabs its users to the worklist because
-  // their address spaces can also be possibly updated.
-  LLVM_DEBUG(dbgs() << "  to " << NewAS << '\n');
-  InferredAddrSpace[&V] = NewAS;
-  return true;
+    return None;
+  return NewAS;
 }
 
 /// \p returns true if \p U is the pointer operand of a memory instruction with
@@ -1038,13 +953,7 @@ static bool handleMemIntrinsicPtrUse(MemIntrinsic *MI, Value *OldV,
     if (Dest == OldV)
       Dest = NewV;
 
-    if (isa<MemCpyInlineInst>(MTI)) {
-      MDNode *TBAAStruct = MTI->getMetadata(LLVMContext::MD_tbaa_struct);
-      B.CreateMemCpyInline(Dest, MTI->getDestAlign(), Src,
-                           MTI->getSourceAlign(), MTI->getLength(),
-                           false, // isVolatile
-                           TBAA, TBAAStruct, ScopeMD, NoAliasMD);
-    } else if (isa<MemCpyInst>(MTI)) {
+    if (isa<MemCpyInst>(MTI)) {
       MDNode *TBAAStruct = MTI->getMetadata(LLVMContext::MD_tbaa_struct);
       B.CreateMemCpy(Dest, MTI->getDestAlign(), Src, MTI->getSourceAlign(),
                      MTI->getLength(),
@@ -1108,8 +1017,7 @@ static Value::use_iterator skipToNextUser(Value::use_iterator I,
 
 bool InferAddressSpacesImpl::rewriteWithNewAddressSpaces(
     const TargetTransformInfo &TTI, ArrayRef<WeakTrackingVH> Postorder,
-    const ValueToAddrSpaceMapTy &InferredAddrSpace,
-    const PredicatedAddrSpaceMapTy &PredicatedAS, Function *F) const {
+    const ValueToAddrSpaceMapTy &InferredAddrSpace, Function *F) const {
   // For each address expression to be modified, creates a clone of it with its
   // pointer operands converted to the new address space. Since the pointer
   // operands are converted, the clone is naturally in the new address space by
@@ -1125,9 +1033,8 @@ bool InferAddressSpacesImpl::rewriteWithNewAddressSpaces(
       continue;
 
     if (V->getType()->getPointerAddressSpace() != NewAddrSpace) {
-      Value *New =
-          cloneValueWithNewAddressSpace(V, NewAddrSpace, ValueWithNewAddrSpace,
-                                        PredicatedAS, &UndefUsesToFix);
+      Value *New = cloneValueWithNewAddressSpace(
+          V, NewAddrSpace, ValueWithNewAddrSpace, &UndefUsesToFix);
       if (New)
         ValueWithNewAddrSpace[V] = New;
     }
@@ -1239,9 +1146,8 @@ bool InferAddressSpacesImpl::rewriteWithNewAddressSpaces(
         if (AddrSpaceCastInst *ASC = dyn_cast<AddrSpaceCastInst>(CurUser)) {
           unsigned NewAS = NewV->getType()->getPointerAddressSpace();
           if (ASC->getDestAddressSpace() == NewAS) {
-            if (!cast<PointerType>(ASC->getType())
-                    ->hasSameElementTypeAs(
-                        cast<PointerType>(NewV->getType()))) {
+            if (ASC->getType()->getPointerElementType() !=
+                NewV->getType()->getPointerElementType()) {
               NewV = CastInst::Create(Instruction::BitCast, NewV,
                                       ASC->getType(), "", ASC);
             }
@@ -1252,18 +1158,12 @@ bool InferAddressSpacesImpl::rewriteWithNewAddressSpaces(
         }
 
         // Otherwise, replaces the use with flat(NewV).
-        if (Instruction *VInst = dyn_cast<Instruction>(V)) {
+        if (Instruction *Inst = dyn_cast<Instruction>(V)) {
           // Don't create a copy of the original addrspacecast.
           if (U == V && isa<AddrSpaceCastInst>(V))
             continue;
 
-          // Insert the addrspacecast after NewV.
-          BasicBlock::iterator InsertPos;
-          if (Instruction *NewVInst = dyn_cast<Instruction>(NewV))
-            InsertPos = std::next(NewVInst->getIterator());
-          else
-            InsertPos = std::next(VInst->getIterator());
-
+          BasicBlock::iterator InsertPos = std::next(Inst->getIterator());
           while (isa<PHINode>(InsertPos))
             ++InsertPos;
           U.set(new AddrSpaceCastInst(NewV, V->getType(), "", &*InsertPos));
@@ -1290,10 +1190,7 @@ bool InferAddressSpaces::runOnFunction(Function &F) {
   if (skipFunction(F))
     return false;
 
-  auto *DTWP = getAnalysisIfAvailable<DominatorTreeWrapperPass>();
-  DominatorTree *DT = DTWP ? &DTWP->getDomTree() : nullptr;
   return InferAddressSpacesImpl(
-             getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F), DT,
              &getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F),
              FlatAddrSpace)
       .run(F);
@@ -1311,14 +1208,11 @@ InferAddressSpacesPass::InferAddressSpacesPass(unsigned AddressSpace)
 PreservedAnalyses InferAddressSpacesPass::run(Function &F,
                                               FunctionAnalysisManager &AM) {
   bool Changed =
-      InferAddressSpacesImpl(AM.getResult<AssumptionAnalysis>(F),
-                             AM.getCachedResult<DominatorTreeAnalysis>(F),
-                             &AM.getResult<TargetIRAnalysis>(F), FlatAddrSpace)
+      InferAddressSpacesImpl(&AM.getResult<TargetIRAnalysis>(F), FlatAddrSpace)
           .run(F);
   if (Changed) {
     PreservedAnalyses PA;
     PA.preserveSet<CFGAnalyses>();
-    PA.preserve<DominatorTreeAnalysis>();
     return PA;
   }
   return PreservedAnalyses::all();

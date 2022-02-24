@@ -12,8 +12,6 @@
 using namespace mlir;
 using namespace mlir::math;
 
-#include "mlir/Dialect/Math/IR/MathOpsDialect.cpp.inc"
-
 namespace {
 /// This class defines the interface for handling inlining with math
 /// operations.
@@ -26,7 +24,7 @@ struct MathInlinerInterface : public DialectInlinerInterface {
     return true;
   }
 };
-} // namespace
+} // end anonymous namespace
 
 void mlir::math::MathDialect::initialize() {
   addOperations<

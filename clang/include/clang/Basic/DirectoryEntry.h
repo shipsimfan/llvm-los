@@ -19,7 +19,6 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/ErrorOr.h"
 
 namespace clang {
@@ -121,25 +120,28 @@ public:
   MapEntryOptionalStorage() : MaybeRef(optional_none_tag()) {}
 
   template <class... ArgTypes>
-  explicit MapEntryOptionalStorage(llvm::in_place_t, ArgTypes &&...Args)
+  explicit MapEntryOptionalStorage(llvm::optional_detail::in_place_t,
+                                   ArgTypes &&...Args)
       : MaybeRef(std::forward<ArgTypes>(Args)...) {}
 
   void reset() { MaybeRef = optional_none_tag(); }
 
   bool hasValue() const { return MaybeRef.hasOptionalValue(); }
 
-  RefTy &getValue() & {
+  RefTy &getValue() LLVM_LVALUE_FUNCTION {
     assert(hasValue());
     return MaybeRef;
   }
-  RefTy const &getValue() const & {
+  RefTy const &getValue() const LLVM_LVALUE_FUNCTION {
     assert(hasValue());
     return MaybeRef;
   }
+#if LLVM_HAS_RVALUE_REFERENCE_THIS
   RefTy &&getValue() && {
     assert(hasValue());
     return std::move(MaybeRef);
   }
+#endif
 
   template <class... Args> void emplace(Args &&...args) {
     MaybeRef = RefTy(std::forward<Args>(args)...);

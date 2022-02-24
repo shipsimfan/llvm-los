@@ -5,10 +5,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// This file defines the DenseMap class.
-///
+//
+// This file defines the DenseMap class.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_DENSEMAP_H
@@ -924,9 +923,6 @@ public:
     init(NextPowerOf2(std::distance(I, E)));
     this->insert(I, E);
   }
-
-  SmallDenseMap(std::initializer_list<typename BaseT::value_type> Vals)
-      : SmallDenseMap(Vals.begin(), Vals.end()) {}
 
   ~SmallDenseMap() {
     this->destroyAll();

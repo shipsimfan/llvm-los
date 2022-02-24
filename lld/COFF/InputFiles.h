@@ -14,7 +14,6 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/StringSet.h"
 #include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/COFF.h"
@@ -38,7 +37,6 @@ namespace lld {
 class DWARFCache;
 
 namespace coff {
-class COFFLinkerContext;
 
 std::vector<MemoryBufferRef> getArchiveMembers(llvm::object::Archive *file);
 
@@ -69,8 +67,7 @@ public:
     LazyObjectKind,
     PDBKind,
     ImportKind,
-    BitcodeKind,
-    DLLKind
+    BitcodeKind
   };
   Kind kind() const { return fileKind; }
   virtual ~InputFile() {}
@@ -92,26 +89,19 @@ public:
   // Returns .drectve section contents if exist.
   StringRef getDirectives() { return directives; }
 
-  COFFLinkerContext &ctx;
-
 protected:
-  InputFile(COFFLinkerContext &c, Kind k, MemoryBufferRef m, bool lazy = false)
-      : mb(m), ctx(c), fileKind(k), lazy(lazy) {}
+  InputFile(Kind k, MemoryBufferRef m) : mb(m), fileKind(k) {}
 
   StringRef directives;
 
 private:
   const Kind fileKind;
-
-public:
-  // True if this is a lazy ObjFile or BitcodeFile.
-  bool lazy = false;
 };
 
 // .lib or .a file.
 class ArchiveFile : public InputFile {
 public:
-  explicit ArchiveFile(COFFLinkerContext &ctx, MemoryBufferRef m);
+  explicit ArchiveFile(MemoryBufferRef m);
   static bool classof(const InputFile *f) { return f->kind() == ArchiveKind; }
   void parse() override;
 
@@ -125,14 +115,30 @@ private:
   llvm::DenseSet<uint64_t> seen;
 };
 
+// .obj or .o file between -start-lib and -end-lib.
+class LazyObjFile : public InputFile {
+public:
+  explicit LazyObjFile(MemoryBufferRef m) : InputFile(LazyObjectKind, m) {}
+  static bool classof(const InputFile *f) {
+    return f->kind() == LazyObjectKind;
+  }
+  // Makes this object file part of the link.
+  void fetch();
+  // Adds the symbols in this file to the symbol table as LazyObject symbols.
+  void parse() override;
+
+private:
+  std::vector<Symbol *> symbols;
+};
+
 // .obj or .o file. This may be a member of an archive file.
 class ObjFile : public InputFile {
 public:
-  explicit ObjFile(COFFLinkerContext &ctx, MemoryBufferRef m, bool lazy = false)
-      : InputFile(ctx, ObjectKind, m, lazy) {}
+  explicit ObjFile(MemoryBufferRef m) : InputFile(ObjectKind, m) {}
+  explicit ObjFile(MemoryBufferRef m, std::vector<Symbol *> &&symbols)
+      : InputFile(ObjectKind, m), symbols(std::move(symbols)) {}
   static bool classof(const InputFile *f) { return f->kind() == ObjectKind; }
   void parse() override;
-  void parseLazy();
   MachineTypes getMachineType() override;
   ArrayRef<Chunk *> getChunks() { return chunks; }
   ArrayRef<SectionChunk *> getDebugChunks() { return debugChunks; }
@@ -166,6 +172,8 @@ public:
   void includeResourceChunks();
 
   bool isResourceObjFile() const { return !resourceChunks.empty(); }
+
+  static std::vector<ObjFile *> instances;
 
   // Flags in the absolute @feat.00 symbol if it is present. These usually
   // indicate if an object was compiled with certain security features enabled
@@ -217,8 +225,6 @@ private:
   const coff_section *getSection(COFFSymbolRef sym) {
     return getSection(sym.getSectionNumber());
   }
-
-  void enqueuePdbFile(StringRef path, ObjFile *fromFile);
 
   void initializeChunks();
   void initializeSymbols();
@@ -310,13 +316,16 @@ private:
 // stream.
 class PDBInputFile : public InputFile {
 public:
-  explicit PDBInputFile(COFFLinkerContext &ctx, MemoryBufferRef m);
+  explicit PDBInputFile(MemoryBufferRef m);
   ~PDBInputFile();
   static bool classof(const InputFile *f) { return f->kind() == PDBKind; }
   void parse() override;
 
-  static PDBInputFile *findFromRecordPath(const COFFLinkerContext &ctx,
-                                          StringRef path, ObjFile *fromFile);
+  static void enqueue(StringRef path, ObjFile *fromFile);
+
+  static PDBInputFile *findFromRecordPath(StringRef path, ObjFile *fromFile);
+
+  static std::map<std::string, PDBInputFile *> instances;
 
   // Record possible errors while opening the PDB file
   llvm::Optional<Error> loadErr;
@@ -333,10 +342,11 @@ public:
 // for details about the format.
 class ImportFile : public InputFile {
 public:
-  explicit ImportFile(COFFLinkerContext &ctx, MemoryBufferRef m)
-      : InputFile(ctx, ImportKind, m) {}
+  explicit ImportFile(MemoryBufferRef m) : InputFile(ImportKind, m) {}
 
   static bool classof(const InputFile *f) { return f->kind() == ImportKind; }
+
+  static std::vector<ImportFile *> instances;
 
   Symbol *impSym = nullptr;
   Symbol *thunkSym = nullptr;
@@ -365,43 +375,22 @@ public:
 // Used for LTO.
 class BitcodeFile : public InputFile {
 public:
-  explicit BitcodeFile(COFFLinkerContext &ctx, MemoryBufferRef mb,
-                       StringRef archiveName, uint64_t offsetInArchive,
-                       bool lazy);
+  BitcodeFile(MemoryBufferRef mb, StringRef archiveName,
+              uint64_t offsetInArchive);
+  explicit BitcodeFile(MemoryBufferRef m, StringRef archiveName,
+                       uint64_t offsetInArchive,
+                       std::vector<Symbol *> &&symbols);
   ~BitcodeFile();
   static bool classof(const InputFile *f) { return f->kind() == BitcodeKind; }
   ArrayRef<Symbol *> getSymbols() { return symbols; }
   MachineTypes getMachineType() override;
-  void parseLazy();
+  static std::vector<BitcodeFile *> instances;
   std::unique_ptr<llvm::lto::InputFile> obj;
 
 private:
   void parse() override;
 
   std::vector<Symbol *> symbols;
-};
-
-// .dll file. MinGW only.
-class DLLFile : public InputFile {
-public:
-  explicit DLLFile(COFFLinkerContext &ctx, MemoryBufferRef m)
-      : InputFile(ctx, DLLKind, m) {}
-  static bool classof(const InputFile *f) { return f->kind() == DLLKind; }
-  void parse() override;
-  MachineTypes getMachineType() override;
-
-  struct Symbol {
-    StringRef dllName;
-    StringRef symbolName;
-    llvm::COFF::ImportNameType nameType;
-    llvm::COFF::ImportType importType;
-  };
-
-  void makeImport(Symbol *s);
-
-private:
-  std::unique_ptr<COFFObjectFile> coffObj;
-  llvm::StringSet<> seen;
 };
 
 inline bool isBitcode(MemoryBufferRef mb) {

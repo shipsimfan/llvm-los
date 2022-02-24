@@ -275,12 +275,12 @@ public:
       friend ASTStmtWriter;
 
       /// \brief No return type requirement was specified.
-      ReturnTypeRequirement() : TypeConstraintInfo(nullptr, false) {}
+      ReturnTypeRequirement() : TypeConstraintInfo(nullptr, 0) {}
 
       /// \brief A return type requirement was specified but it was a
       /// substitution failure.
       ReturnTypeRequirement(SubstitutionDiagnostic *SubstDiag) :
-          TypeConstraintInfo(SubstDiag, false) {}
+          TypeConstraintInfo(SubstDiag, 0) {}
 
       /// \brief A 'type constraint' style return type requirement.
       /// \param TPL an invented template parameter list containing a single
@@ -413,12 +413,12 @@ public:
   friend ASTStmtWriter;
 
   NestedRequirement(SubstitutionDiagnostic *SubstDiag) :
-      Requirement(RK_Nested, /*IsDependent=*/false,
+      Requirement(RK_Nested, /*Dependent=*/false,
                   /*ContainsUnexpandedParameterPack*/false,
-                  /*IsSatisfied=*/false), Value(SubstDiag) {}
+                  /*Satisfied=*/false), Value(SubstDiag) {}
 
   NestedRequirement(Expr *Constraint) :
-      Requirement(RK_Nested, /*IsDependent=*/true,
+      Requirement(RK_Nested, /*Dependent=*/true,
                   Constraint->containsUnexpandedParameterPack()),
       Value(Constraint) {
     assert(Constraint->isInstantiationDependent() &&

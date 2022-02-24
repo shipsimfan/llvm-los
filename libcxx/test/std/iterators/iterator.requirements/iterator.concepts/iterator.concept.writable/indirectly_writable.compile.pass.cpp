@@ -8,6 +8,8 @@
 
 // UNSUPPORTED: c++03, c++11, c++14, c++17
 // UNSUPPORTED: libcpp-no-concepts
+// UNSUPPORTED: gcc-10
+// XFAIL: msvc && clang
 
 // template<class In>
 // concept indirectly_writable;
@@ -21,7 +23,7 @@
 #include "read_write.h"
 
 template <class Out, class T>
-constexpr bool check_indirectly_writable() {
+[[nodiscard]] constexpr bool check_indirectly_writable() {
   constexpr bool result = std::indirectly_writable<Out, T>;
   static_assert(std::indirectly_writable<Out const, T> == result);
   return result;

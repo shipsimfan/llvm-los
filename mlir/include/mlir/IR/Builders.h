@@ -10,7 +10,6 @@
 #define MLIR_IR_BUILDERS_H
 
 #include "mlir/IR/OpDefinition.h"
-#include "llvm/Support/Compiler.h"
 
 namespace mlir {
 
@@ -53,6 +52,8 @@ public:
 
   MLIRContext *getContext() const { return context; }
 
+  Identifier getIdentifier(StringRef str);
+
   // Locations.
   Location getUnknownLoc();
   Location getFusedLoc(ArrayRef<Location> locs,
@@ -69,7 +70,6 @@ public:
   IndexType getIndexType();
 
   IntegerType getI1Type();
-  IntegerType getI8Type();
   IntegerType getI32Type();
   IntegerType getI64Type();
   IntegerType getIntegerType(unsigned width);
@@ -79,8 +79,7 @@ public:
   NoneType getNoneType();
 
   /// Get or construct an instance of the type 'ty' with provided arguments.
-  template <typename Ty, typename... Args>
-  Ty getType(Args... args) {
+  template <typename Ty, typename... Args> Ty getType(Args... args) {
     return Ty::get(context, args...);
   }
 
@@ -94,8 +93,12 @@ public:
   IntegerAttr getIntegerAttr(Type type, const APInt &value);
   FloatAttr getFloatAttr(Type type, double value);
   FloatAttr getFloatAttr(Type type, const APFloat &value);
-  StringAttr getStringAttr(const Twine &bytes);
+  StringAttr getStringAttr(StringRef bytes);
   ArrayAttr getArrayAttr(ArrayRef<Attribute> value);
+  FlatSymbolRefAttr getSymbolRefAttr(Operation *value);
+  FlatSymbolRefAttr getSymbolRefAttr(StringRef value);
+  SymbolRefAttr getSymbolRefAttr(StringRef value,
+                                 ArrayRef<FlatSymbolRefAttr> nestedReferences);
 
   // Returns a 0-valued attribute of the given `type`. This function only
   // supports boolean, integer, and 16-/32-/64-bit float types, and vector or
@@ -279,28 +282,11 @@ public:
   class InsertionGuard {
   public:
     InsertionGuard(OpBuilder &builder)
-        : builder(&builder), ip(builder.saveInsertionPoint()) {}
-
-    ~InsertionGuard() {
-      if (builder)
-        builder->restoreInsertionPoint(ip);
-    }
-
-    InsertionGuard(const InsertionGuard &) = delete;
-    InsertionGuard &operator=(const InsertionGuard &) = delete;
-
-    /// Implement the move constructor to clear the builder field of `other`.
-    /// That way it does not restore the insertion point upon destruction as
-    /// that should be done exclusively by the just constructed InsertionGuard.
-    InsertionGuard(InsertionGuard &&other) noexcept
-        : builder(other.builder), ip(other.ip) {
-      other.builder = nullptr;
-    }
-
-    InsertionGuard &operator=(InsertionGuard &&other) = delete;
+        : builder(builder), ip(builder.saveInsertionPoint()) {}
+    ~InsertionGuard() { builder.restoreInsertionPoint(ip); }
 
   private:
-    OpBuilder *builder;
+    OpBuilder &builder;
     OpBuilder::InsertPoint ip;
   };
 
@@ -347,7 +333,7 @@ public:
   /// Sets the insertion point to the node after the specified value. If value
   /// has a defining operation, sets the insertion point to the node after such
   /// defining operation. This will cause subsequent insertions to go right
-  /// after it. Otherwise, value is a BlockArgument. Sets the insertion point to
+  /// after it. Otherwise, value is a BlockArgumen. Sets the insertion point to
   /// the start of its block.
   void setInsertionPointAfterValue(Value val) {
     if (Operation *op = val.getDefiningOp()) {
@@ -384,18 +370,13 @@ public:
 
   /// Add new block with 'argTypes' arguments and set the insertion point to the
   /// end of it. The block is inserted at the provided insertion point of
-  /// 'parent'. `locs` contains the locations of the inserted arguments, and
-  /// should match the size of `argTypes`.
+  /// 'parent'.
   Block *createBlock(Region *parent, Region::iterator insertPt = {},
-                     TypeRange argTypes = llvm::None,
-                     ArrayRef<Location> locs = llvm::None);
+                     TypeRange argTypes = llvm::None);
 
   /// Add new block with 'argTypes' arguments and set the insertion point to the
-  /// end of it. The block is placed before 'insertBefore'. `locs` contains the
-  /// locations of the inserted arguments, and should match the size of
-  /// `argTypes`.
-  Block *createBlock(Block *insertBefore, TypeRange argTypes = llvm::None,
-                     ArrayRef<Location> locs = llvm::None);
+  /// end of it. The block is placed before 'insertBefore'.
+  Block *createBlock(Block *insertBefore, TypeRange argTypes = llvm::None);
 
   //===--------------------------------------------------------------------===//
   // Operation Creation
@@ -407,29 +388,14 @@ public:
   /// Creates an operation given the fields represented as an OperationState.
   Operation *createOperation(const OperationState &state);
 
-private:
-  /// Helper for sanity checking preconditions for create* methods below.
-  template <typename OpT>
-  RegisteredOperationName getCheckRegisteredInfo(MLIRContext *ctx) {
-    Optional<RegisteredOperationName> opName =
-        RegisteredOperationName::lookup(OpT::getOperationName(), ctx);
-    if (LLVM_UNLIKELY(!opName)) {
-      llvm::report_fatal_error(
-          "Building op `" + OpT::getOperationName() +
-          "` but it isn't registered in this MLIRContext: the dialect may not "
-          "be loaded or this operation isn't registered by the dialect. See "
-          "also https://mlir.llvm.org/getting_started/Faq/"
-          "#registered-loaded-dependent-whats-up-with-dialects-management");
-    }
-    return *opName;
-  }
-
-public:
   /// Create an operation of specific op type at the current insertion point.
   template <typename OpTy, typename... Args>
-  OpTy create(Location location, Args &&...args) {
-    OperationState state(location,
-                         getCheckRegisteredInfo<OpTy>(location.getContext()));
+  OpTy create(Location location, Args &&... args) {
+    OperationState state(location, OpTy::getOperationName());
+    if (!state.name.getAbstractOperation())
+      llvm::report_fatal_error("Building op `" +
+                               state.name.getStringRef().str() +
+                               "` but it isn't registered in this MLIRContext");
     OpTy::build(*this, state, std::forward<Args>(args)...);
     auto *op = createOperation(state);
     auto result = dyn_cast<OpTy>(op);
@@ -442,11 +408,14 @@ public:
   /// the results after folding the operation.
   template <typename OpTy, typename... Args>
   void createOrFold(SmallVectorImpl<Value> &results, Location location,
-                    Args &&...args) {
+                    Args &&... args) {
     // Create the operation without using 'createOperation' as we don't want to
     // insert it yet.
-    OperationState state(location,
-                         getCheckRegisteredInfo<OpTy>(location.getContext()));
+    OperationState state(location, OpTy::getOperationName());
+    if (!state.name.getAbstractOperation())
+      llvm::report_fatal_error("Building op `" +
+                               state.name.getStringRef().str() +
+                               "` but it isn't registered in this MLIRContext");
     OpTy::build(*this, state, std::forward<Args>(args)...);
     Operation *op = Operation::create(state);
 
@@ -461,7 +430,7 @@ public:
   template <typename OpTy, typename... Args>
   typename std::enable_if<OpTy::template hasTrait<OpTrait::OneResult>(),
                           Value>::type
-  createOrFold(Location location, Args &&...args) {
+  createOrFold(Location location, Args &&... args) {
     SmallVector<Value, 1> results;
     createOrFold<OpTy>(results, location, std::forward<Args>(args)...);
     return results.front();
@@ -471,10 +440,10 @@ public:
   template <typename OpTy, typename... Args>
   typename std::enable_if<OpTy::template hasTrait<OpTrait::ZeroResult>(),
                           OpTy>::type
-  createOrFold(Location location, Args &&...args) {
+  createOrFold(Location location, Args &&... args) {
     auto op = create<OpTy>(location, std::forward<Args>(args)...);
     SmallVector<Value, 0> unused;
-    (void)tryFold(op.getOperation(), unused);
+    tryFold(op.getOperation(), unused);
 
     // Folding cannot remove a zero-result operation, so for convenience we
     // continue to return it.
@@ -503,8 +472,7 @@ public:
   Operation *cloneWithoutRegions(Operation &op) {
     return insert(op.cloneWithoutRegions());
   }
-  template <typename OpT>
-  OpT cloneWithoutRegions(OpT op) {
+  template <typename OpT> OpT cloneWithoutRegions(OpT op) {
     return cast<OpT>(cloneWithoutRegions(*op.getOperation()));
   }
 

@@ -17,14 +17,14 @@
 !-----------------------------------------
 ! EXPECTED OUTPUT FOR ESCAPED BACKSLASHES
 !-----------------------------------------
-! ESCAPED:program Backslash
+! ESCAPED:program backslash
 ! ESCAPED-NEXT:New\\nline
 ! ESCAPED-NOT:New\nline
 
 !-------------------------------------------
 ! EXPECTED OUTPUT FOR UNESCAPED BACKSLASHES
 !-------------------------------------------
-! UNESCAPED:program Backslash
+! UNESCAPED:program backslash
 ! UNESCAPED-NEXT:New\nline
 ! UNESCAPED-NOT:New\\nline
 

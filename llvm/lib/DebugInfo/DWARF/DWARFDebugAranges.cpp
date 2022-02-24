@@ -7,12 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/DebugInfo/DWARF/DWARFDebugAranges.h"
-#include "llvm/DebugInfo/DWARF/DWARFAddressRange.h"
+#include "llvm/DebugInfo/DWARF/DWARFCompileUnit.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
-#include "llvm/DebugInfo/DWARF/DWARFDataExtractor.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugArangeSet.h"
-#include "llvm/DebugInfo/DWARF/DWARFObject.h"
-#include "llvm/DebugInfo/DWARF/DWARFUnit.h"
+#include "llvm/Support/DataExtractor.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>

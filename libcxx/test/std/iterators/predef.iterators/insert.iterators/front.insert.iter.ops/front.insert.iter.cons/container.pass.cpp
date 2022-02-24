@@ -10,7 +10,7 @@
 
 // front_insert_iterator
 
-// explicit front_insert_iterator(Cont& x); // constexpr in C++20
+// explicit front_insert_iterator(Cont& x);
 
 #include <iterator>
 #include <list>

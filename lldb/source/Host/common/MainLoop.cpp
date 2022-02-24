@@ -16,7 +16,7 @@
 #include <cassert>
 #include <cerrno>
 #include <csignal>
-#include <ctime>
+#include <time.h>
 #include <vector>
 
 // Multiplexing is implemented using kqueue on systems that support it (BSD

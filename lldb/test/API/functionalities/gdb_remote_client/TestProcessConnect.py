@@ -3,14 +3,11 @@ import binascii
 import os
 from lldbsuite.test.lldbtest import *
 from lldbsuite.test.decorators import *
-from lldbsuite.test.gdbclientutils import *
-from lldbsuite.test.lldbgdbclient import GDBRemoteTestBase
+from gdbclientutils import *
 
 
 @skipIfRemote
 class TestProcessConnect(GDBRemoteTestBase):
-
-    mydir = TestBase.compute_mydir(__file__)
 
     NO_DEBUG_INFO_TESTCASE = True
 
@@ -21,8 +18,9 @@ class TestProcessConnect(GDBRemoteTestBase):
             self.expect("gdb-remote " + self.server.get_connect_address(),
                         substrs=['Process', 'stopped'])
         finally:
-            self.dbg.GetSelectedTarget().GetProcess().Kill()
+            self.dbg.GetSelectedPlatform().DisconnectRemote()
 
+    @skipIfReproducer # Reproducer don't support async.
     def test_gdb_remote_async(self):
         """Test the gdb-remote command in asynchronous mode"""
         try:
@@ -33,9 +31,7 @@ class TestProcessConnect(GDBRemoteTestBase):
             lldbutil.expect_state_changes(self, self.dbg.GetListener(),
                                           self.process(), [lldb.eStateStopped])
         finally:
-            self.dbg.GetSelectedTarget().GetProcess().Kill()
-        lldbutil.expect_state_changes(self, self.dbg.GetListener(),
-                                      self.process(), [lldb.eStateExited])
+            self.dbg.GetSelectedPlatform().DisconnectRemote()
 
     @skipIfWindows
     def test_process_connect_sync(self):
@@ -44,24 +40,25 @@ class TestProcessConnect(GDBRemoteTestBase):
             self.dbg.SetAsync(False)
             self.expect("platform select remote-gdb-server",
                         substrs=['Platform: remote-gdb-server', 'Connected: no'])
-            self.expect("process connect " + self.server.get_connect_url(),
+            self.expect("process connect connect://" +
+                        self.server.get_connect_address(),
                         substrs=['Process', 'stopped'])
         finally:
-            self.dbg.GetSelectedTarget().GetProcess().Kill()
+            self.dbg.GetSelectedPlatform().DisconnectRemote()
 
     @skipIfWindows
+    @skipIfReproducer # Reproducer don't support async.
     def test_process_connect_async(self):
         """Test the gdb-remote command in asynchronous mode"""
         try:
             self.dbg.SetAsync(True)
             self.expect("platform select remote-gdb-server",
                         substrs=['Platform: remote-gdb-server', 'Connected: no'])
-            self.expect("process connect " + self.server.get_connect_url(),
+            self.expect("process connect connect://" +
+                        self.server.get_connect_address(),
                         matching=False,
                         substrs=['Process', 'stopped'])
             lldbutil.expect_state_changes(self, self.dbg.GetListener(),
                                           self.process(), [lldb.eStateStopped])
         finally:
-            self.dbg.GetSelectedTarget().GetProcess().Kill()
-        lldbutil.expect_state_changes(self, self.dbg.GetListener(),
-                                      self.process(), [lldb.eStateExited])
+            self.dbg.GetSelectedPlatform().DisconnectRemote()

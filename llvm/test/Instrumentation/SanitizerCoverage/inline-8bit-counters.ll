@@ -1,4 +1,5 @@
 ; Test -sanitizer-coverage-inline-8bit-counters=1
+; RUN: opt < %s -sancov -sanitizer-coverage-level=1 -sanitizer-coverage-inline-8bit-counters=1  -S -enable-new-pm=0 | FileCheck %s
 ; RUN: opt < %s -passes='module(sancov-module)' -sanitizer-coverage-level=1 -sanitizer-coverage-inline-8bit-counters=1  -S | FileCheck %s
 
 ; CHECK:      @__sancov_gen_ = private global [1 x i8] zeroinitializer, section "__sancov_cntrs", comdat($foo), align 1

@@ -93,8 +93,8 @@ struct CGBitFieldInfo {
   CharUnits VolatileStorageOffset;
 
   CGBitFieldInfo()
-      : Offset(), Size(), IsSigned(), StorageSize(), VolatileOffset(),
-        VolatileStorageSize() {}
+      : Offset(), Size(), IsSigned(), StorageSize(), StorageOffset(),
+        VolatileOffset(), VolatileStorageSize(), VolatileStorageOffset() {}
 
   CGBitFieldInfo(unsigned Offset, unsigned Size, bool IsSigned,
                  unsigned StorageSize, CharUnits StorageOffset)

@@ -14,7 +14,7 @@ static void f(b g) {
   for (d = g->c;;)
     ;
 }
-void h(void) { f(e); }
+void h() { f(e); }
 
 // CHECK: Running pass: {{.*}}SanitizerPass
 // CHECK-NOT: Running pass: LoopSimplifyPass on {{.*}}san.module_ctor

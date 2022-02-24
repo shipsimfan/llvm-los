@@ -24,7 +24,7 @@ def fircg_Dialect : Dialect {
 
 // Base class for FIR CG operations.
 // All operations automatically get a prefix of "fircg.".
-class fircg_Op<string mnemonic, list<Trait> traits>
+class fircg_Op<string mnemonic, list<OpTrait> traits>
   : Op<fircg_Dialect, mnemonic, traits>;
 
 // Extended embox operation.
@@ -42,7 +42,6 @@ def fircg_XEmboxOp : fircg_Op<"ext_embox", [AttrSizedOperandSegments]> {
          The default is a vector of the value 1.
        - slice: A vector of triples that describe an array slice.
        - subcomponent: A vector of indices for subobject slicing.
-       - substring: A substring operator (offset, length) for CHARACTER.
        - LEN type parameters: A vector of runtime LEN type parameters that
          describe an correspond to the elemental derived type.
 
@@ -55,15 +54,14 @@ def fircg_XEmboxOp : fircg_Op<"ext_embox", [AttrSizedOperandSegments]> {
     Variadic<AnyIntegerType>:$shift,
     Variadic<AnyIntegerType>:$slice,
     Variadic<AnyCoordinateType>:$subcomponent,
-    Variadic<AnyIntegerType>:$substr,
     Variadic<AnyIntegerType>:$lenParams
   );
   let results = (outs fir_BoxType);
 
   let assemblyFormat = [{
     $memref (`(`$shape^`)`)? (`origin` $shift^)? (`[`$slice^`]`)?
-      (`path` $subcomponent^)? (`substr` $substr^)? (`typeparams` $lenParams^)?
-      attr-dict `:` functional-type(operands, results)
+      (`path` $subcomponent^)? (`typeparams` $lenParams^)? attr-dict
+      `:` functional-type(operands, results)
   }];
 
   let extraClassDeclaration = [{
@@ -78,10 +76,9 @@ def fircg_XEmboxOp : fircg_Op<"ext_embox", [AttrSizedOperandSegments]> {
     unsigned shiftOffset() { return shapeOffset() + shape().size(); }
     unsigned sliceOffset() { return shiftOffset() + shift().size(); }
     unsigned subcomponentOffset() { return sliceOffset() + slice().size(); }
-    unsigned substrOffset() {
+    unsigned lenParamOffset() {
       return subcomponentOffset() + subcomponent().size();
     }
-    unsigned lenParamOffset() { return substrOffset() + substr().size(); }
   }];
 }
 
@@ -100,7 +97,6 @@ def fircg_XReboxOp : fircg_Op<"ext_rebox", [AttrSizedOperandSegments]> {
          The default is a vector of the value 1.
        - slice: A vector of triples that describe an array slice.
        - subcomponent: A vector of indices for subobject slicing.
-       - substring: A substring operator (offset, length) for CHARACTER.
 
     The box argument is mandatory, the other arguments are optional.
     There must not both be a shape and slice/subcomponent arguments
@@ -111,15 +107,14 @@ def fircg_XReboxOp : fircg_Op<"ext_rebox", [AttrSizedOperandSegments]> {
     Variadic<AnyIntegerType>:$shape,
     Variadic<AnyIntegerType>:$shift,
     Variadic<AnyIntegerType>:$slice,
-    Variadic<AnyCoordinateType>:$subcomponent,
-    Variadic<AnyIntegerType>:$substr
+    Variadic<AnyCoordinateType>:$subcomponent
   );
   let results = (outs fir_BoxType);
 
   let assemblyFormat = [{
     $box (`(`$shape^`)`)? (`origin` $shift^)? (`[`$slice^`]`)?
-      (`path` $subcomponent^)? (`substr` $substr^)? attr-dict `:`
-      functional-type(operands, results)
+      (`path` $subcomponent^) ? attr-dict
+      `:` functional-type(operands, results)
   }];
 
   let extraClassDeclaration = [{
@@ -127,14 +122,6 @@ def fircg_XReboxOp : fircg_Op<"ext_rebox", [AttrSizedOperandSegments]> {
     unsigned getRank();
     // The rank of the result box
     unsigned getOutRank();
-
-    unsigned shapeOffset() { return 1; }
-    unsigned shiftOffset() { return shapeOffset() + shape().size(); }
-    unsigned sliceOffset() { return shiftOffset() + shift().size(); }
-    unsigned subcomponentOffset() { return sliceOffset() + slice().size(); }
-    unsigned substrOffset() {
-      return subcomponentOffset() + subcomponent().size();
-    }
   }];
 }
 
@@ -184,16 +171,6 @@ def fircg_XArrayCoorOp : fircg_Op<"ext_array_coor", [AttrSizedOperandSegments]> 
 
   let extraClassDeclaration = [{
     unsigned getRank();
-
-    // Shape is optional, but if it exists, it will be at offset 1.
-    unsigned shapeOffset() { return 1; }
-    unsigned shiftOffset() { return shapeOffset() + shape().size(); }
-    unsigned sliceOffset() { return shiftOffset() + shift().size(); }
-    unsigned subcomponentOffset() { return sliceOffset() + slice().size(); }
-    unsigned indicesOffset() {
-      return subcomponentOffset() + subcomponent().size();
-    }
-    unsigned lenParamsOffset() { return indicesOffset() + indices().size(); }
   }];
 }
 

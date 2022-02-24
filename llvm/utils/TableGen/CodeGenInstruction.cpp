@@ -342,7 +342,7 @@ static void ParseConstraints(StringRef CStr, CGIOperandList &Ops, Record *Rec) {
 }
 
 void CGIOperandList::ProcessDisableEncoding(StringRef DisableEncoding) {
-  while (true) {
+  while (1) {
     StringRef OpName;
     std::tie(OpName, DisableEncoding) = getToken(DisableEncoding, " ,\t");
     if (OpName.empty()) break;

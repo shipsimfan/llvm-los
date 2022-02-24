@@ -33,8 +33,6 @@
 using namespace mlir;
 using namespace mlir::spirv;
 
-#include "mlir/Dialect/SPIRV/IR/SPIRVOpsDialect.cpp.inc"
-
 //===----------------------------------------------------------------------===//
 // InlinerInterface
 //===----------------------------------------------------------------------===//
@@ -155,7 +153,7 @@ Optional<unsigned> parseAndVerify<unsigned>(SPIRVDialect const &dialect,
 static Type parseAndVerifyType(SPIRVDialect const &dialect,
                                DialectAsmParser &parser) {
   Type type;
-  SMLoc typeLoc = parser.getCurrentLocation();
+  llvm::SMLoc typeLoc = parser.getCurrentLocation();
   if (parser.parseType(type))
     return Type();
 
@@ -199,7 +197,7 @@ static Type parseAndVerifyType(SPIRVDialect const &dialect,
 static Type parseAndVerifyMatrixType(SPIRVDialect const &dialect,
                                      DialectAsmParser &parser) {
   Type type;
-  SMLoc typeLoc = parser.getCurrentLocation();
+  llvm::SMLoc typeLoc = parser.getCurrentLocation();
   if (parser.parseType(type))
     return Type();
 
@@ -235,7 +233,7 @@ static Type parseAndVerifyMatrixType(SPIRVDialect const &dialect,
 static Type parseAndVerifySampledImageType(SPIRVDialect const &dialect,
                                            DialectAsmParser &parser) {
   Type type;
-  SMLoc typeLoc = parser.getCurrentLocation();
+  llvm::SMLoc typeLoc = parser.getCurrentLocation();
   if (parser.parseType(type))
     return Type();
 
@@ -263,7 +261,7 @@ static LogicalResult parseOptionalArrayStride(const SPIRVDialect &dialect,
   if (parser.parseKeyword("stride") || parser.parseEqual())
     return failure();
 
-  SMLoc strideLoc = parser.getCurrentLocation();
+  llvm::SMLoc strideLoc = parser.getCurrentLocation();
   Optional<unsigned> optStride = parseAndVerify<unsigned>(dialect, parser);
   if (!optStride)
     return failure();
@@ -288,7 +286,7 @@ static Type parseArrayType(SPIRVDialect const &dialect,
     return Type();
 
   SmallVector<int64_t, 1> countDims;
-  SMLoc countLoc = parser.getCurrentLocation();
+  llvm::SMLoc countLoc = parser.getCurrentLocation();
   if (parser.parseDimensionList(countDims, /*allowDynamic=*/false))
     return Type();
   if (countDims.size() != 1) {
@@ -326,7 +324,7 @@ static Type parseCooperativeMatrixType(SPIRVDialect const &dialect,
     return Type();
 
   SmallVector<int64_t, 2> dims;
-  SMLoc countLoc = parser.getCurrentLocation();
+  llvm::SMLoc countLoc = parser.getCurrentLocation();
   if (parser.parseDimensionList(dims, /*allowDynamic=*/false))
     return Type();
 
@@ -367,7 +365,7 @@ static Type parsePointerType(SPIRVDialect const &dialect,
     return Type();
 
   StringRef storageClassSpec;
-  SMLoc storageClassLoc = parser.getCurrentLocation();
+  llvm::SMLoc storageClassLoc = parser.getCurrentLocation();
   if (parser.parseComma() || parser.parseKeyword(&storageClassSpec))
     return Type();
 
@@ -409,7 +407,7 @@ static Type parseMatrixType(SPIRVDialect const &dialect,
     return Type();
 
   SmallVector<int64_t, 1> countDims;
-  SMLoc countLoc = parser.getCurrentLocation();
+  llvm::SMLoc countLoc = parser.getCurrentLocation();
   if (parser.parseDimensionList(countDims, /*allowDynamic=*/false))
     return Type();
   if (countDims.size() != 1) {
@@ -442,7 +440,7 @@ template <typename ValTy>
 static Optional<ValTy> parseAndVerify(SPIRVDialect const &dialect,
                                       DialectAsmParser &parser) {
   StringRef enumSpec;
-  SMLoc enumLoc = parser.getCurrentLocation();
+  llvm::SMLoc enumLoc = parser.getCurrentLocation();
   if (parser.parseKeyword(&enumSpec)) {
     return llvm::None;
   }
@@ -568,7 +566,7 @@ static ParseResult parseStructMemberDecorations(
     SmallVectorImpl<StructType::MemberDecorationInfo> &memberDecorationInfo) {
 
   // Check if the first element is offset.
-  SMLoc offsetLoc = parser.getCurrentLocation();
+  llvm::SMLoc offsetLoc = parser.getCurrentLocation();
   StructType::OffsetInfo offset = 0;
   OptionalParseResult offsetParseResult = parser.parseOptionalInteger(offset);
   if (offsetParseResult.hasValue()) {
@@ -875,7 +873,7 @@ void SPIRVDialect::printType(Type type, DialectAsmPrinter &os) const {
 /// of the parsed keyword, and returns failure if any error occurs.
 static ParseResult parseKeywordList(
     DialectAsmParser &parser,
-    function_ref<LogicalResult(SMLoc, StringRef)> processKeyword) {
+    function_ref<LogicalResult(llvm::SMLoc, StringRef)> processKeyword) {
   if (parser.parseLSquare())
     return failure();
 
@@ -992,10 +990,10 @@ static Attribute parseVerCapExtAttr(DialectAsmParser &parser) {
   ArrayAttr capabilitiesAttr;
   {
     SmallVector<Attribute, 4> capabilities;
-    SMLoc errorloc;
+    llvm::SMLoc errorloc;
     StringRef errorKeyword;
 
-    auto processCapability = [&](SMLoc loc, StringRef capability) {
+    auto processCapability = [&](llvm::SMLoc loc, StringRef capability) {
       if (auto capSymbol = spirv::symbolizeCapability(capability)) {
         capabilities.push_back(
             builder.getI32IntegerAttr(static_cast<uint32_t>(*capSymbol)));
@@ -1015,10 +1013,10 @@ static Attribute parseVerCapExtAttr(DialectAsmParser &parser) {
   ArrayAttr extensionsAttr;
   {
     SmallVector<Attribute, 1> extensions;
-    SMLoc errorloc;
+    llvm::SMLoc errorloc;
     StringRef errorKeyword;
 
-    auto processExtension = [&](SMLoc loc, StringRef extension) {
+    auto processExtension = [&](llvm::SMLoc loc, StringRef extension) {
       if (spirv::symbolizeExtension(extension)) {
         extensions.push_back(builder.getStringAttr(extension));
         return success();
@@ -1211,8 +1209,8 @@ Operation *SPIRVDialect::materializeConstant(OpBuilder &builder,
 
 LogicalResult SPIRVDialect::verifyOperationAttribute(Operation *op,
                                                      NamedAttribute attribute) {
-  StringRef symbol = attribute.getName().strref();
-  Attribute attr = attribute.getValue();
+  StringRef symbol = attribute.first.strref();
+  Attribute attr = attribute.second;
 
   // TODO: figure out a way to generate the description from the
   // StructAttr definition.
@@ -1237,8 +1235,8 @@ LogicalResult SPIRVDialect::verifyOperationAttribute(Operation *op,
 /// `valueType` is valid.
 static LogicalResult verifyRegionAttribute(Location loc, Type valueType,
                                            NamedAttribute attribute) {
-  StringRef symbol = attribute.getName().strref();
-  Attribute attr = attribute.getValue();
+  StringRef symbol = attribute.first.strref();
+  Attribute attr = attribute.second;
 
   if (symbol != spirv::getInterfaceVarABIAttrName())
     return emitError(loc, "found unsupported '")

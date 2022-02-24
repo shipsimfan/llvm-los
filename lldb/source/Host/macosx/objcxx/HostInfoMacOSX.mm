@@ -11,7 +11,6 @@
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Host/macosx/HostInfoMacOSX.h"
 #include "lldb/Utility/Args.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Timer.h"
 #include "Utility/UuidCompatibility.h"
@@ -26,7 +25,7 @@
 #include <string>
 
 // C inclues
-#include <cstdlib>
+#include <stdlib.h>
 #include <sys/sysctl.h>
 #include <sys/syslimits.h>
 #include <sys/types.h>
@@ -56,14 +55,29 @@
 
 using namespace lldb_private;
 
-llvm::Optional<std::string> HostInfoMacOSX::GetOSBuildString() {
+bool HostInfoMacOSX::GetOSBuildString(std::string &s) {
   int mib[2] = {CTL_KERN, KERN_OSVERSION};
   char cstr[PATH_MAX];
   size_t cstr_len = sizeof(cstr);
-  if (::sysctl(mib, 2, cstr, &cstr_len, NULL, 0) == 0)
-    return std::string(cstr, cstr_len - 1);
+  if (::sysctl(mib, 2, cstr, &cstr_len, NULL, 0) == 0) {
+    s.assign(cstr, cstr_len);
+    return true;
+  }
 
-  return llvm::None;
+  s.clear();
+  return false;
+}
+
+bool HostInfoMacOSX::GetOSKernelDescription(std::string &s) {
+  int mib[2] = {CTL_KERN, KERN_VERSION};
+  char cstr[PATH_MAX];
+  size_t cstr_len = sizeof(cstr);
+  if (::sysctl(mib, 2, cstr, &cstr_len, NULL, 0) == 0) {
+    s.assign(cstr, cstr_len);
+    return true;
+  }
+  s.clear();
+  return false;
 }
 
 static void ParseOSVersion(llvm::VersionTuple &version, NSString *Key) {
@@ -145,7 +159,7 @@ bool HostInfoMacOSX::ComputeSupportExeDirectory(FileSpec &file_spec) {
     FileSpec support_dir_spec(raw_path);
     FileSystem::Instance().Resolve(support_dir_spec);
     if (!FileSystem::Instance().IsDirectory(support_dir_spec)) {
-      Log *log = GetLog(LLDBLog::Host);
+      Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
       LLDB_LOGF(log, "HostInfoMacOSX::%s(): failed to find support directory",
                 __FUNCTION__);
       return false;
@@ -369,22 +383,17 @@ static std::string GetXcodeSDK(XcodeSDK sdk) {
 
   auto xcrun = [](const std::string &sdk,
                   llvm::StringRef developer_dir = "") -> std::string {
-    Args args;
-    if (!developer_dir.empty()) {
-      args.AppendArgument("/usr/bin/env");
-      args.AppendArgument("DEVELOPER_DIR=" + developer_dir.str());
-    }
-    args.AppendArgument("/usr/bin/xcrun");
-    args.AppendArgument("--show-sdk-path");
-    args.AppendArgument("--sdk");
-    args.AppendArgument(sdk);
+    std::string xcrun_cmd = "xcrun --show-sdk-path --sdk " + sdk;
+    if (!developer_dir.empty())
+      xcrun_cmd = "/usr/bin/env DEVELOPER_DIR=\"" + developer_dir.str() +
+                  "\" " + xcrun_cmd;
 
     int status = 0;
     int signo = 0;
     std::string output_str;
     lldb_private::Status error =
-        Host::RunShellCommand(args, FileSpec(), &status, &signo, &output_str,
-                              std::chrono::seconds(15));
+        Host::RunShellCommand(xcrun_cmd, FileSpec(), &status, &signo,
+                              &output_str, std::chrono::seconds(15));
 
     // Check that xcrun return something useful.
     if (status != 0 || output_str.empty())
@@ -444,7 +453,7 @@ static std::string GetXcodeSDK(XcodeSDK sdk) {
       if (!path.empty())
         break;
     }
-    Log *log = GetLog(LLDBLog::Host);
+    Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
     LLDB_LOGF(log, "Couldn't find SDK %s on host", sdk_name.c_str());
 
     // Try without the version.
@@ -504,10 +513,10 @@ extern "C" bool _dyld_get_shared_cache_uuid(uuid_t uuid);
 namespace {
 class SharedCacheInfo {
 public:
-  const UUID &GetUUID() const { return m_uuid; }
+  const UUID &GetUUID() const { return m_uuid; };
   const llvm::StringMap<SharedCacheImageInfo> &GetImages() const {
     return m_images;
-  }
+  };
 
   SharedCacheInfo();
 

@@ -23,7 +23,11 @@ class MCObjectTargetWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
 class MCTargetOptions;
+class StringRef;
 class Target;
+class Triple;
+class raw_pwrite_stream;
+class raw_ostream;
 
 namespace SystemZMC {
 // How many bytes are in the ABI-defined, caller-allocated part of
@@ -78,6 +82,7 @@ inline unsigned getRegAsVR128(unsigned Reg) {
 } // end namespace SystemZMC
 
 MCCodeEmitter *createSystemZMCCodeEmitter(const MCInstrInfo &MCII,
+                                          const MCRegisterInfo &MRI,
                                           MCContext &Ctx);
 
 MCAsmBackend *createSystemZMCAsmBackend(const Target &T,

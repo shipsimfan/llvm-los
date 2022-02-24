@@ -13,7 +13,7 @@
 #include "llvm/Support/PointerLikeTypeTraits.h"
 
 namespace mlir {
-class StringAttr;
+class Identifier;
 
 /// Attributes are known-constant values of operations.
 ///
@@ -31,9 +31,8 @@ public:
 
   using ImplType = AttributeStorage;
   using ValueType = void;
-  using AbstractTy = AbstractAttribute;
 
-  constexpr Attribute() {}
+  constexpr Attribute() : impl(nullptr) {}
   /* implicit */ Attribute(const ImplType *impl)
       : impl(const_cast<ImplType *>(impl)) {}
 
@@ -49,8 +48,6 @@ public:
   template <typename U> bool isa() const;
   template <typename First, typename Second, typename... Rest>
   bool isa() const;
-  template <typename First, typename... Rest>
-  bool isa_and_nonnull() const;
   template <typename U> U dyn_cast() const;
   template <typename U> U dyn_cast_or_null() const;
   template <typename U> U cast() const;
@@ -63,15 +60,13 @@ public:
   TypeID getTypeID() { return impl->getAbstractAttribute().getTypeID(); }
 
   /// Return the type of this attribute.
-  Type getType() const { return impl->getType(); }
+  Type getType() const;
 
   /// Return the context this attribute belongs to.
   MLIRContext *getContext() const;
 
   /// Get the dialect this attribute is registered to.
-  Dialect &getDialect() const {
-    return impl->getAbstractAttribute().getDialect();
-  }
+  Dialect &getDialect() const;
 
   /// Print the attribute.
   void print(raw_ostream &os) const;
@@ -86,19 +81,13 @@ public:
 
   friend ::llvm::hash_code hash_value(Attribute arg);
 
-  /// Returns true if the type was registered with a particular trait.
-  template <template <typename T> class Trait>
-  bool hasTrait() {
-    return getAbstractAttribute().hasTrait<Trait>();
-  }
-
   /// Return the abstract descriptor for this attribute.
-  const AbstractTy &getAbstractAttribute() const {
+  const AbstractAttribute &getAbstractAttribute() const {
     return impl->getAbstractAttribute();
   }
 
 protected:
-  ImplType *impl{nullptr};
+  ImplType *impl;
 };
 
 inline raw_ostream &operator<<(raw_ostream &os, Attribute attr) {
@@ -116,11 +105,6 @@ bool Attribute::isa() const {
   return isa<First>() || isa<Second, Rest...>();
 }
 
-template <typename First, typename... Rest>
-bool Attribute::isa_and_nonnull() const {
-  return impl && isa<First, Rest...>();
-}
-
 template <typename U> U Attribute::dyn_cast() const {
   return isa<U>() ? U(impl) : U(nullptr);
 }
@@ -133,67 +117,20 @@ template <typename U> U Attribute::cast() const {
 }
 
 inline ::llvm::hash_code hash_value(Attribute arg) {
-  return DenseMapInfo<const Attribute::ImplType *>::getHashValue(arg.impl);
+  return ::llvm::hash_value(arg.impl);
 }
 
 //===----------------------------------------------------------------------===//
 // NamedAttribute
 //===----------------------------------------------------------------------===//
 
-/// NamedAttribute represents a combination of a name and an Attribute value.
-class NamedAttribute {
-public:
-  NamedAttribute(StringAttr name, Attribute value);
+/// NamedAttribute is combination of a name, represented by an Identifier, and a
+/// value, represented by an Attribute. The attribute pointer should always be
+/// non-null.
+using NamedAttribute = std::pair<Identifier, Attribute>;
 
-  /// Return the name of the attribute.
-  StringAttr getName() const;
-
-  /// Return the dialect of the name of this attribute, if the name is prefixed
-  /// by a dialect namespace. For example, `llvm.fast_math` would return the
-  /// LLVM dialect (if it is loaded). Returns nullptr if the dialect isn't
-  /// loaded, or if the name is not prefixed by a dialect namespace.
-  Dialect *getNameDialect() const;
-
-  /// Return the value of the attribute.
-  Attribute getValue() const { return value; }
-
-  /// Set the name of this attribute.
-  void setName(StringAttr newName);
-
-  /// Set the value of this attribute.
-  void setValue(Attribute newValue) {
-    assert(value && "expected valid attribute value");
-    value = newValue;
-  }
-
-  /// Compare this attribute to the provided attribute, ordering by name.
-  bool operator<(const NamedAttribute &rhs) const;
-  /// Compare this attribute to the provided string, ordering by name.
-  bool operator<(StringRef rhs) const;
-
-  bool operator==(const NamedAttribute &rhs) const {
-    return name == rhs.name && value == rhs.value;
-  }
-  bool operator!=(const NamedAttribute &rhs) const { return !(*this == rhs); }
-
-private:
-  NamedAttribute(Attribute name, Attribute value) : name(name), value(value) {}
-
-  /// Allow access to internals to enable hashing.
-  friend ::llvm::hash_code hash_value(const NamedAttribute &arg);
-  friend DenseMapInfo<NamedAttribute>;
-
-  /// The name of the attribute. This is represented as a StringAttr, but
-  /// type-erased to Attribute in the field.
-  Attribute name;
-  /// The value of the attribute.
-  Attribute value;
-};
-
-inline ::llvm::hash_code hash_value(const NamedAttribute &arg) {
-  using AttrPairT = std::pair<Attribute, Attribute>;
-  return DenseMapInfo<AttrPairT>::getHashValue(AttrPairT(arg.name, arg.value));
-}
+bool operator<(const NamedAttribute &lhs, const NamedAttribute &rhs);
+bool operator<(const NamedAttribute &lhs, StringRef rhs);
 
 //===----------------------------------------------------------------------===//
 // AttributeTraitBase
@@ -231,18 +168,18 @@ private:
   friend InterfaceBase;
 };
 
-} // namespace mlir.
+} // end namespace mlir.
 
 namespace llvm {
 
 // Attribute hash just like pointers.
 template <> struct DenseMapInfo<mlir::Attribute> {
   static mlir::Attribute getEmptyKey() {
-    auto *pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
+    auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
     return mlir::Attribute(static_cast<mlir::Attribute::ImplType *>(pointer));
   }
   static mlir::Attribute getTombstoneKey() {
-    auto *pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
+    auto pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
     return mlir::Attribute(static_cast<mlir::Attribute::ImplType *>(pointer));
   }
   static unsigned getHashValue(mlir::Attribute val) {
@@ -250,19 +187,6 @@ template <> struct DenseMapInfo<mlir::Attribute> {
   }
   static bool isEqual(mlir::Attribute LHS, mlir::Attribute RHS) {
     return LHS == RHS;
-  }
-};
-template <typename T>
-struct DenseMapInfo<
-    T, std::enable_if_t<std::is_base_of<mlir::Attribute, T>::value>>
-    : public DenseMapInfo<mlir::Attribute> {
-  static T getEmptyKey() {
-    const void *pointer = llvm::DenseMapInfo<const void *>::getEmptyKey();
-    return T::getFromOpaquePointer(pointer);
-  }
-  static T getTombstoneKey() {
-    const void *pointer = llvm::DenseMapInfo<const void *>::getTombstoneKey();
-    return T::getFromOpaquePointer(pointer);
   }
 };
 
@@ -276,23 +200,6 @@ template <> struct PointerLikeTypeTraits<mlir::Attribute> {
   }
   static constexpr int NumLowBitsAvailable = llvm::PointerLikeTypeTraits<
       mlir::AttributeStorage *>::NumLowBitsAvailable;
-};
-
-template <> struct DenseMapInfo<mlir::NamedAttribute> {
-  static mlir::NamedAttribute getEmptyKey() {
-    auto emptyAttr = llvm::DenseMapInfo<mlir::Attribute>::getEmptyKey();
-    return mlir::NamedAttribute(emptyAttr, emptyAttr);
-  }
-  static mlir::NamedAttribute getTombstoneKey() {
-    auto tombAttr = llvm::DenseMapInfo<mlir::Attribute>::getTombstoneKey();
-    return mlir::NamedAttribute(tombAttr, tombAttr);
-  }
-  static unsigned getHashValue(mlir::NamedAttribute val) {
-    return mlir::hash_value(val);
-  }
-  static bool isEqual(mlir::NamedAttribute lhs, mlir::NamedAttribute rhs) {
-    return lhs == rhs;
-  }
 };
 
 } // namespace llvm

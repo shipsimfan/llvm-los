@@ -67,7 +67,6 @@ struct DiagnosticMessage {
 /// fixes to be applied.
 struct Diagnostic {
   enum Level {
-    Remark = DiagnosticsEngine::Remark,
     Warning = DiagnosticsEngine::Warning,
     Error = DiagnosticsEngine::Error
   };

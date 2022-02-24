@@ -19,7 +19,7 @@ public:
 
   SBTypeSummaryOptions(const lldb::SBTypeSummaryOptions &rhs);
 
-  SBTypeSummaryOptions(const lldb_private::TypeSummaryOptions &lldb_object);
+  SBTypeSummaryOptions(const lldb_private::TypeSummaryOptions *lldb_object_ptr);
 
   ~SBTypeSummaryOptions();
 
@@ -47,6 +47,8 @@ protected:
   lldb_private::TypeSummaryOptions &ref();
 
   const lldb_private::TypeSummaryOptions &ref() const;
+
+  void SetOptions(const lldb_private::TypeSummaryOptions *lldb_object_ptr);
 
 private:
   std::unique_ptr<lldb_private::TypeSummaryOptions> m_opaque_up;

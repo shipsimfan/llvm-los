@@ -23,13 +23,12 @@
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCObjectWriter.h"
-#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
@@ -65,12 +64,8 @@ void LLVMTargetMachine::initAsmInfo() {
   if (Options.BinutilsVersion.first > 0)
     TmpAsmInfo->setBinutilsVersion(Options.BinutilsVersion);
 
-  if (Options.DisableIntegratedAS) {
+  if (Options.DisableIntegratedAS)
     TmpAsmInfo->setUseIntegratedAssembler(false);
-    // If there is explict option disable integratedAS, we can't use it for
-    // inlineasm either.
-    TmpAsmInfo->setParseInlineAsmUsingAsmParser(false);
-  }
 
   TmpAsmInfo->setPreserveAsmComments(Options.MCOptions.PreserveAsmComments);
 
@@ -165,7 +160,7 @@ Expected<std::unique_ptr<MCStreamer>> LLVMTargetMachine::createMCStreamer(
     // Create a code emitter if asked to show the encoding.
     std::unique_ptr<MCCodeEmitter> MCE;
     if (Options.MCOptions.ShowMCEncoding)
-      MCE.reset(getTarget().createMCCodeEmitter(MII, Context));
+      MCE.reset(getTarget().createMCCodeEmitter(MII, MRI, Context));
 
     std::unique_ptr<MCAsmBackend> MAB(
         getTarget().createMCAsmBackend(STI, MRI, Options.MCOptions));
@@ -180,7 +175,7 @@ Expected<std::unique_ptr<MCStreamer>> LLVMTargetMachine::createMCStreamer(
   case CGFT_ObjectFile: {
     // Create the code emitter for the target if it exists.  If not, .o file
     // emission fails.
-    MCCodeEmitter *MCE = getTarget().createMCCodeEmitter(MII, Context);
+    MCCodeEmitter *MCE = getTarget().createMCCodeEmitter(MII, MRI, Context);
     if (!MCE)
       return make_error<StringError>("createMCCodeEmitter failed",
                                      inconvertibleErrorCode());
@@ -260,7 +255,8 @@ bool LLVMTargetMachine::addPassesToEmitMC(PassManagerBase &PM, MCContext *&Ctx,
   // emission fails.
   const MCSubtargetInfo &STI = *getMCSubtargetInfo();
   const MCRegisterInfo &MRI = *getMCRegisterInfo();
-  MCCodeEmitter *MCE = getTarget().createMCCodeEmitter(*getMCInstrInfo(), *Ctx);
+  MCCodeEmitter *MCE =
+      getTarget().createMCCodeEmitter(*getMCInstrInfo(), MRI, *Ctx);
   MCAsmBackend *MAB =
       getTarget().createMCAsmBackend(STI, MRI, Options.MCOptions);
   if (!MCE || !MAB)

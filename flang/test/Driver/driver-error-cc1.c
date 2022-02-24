@@ -1,6 +1,8 @@
 // C files are currently not supported (i.e. `flang -cc1`). Make sure that the
 // driver reports this as expected.
 
+// REQUIRES: new-flang-driver
+
 //-----------
 // RUN LINES
 //-----------

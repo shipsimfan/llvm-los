@@ -22,7 +22,6 @@ unittest("ADTTests") {
     "BreadthFirstIteratorTest.cpp",
     "BumpPtrListTest.cpp",
     "CoalescingBitVectorTest.cpp",
-    "CombinationGeneratorTest.cpp",
     "DAGDeltaAlgorithmTest.cpp",
     "DeltaAlgorithmTest.cpp",
     "DenseMapTest.cpp",
@@ -86,5 +85,6 @@ unittest("ADTTests") {
     "TwineTest.cpp",
     "TypeSwitchTest.cpp",
     "TypeTraitsTest.cpp",
+    "WaymarkingTest.cpp",
   ]
 }

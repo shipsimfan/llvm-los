@@ -44,7 +44,7 @@ void TargetLoweringObjectFile::Initialize(MCContext &ctx,
   // `Initialize` can be called more than once.
   delete Mang;
   Mang = new Mangler();
-  initMCObjectFileInfo(ctx, TM.isPositionIndependent(),
+  InitMCObjectFileInfo(TM.getTargetTriple(), TM.isPositionIndependent(), ctx,
                        TM.getCodeModel() == CodeModel::Large);
 
   // Reset various EH DWARF encodings.

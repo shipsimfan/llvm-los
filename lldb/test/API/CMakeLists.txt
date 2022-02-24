@@ -1,5 +1,5 @@
 add_custom_target(lldb-api-test-deps)
-add_dependencies(lldb-api-test-deps lldb-test-depends)
+add_dependencies(lldb-api-test-deps lldb-test-deps)
 
 add_lit_testsuites(LLDB-API
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -17,7 +17,7 @@ function(add_python_test_target name test_script args comment)
     COMMENT "${comment}"
     USES_TERMINAL
     )
-  add_dependencies(${name} lldb-test-depends)
+  add_dependencies(${name} lldb-test-deps)
 endfunction()
 
 # The default architecture with which to compile test executables is the
@@ -37,6 +37,11 @@ set(LLDB_TEST_USER_ARGS
   ""
   CACHE STRING "Specify additional arguments to pass to test runner. For example: '-C gcc -C clang -A i386 -A x86_64'")
 
+# The .noindex suffix is a marker for Spotlight to never index the
+# build directory.  LLDB queries Spotlight to locate .dSYM bundles
+# based on the UUID embedded in a binary, and because the UUID is a
+# hash of filename and .text section, there *will* be conflicts inside
+# the build directory.
 set(LLDB_TEST_COMMON_ARGS
   -u CXXFLAGS
   -u CFLAGS
@@ -103,17 +108,10 @@ if(CMAKE_HOST_APPLE)
 
   if(LLDB_USE_SYSTEM_DEBUGSERVER)
     lldb_find_system_debugserver(system_debugserver_path)
-    if(LLDB_BUILD_FRAMEWORK)
-      add_custom_target(debugserver
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${system_debugserver_path} $<TARGET_FILE_DIR:liblldb>/Resources
-        COMMENT "Copying the system debugserver to LLDB.framework's resource directory for testing.")
-    else()
-      add_custom_target(debugserver
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${system_debugserver_path} ${LLVM_RUNTIME_OUTPUT_INTDIR}
-        COMMENT "Copying the system debugserver to LLDB's binaries directory for testing.")
-    endif()
+    add_custom_target(debugserver
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      ${system_debugserver_path} ${LLVM_RUNTIME_OUTPUT_INTDIR}
+      COMMENT "Copying the system debugserver to LLDB's binaries directory for testing.")
     message(STATUS "LLDB tests use out-of-tree debugserver: ${system_debugserver_path}")
     list(APPEND LLDB_TEST_COMMON_ARGS --out-of-tree-debugserver)
     add_lldb_test_dependency(debugserver)

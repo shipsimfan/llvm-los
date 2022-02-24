@@ -12,7 +12,7 @@
 #define FORTRAN_RUNTIME_IO_INTERNAL_UNIT_H_
 
 #include "connection.h"
-#include "flang/Runtime/descriptor.h"
+#include "descriptor.h"
 #include <cinttypes>
 #include <type_traits>
 
@@ -31,7 +31,6 @@ public:
   void EndIoStatement();
 
   bool Emit(const char *, std::size_t, IoErrorHandler &);
-  std::size_t GetNextInputBytes(const char *&, IoErrorHandler &);
   std::optional<char32_t> GetCurrentChar(IoErrorHandler &);
   bool AdvanceRecord(IoErrorHandler &);
   void BackspaceRecord(IoErrorHandler &);
@@ -45,8 +44,6 @@ private:
     return descriptor().template ZeroBasedIndexedElement<char>(
         currentRecordNumber - 1);
   }
-  void BlankFillOutputRecord();
-
   StaticDescriptor<maxRank, true /*addendum*/> staticDescriptor_;
 };
 

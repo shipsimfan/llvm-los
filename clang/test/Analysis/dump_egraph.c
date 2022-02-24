@@ -9,9 +9,9 @@
 
 // REQUIRES: asserts
 
-int getJ(void);
+int getJ();
 
-int foo(void) {
+int foo() {
   int *x = 0, *y = 0;
   char c = '\x13';
 

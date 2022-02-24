@@ -15,16 +15,7 @@ class RewritePatternSet;
 
 void populateExpandTanhPattern(RewritePatternSet &patterns);
 
-void populateMathAlgebraicSimplificationPatterns(RewritePatternSet &patterns);
-
-struct MathPolynomialApproximationOptions {
-  // Enables the use of AVX2 intrinsics in some of the approximations.
-  bool enableAvx2 = false;
-};
-
-void populateMathPolynomialApproximationPatterns(
-    RewritePatternSet &patterns,
-    const MathPolynomialApproximationOptions &options = {});
+void populateMathPolynomialApproximationPatterns(RewritePatternSet &patterns);
 
 } // namespace mlir
 

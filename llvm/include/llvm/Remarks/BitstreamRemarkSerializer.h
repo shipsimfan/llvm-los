@@ -17,11 +17,10 @@
 #include "llvm/Bitstream/BitstreamWriter.h"
 #include "llvm/Remarks/BitstreamRemarkContainer.h"
 #include "llvm/Remarks/RemarkSerializer.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
 namespace remarks {
-
-struct Remarks;
 
 /// Serialize the remarks to LLVM bitstream.
 /// This class provides ways to emit remarks in the LLVM bitstream format and

@@ -41,12 +41,12 @@ public:
 
 private:
   llvm::Optional<FailureInfo>
-  getDeclFailureInfo(const NamedDecl *Decl,
+  GetDeclFailureInfo(const NamedDecl *Decl,
                      const SourceManager &SM) const override;
   llvm::Optional<FailureInfo>
-  getMacroFailureInfo(const Token &MacroNameTok,
+  GetMacroFailureInfo(const Token &MacroNameTok,
                       const SourceManager &SM) const override;
-  DiagInfo getDiagInfo(const NamingCheckId &ID,
+  DiagInfo GetDiagInfo(const NamingCheckId &ID,
                        const NamingCheckFailure &Failure) const override;
 };
 

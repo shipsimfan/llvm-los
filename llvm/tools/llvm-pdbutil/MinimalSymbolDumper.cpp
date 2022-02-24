@@ -207,7 +207,6 @@ static std::string formatSourceLanguage(SourceLanguage Lang) {
     RETURN_CASE(SourceLanguage, HLSL, "hlsl");
     RETURN_CASE(SourceLanguage, D, "d");
     RETURN_CASE(SourceLanguage, Swift, "swift");
-    RETURN_CASE(SourceLanguage, Rust, "rust");
   }
   return formatUnknownEnum(Lang);
 }
@@ -262,9 +261,6 @@ static std::string formatMachineType(CPUType Cpu) {
     RETURN_CASE(CPUType, ARM_WMMX, "arm wmmx");
     RETURN_CASE(CPUType, ARM7, "arm 7");
     RETURN_CASE(CPUType, ARM64, "arm64");
-    RETURN_CASE(CPUType, ARM64EC, "arm64ec");
-    RETURN_CASE(CPUType, ARM64X, "arm64x");
-    RETURN_CASE(CPUType, HybridX86ARM64, "hybrid x86 arm64");
     RETURN_CASE(CPUType, Omni, "omni");
     RETURN_CASE(CPUType, Ia64, "intel itanium ia64");
     RETURN_CASE(CPUType, Ia64_2, "intel itanium ia64 2");
@@ -563,7 +559,7 @@ Error MinimalSymbolDumper::visitKnownRecord(CVSymbol &CVR,
   P.format(" `{0}`", Constant.Name);
   AutoIndent Indent(P, 7);
   P.formatLine("type = {0}, value = {1}", typeIndex(Constant.Type),
-               toString(Constant.Value, 10));
+               Constant.Value.toString(10));
   return Error::success();
 }
 
@@ -586,7 +582,8 @@ Error MinimalSymbolDumper::visitKnownRecord(CVSymbol &CVR,
   AutoIndent Indent(P, 7);
   P.formatLine("offset = {0}, range = {1}", Def.Hdr.Offset,
                formatRange(Def.Range));
-  P.formatLine("gaps = [{0}]", formatGaps(P.getIndentLevel() + 9, Def.Gaps));
+  P.formatLine("gaps = {2}", Def.Hdr.Offset,
+               formatGaps(P.getIndentLevel() + 9, Def.Gaps));
   return Error::success();
 }
 
@@ -598,7 +595,7 @@ Error MinimalSymbolDumper::visitKnownRecord(CVSymbol &CVR,
                formatRegisterId(Def.Hdr.Register, CompilationCPU),
                int32_t(Def.Hdr.BasePointerOffset), Def.offsetInParent(),
                Def.hasSpilledUDTMember());
-  P.formatLine("range = {0}, gaps = [{1}]", formatRange(Def.Range),
+  P.formatLine("range = {0}, gaps = {1}", formatRange(Def.Range),
                formatGaps(P.getIndentLevel() + 9, Def.Gaps));
   return Error::success();
 }
@@ -625,7 +622,7 @@ Error MinimalSymbolDumper::visitKnownRecord(CVSymbol &CVR,
   P.formatLine("register = {0}, may have no name = {1}, offset in parent = {2}",
                formatRegisterId(Def.Hdr.Register, CompilationCPU), NoName,
                uint32_t(Def.Hdr.OffsetInParent));
-  P.formatLine("range = {0}, gaps = [{1}]", formatRange(Def.Range),
+  P.formatLine("range = {0}, gaps = {1}", formatRange(Def.Range),
                formatGaps(P.getIndentLevel() + 9, Def.Gaps));
   return Error::success();
 }
@@ -635,7 +632,7 @@ Error MinimalSymbolDumper::visitKnownRecord(CVSymbol &CVR,
   AutoIndent Indent(P, 7);
   P.formatLine("program = {0}, offset in parent = {1}, range = {2}",
                Def.Program, Def.OffsetInParent, formatRange(Def.Range));
-  P.formatLine("gaps = [{0}]", formatGaps(P.getIndentLevel() + 9, Def.Gaps));
+  P.formatLine("gaps = {0}", formatGaps(P.getIndentLevel() + 9, Def.Gaps));
   return Error::success();
 }
 
@@ -643,7 +640,7 @@ Error MinimalSymbolDumper::visitKnownRecord(CVSymbol &CVR, DefRangeSym &Def) {
   AutoIndent Indent(P, 7);
   P.formatLine("program = {0}, range = {1}", Def.Program,
                formatRange(Def.Range));
-  P.formatLine("gaps = [{0}]", formatGaps(P.getIndentLevel() + 9, Def.Gaps));
+  P.formatLine("gaps = {0}", formatGaps(P.getIndentLevel() + 9, Def.Gaps));
   return Error::success();
 }
 

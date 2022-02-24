@@ -37,14 +37,14 @@ def Tosa_ApplyScaleOp: Tosa_Op<"apply_scale", [NoSideEffect] # ElementwiseMappab
   }];
 
   let arguments = (ins
-    Tosa_IntLike:$value,
-    Tosa_IntLike:$multiplier,
+    Tosa_Int32Like:$value,
+    Tosa_Int32Like:$multiplier,
     Tosa_Int8Like:$shift,
     BoolAttr:$double_round
   );
 
   let results = (outs
-    Tosa_IntLike:$output
+    Tosa_Int32:$output
   );
 }
 

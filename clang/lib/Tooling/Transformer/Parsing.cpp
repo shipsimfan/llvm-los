@@ -33,6 +33,7 @@ using namespace transformer;
 // much as possible with the AST Matchers parsing.
 
 namespace {
+using llvm::Error;
 using llvm::Expected;
 
 template <typename... Ts> using RangeSelectorOp = RangeSelector (*)(Ts...);
@@ -164,7 +165,7 @@ static ExpectedProgress<llvm::NoneType> parseChar(char c, ParseState State) {
 static ExpectedProgress<std::string> parseId(ParseState State) {
   State.Input = consumeWhitespace(State.Input);
   auto Id = State.Input.take_while(
-      [](char c) { return isASCII(c) && isAsciiIdentifierContinue(c); });
+      [](char c) { return isASCII(c) && isIdentifierBody(c); });
   if (Id.empty())
     return makeParseError(State, "failed to parse name");
   return makeParseProgress(advance(State, Id.size()), Id.str());

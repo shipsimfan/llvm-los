@@ -21,8 +21,8 @@
 
 #include <vector>
 
-#include <cstdint>
-#include <cstring>
+#include <stdint.h>
+#include <string.h>
 
 namespace lldb_private {
 class DataExtractor;
@@ -148,15 +148,15 @@ public:
 protected:
   Scalar m_value;
   CompilerType m_compiler_type;
-  void *m_context = nullptr;
-  ValueType m_value_type = ValueType::Scalar;
-  ContextType m_context_type = ContextType::Invalid;
+  void *m_context;
+  ValueType m_value_type;
+  ContextType m_context_type;
   DataBufferHeap m_data_buffer;
 };
 
 class ValueList {
 public:
-  ValueList() {}
+  ValueList() : m_values() {}
 
   ValueList(const ValueList &rhs);
 

@@ -23,7 +23,11 @@ class TestFrameVar(TestBase):
         self.do_test()
 
     def do_test(self):
-        target = self.createTestTarget()
+        exe = self.getBuildArtifact("a.out")
+
+        # Create a target by the debugger.
+        target = self.dbg.CreateTarget(exe)
+        self.assertTrue(target, VALID_TARGET)
 
         # Now create a breakpoint in main.c at the source matching
         # "Set a breakpoint here"

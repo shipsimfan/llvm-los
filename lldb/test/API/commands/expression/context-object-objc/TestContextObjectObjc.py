@@ -36,7 +36,7 @@ class ContextObjectObjcTestCase(TestBase):
         # Test retrieving of a field (not a local with the same name)
         value = obj_val.EvaluateExpression("field")
         self.assertTrue(value.IsValid())
-        self.assertSuccess(value.GetError())
+        self.assertTrue(value.GetError().Success())
         self.assertEqual(value.GetValueAsSigned(), 1111)
 
         # Test if the self pointer is properly evaluated

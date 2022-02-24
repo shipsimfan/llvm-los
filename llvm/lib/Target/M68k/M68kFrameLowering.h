@@ -1,4 +1,4 @@
-//===-- M68kFrameLowering.h - Define frame lowering for M68k ----*- C++ -*-===//
+//===- M68kFrameLowering.h - Define frame lowering for M68k -*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -57,9 +57,10 @@ class M68kFrameLowering : public TargetFrameLowering {
   void BuildCFI(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                 const DebugLoc &DL, const MCCFIInstruction &CFIInst) const;
 
-  void emitPrologueCalleeSavedFrameMoves(MachineBasicBlock &MBB,
-                                         MachineBasicBlock::iterator MBBI,
-                                         const DebugLoc &DL) const;
+  void emitCalleeSavedFrameMoves(MachineBasicBlock &MBB,
+                                 MachineBasicBlock::iterator MBBI,
+                                 const DebugLoc &DL,
+                                 bool IsProlog) const override;
 
   unsigned getPSPSlotOffsetFromSP(const MachineFunction &MF) const;
 
@@ -169,4 +170,4 @@ public:
 };
 } // namespace llvm
 
-#endif // LLVM_LIB_TARGET_M68K_M68KFRAMELOWERING_H
+#endif

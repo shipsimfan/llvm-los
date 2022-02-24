@@ -187,7 +187,8 @@ public:
   void substitutePass(AnalysisID StandardID, IdentifyingPassPtr TargetID);
 
   /// Insert InsertedPassID pass after TargetPassID pass.
-  void insertPass(AnalysisID TargetPassID, IdentifyingPassPtr InsertedPassID);
+  void insertPass(AnalysisID TargetPassID, IdentifyingPassPtr InsertedPassID,
+                  bool VerifyAfter = true);
 
   /// Allow the target to enable a specific standard pass by default.
   void enablePass(AnalysisID PassID) { substitutePass(PassID, PassID); }
@@ -322,7 +323,8 @@ public:
 
   /// Add standard passes after a pass that has just been added. For example,
   /// the MachineVerifier if it is enabled.
-  void addMachinePostPasses(const std::string &Banner);
+  void addMachinePostPasses(const std::string &Banner, bool AllowVerify = true,
+                            bool AllowStrip = true);
 
   /// Check whether or not GlobalISel should abort on error.
   /// When this is disabled, GlobalISel will fall back on SDISel instead of
@@ -404,10 +406,6 @@ protected:
     return false;
   }
 
-  /// addPostFastRegAllocRewrite - Add passes to the optimized register
-  /// allocation pipeline after fast register allocation is complete.
-  virtual bool addPostFastRegAllocRewrite() { return false; }
-
   /// Add passes to be run immediately after virtual registers are rewritten
   /// to physical registers.
   virtual void addPostRewrite() { }
@@ -447,12 +445,16 @@ protected:
 
   /// Add a CodeGen pass at this point in the pipeline after checking overrides.
   /// Return the pass that was added, or zero if no pass was added.
-  AnalysisID addPass(AnalysisID PassID);
+  /// @p verifyAfter   if true and adding a machine function pass add an extra
+  ///                  machine verification pass afterwards.
+  AnalysisID addPass(AnalysisID PassID, bool verifyAfter = true);
 
   /// Add a pass to the PassManager if that pass is supposed to be run, as
   /// determined by the StartAfter and StopAfter options. Takes ownership of the
   /// pass.
-  void addPass(Pass *P);
+  /// @p verifyAfter   if true and adding a machine function pass add an extra
+  ///                  machine verification pass afterwards.
+  void addPass(Pass *P, bool verifyAfter = true);
 
   /// addMachinePasses helper to create the target-selected or overriden
   /// regalloc pass.

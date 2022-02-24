@@ -58,8 +58,7 @@ public:
     auto Buffer = llvm::MemoryBuffer::getFile(ShardPath);
     if (!Buffer)
       return nullptr;
-    if (auto I =
-            readIndexFile(Buffer->get()->getBuffer(), SymbolOrigin::Background))
+    if (auto I = readIndexFile(Buffer->get()->getBuffer()))
       return std::make_unique<IndexFileIn>(std::move(*I));
     else
       elog("Error while reading shard {0}: {1}", ShardIdentifier,

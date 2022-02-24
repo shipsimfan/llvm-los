@@ -15,11 +15,11 @@ namespace mlir {
 
 namespace spirv {
 class ModuleOp;
-} // namespace spirv
+} // end namespace spirv
 
 #define GEN_PASS_CLASSES
 #include "mlir/Dialect/SPIRV/Transforms/Passes.h.inc"
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // DIALECT_SPIRV_TRANSFORMS_PASSDETAIL_H_

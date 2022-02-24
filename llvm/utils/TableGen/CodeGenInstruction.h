@@ -13,7 +13,6 @@
 #ifndef LLVM_UTILS_TABLEGEN_CODEGENINSTRUCTION_H
 #define LLVM_UTILS_TABLEGEN_CODEGENINSTRUCTION_H
 
-#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/MachineValueType.h"
 #include "llvm/Support/SMLoc.h"
@@ -107,7 +106,7 @@ template <typename T> class ArrayRef;
       /// DoNotEncode - Bools are set to true in this vector for each operand in
       /// the DisableEncoding list.  These should not be emitted by the code
       /// emitter.
-      BitVector DoNotEncode;
+      std::vector<bool> DoNotEncode;
 
       /// MIOperandInfo - Default MI operand type. Note an operand may be made
       /// up of multiple MI operands.

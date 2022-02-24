@@ -11,8 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/Twine.h"
-#include "llvm/Support/MemAlloc.h"
 #include <cstdint>
 #ifdef LLVM_ENABLE_EXCEPTIONS
 #include <stdexcept>
@@ -21,21 +19,12 @@ using namespace llvm;
 
 // Check that no bytes are wasted and everything is well-aligned.
 namespace {
-// These structures may cause binary compat warnings on AIX. Suppress the
-// warning since we are only using these types for the static assertions below.
-#if defined(_AIX)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Waix-compat"
-#endif
 struct Struct16B {
   alignas(16) void *X;
 };
 struct Struct32B {
   alignas(32) void *X;
 };
-#if defined(_AIX)
-#pragma GCC diagnostic pop
-#endif
 }
 static_assert(sizeof(SmallVector<void *, 0>) ==
                   sizeof(unsigned) * 2 + sizeof(void *),
@@ -58,7 +47,8 @@ static_assert(sizeof(SmallVector<char, 0>) ==
 
 /// Report that MinSize doesn't fit into this vector's size type. Throws
 /// std::length_error or calls report_fatal_error.
-[[noreturn]] static void report_size_overflow(size_t MinSize, size_t MaxSize);
+LLVM_ATTRIBUTE_NORETURN
+static void report_size_overflow(size_t MinSize, size_t MaxSize);
 static void report_size_overflow(size_t MinSize, size_t MaxSize) {
   std::string Reason = "SmallVector unable to grow. Requested capacity (" +
                        std::to_string(MinSize) +
@@ -67,13 +57,13 @@ static void report_size_overflow(size_t MinSize, size_t MaxSize) {
 #ifdef LLVM_ENABLE_EXCEPTIONS
   throw std::length_error(Reason);
 #else
-  report_fatal_error(Twine(Reason));
+  report_fatal_error(Reason);
 #endif
 }
 
 /// Report that this vector is already at maximum capacity. Throws
 /// std::length_error or calls report_fatal_error.
-[[noreturn]] static void report_at_maximum_capacity(size_t MaxSize);
+LLVM_ATTRIBUTE_NORETURN static void report_at_maximum_capacity(size_t MaxSize);
 static void report_at_maximum_capacity(size_t MaxSize) {
   std::string Reason =
       "SmallVector capacity unable to grow. Already at maximum size " +
@@ -81,7 +71,7 @@ static void report_at_maximum_capacity(size_t MaxSize) {
 #ifdef LLVM_ENABLE_EXCEPTIONS
   throw std::length_error(Reason);
 #else
-  report_fatal_error(Twine(Reason));
+  report_fatal_error(Reason);
 #endif
 }
 

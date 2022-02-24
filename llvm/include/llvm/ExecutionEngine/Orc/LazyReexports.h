@@ -151,8 +151,7 @@ public:
 private:
   void materialize(std::unique_ptr<MaterializationResponsibility> R) override;
   void discard(const JITDylib &JD, const SymbolStringPtr &Name) override;
-  static MaterializationUnit::Interface
-  extractFlags(const SymbolAliasMap &Aliases);
+  static SymbolFlagsMap extractFlags(const SymbolAliasMap &Aliases);
 
   LazyCallThroughManager &LCTManager;
   IndirectStubsManager &ISManager;

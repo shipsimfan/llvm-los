@@ -5,10 +5,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// This file implements the C++20 <bit> header.
-///
+//
+// This file implements the C++20 <bit> header.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_BIT_H

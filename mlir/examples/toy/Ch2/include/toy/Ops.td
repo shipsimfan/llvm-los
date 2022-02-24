@@ -28,7 +28,7 @@ def Toy_Dialect : Dialect {
 //   * The parent dialect of the operation.
 //   * The mnemonic for the operation, or the name without the dialect prefix.
 //   * A list of traits for the operation.
-class Toy_Op<string mnemonic, list<Trait> traits = []> :
+class Toy_Op<string mnemonic, list<OpTrait> traits = []> :
     Op<Toy_Dialect, mnemonic, traits>;
 
 //===----------------------------------------------------------------------===//
@@ -59,8 +59,9 @@ def ConstantOp : Toy_Op<"constant", [NoSideEffect]> {
   // The constant operation returns a single value of TensorType.
   let results = (outs F64Tensor);
 
-  // Indicate that the operation has a custom parser and printer method.
-  let hasCustomAssemblyFormat = 1;
+  // Specify a parser and printer method.
+  let parser = [{ return ::parseConstantOp(parser, result); }];
+  let printer = [{ return ::print(p, *this); }];
 
   // Add custom build methods for the constant operation. These method populates
   // the `state` that MLIR uses to create operations, i.e. these are used when
@@ -75,8 +76,8 @@ def ConstantOp : Toy_Op<"constant", [NoSideEffect]> {
     OpBuilder<(ins "double":$value)>
   ];
 
-  // Indicate that additional verification for this operation is necessary.
-  let hasVerifier = 1;
+  // Invoke a static verify method to verify this constant operation.
+  let verifier = [{ return ::verify(*this); }];
 }
 
 def AddOp : Toy_Op<"add"> {
@@ -89,8 +90,9 @@ def AddOp : Toy_Op<"add"> {
   let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
   let results = (outs F64Tensor);
 
-  // Indicate that the operation has a custom parser and printer method.
-  let hasCustomAssemblyFormat = 1;
+  // Specify a parser and printer method.
+  let parser = [{ return ::parseBinaryOp(parser, result); }];
+  let printer = [{ return ::printBinaryOp(p, *this); }];
 
   // Allow building an AddOp with from the two input operands.
   let builders = [
@@ -143,8 +145,9 @@ def MulOp : Toy_Op<"mul"> {
   let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
   let results = (outs F64Tensor);
 
-  // Indicate that the operation has a custom parser and printer method.
-  let hasCustomAssemblyFormat = 1;
+  // Specify a parser and printer method.
+  let parser = [{ return ::parseBinaryOp(parser, result); }];
+  let printer = [{ return ::printBinaryOp(p, *this); }];
 
   // Allow building a MulOp with from the two input operands.
   let builders = [
@@ -221,7 +224,7 @@ def ReturnOp : Toy_Op<"return", [NoSideEffect, HasParent<"FuncOp">,
   }];
 
   // Invoke a static verify method to verify this return operation.
-  let hasVerifier = 1;
+  let verifier = [{ return ::verify(*this); }];
 }
 
 def TransposeOp : Toy_Op<"transpose"> {
@@ -240,7 +243,7 @@ def TransposeOp : Toy_Op<"transpose"> {
   ];
 
   // Invoke a static verify method to verify this transpose operation.
-  let hasVerifier = 1;
+  let verifier = [{ return ::verify(*this); }];
 }
 
 #endif // TOY_OPS

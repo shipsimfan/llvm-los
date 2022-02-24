@@ -37,7 +37,7 @@
 @end
 
 @interface LocalizationTestSuite : NSObject
-int random(void);
+int random();
 @property (assign) int unreadArticlesCount;
 @end
 #define MCLocalizedString(s) NSLocalizedString(s,nil);

@@ -11,21 +11,20 @@
 
 include "mlir/Pass/PassBase.td"
 
-def RemoveShapeConstraints : Pass<"remove-shape-constraints", "FuncOp"> {
+def RemoveShapeConstraints : FunctionPass<"remove-shape-constraints"> {
   let summary = "Replace all cstr_ ops with a true witness";
   let constructor = "mlir::createRemoveShapeConstraintsPass()";
 }
 
-def ShapeToShapeLowering : Pass<"shape-to-shape-lowering", "FuncOp"> {
+def ShapeToShapeLowering : FunctionPass<"shape-to-shape-lowering"> {
   let summary = "Legalize Shape dialect to be convertible to Standard";
   let constructor = "mlir::createShapeToShapeLowering()";
 }
 
 // TODO: Generalize this to allow any type conversions desired.
-def ShapeBufferize : Pass<"shape-bufferize", "FuncOp"> {
+def ShapeBufferize : FunctionPass<"shape-bufferize"> {
   let summary = "Bufferize the shape dialect.";
   let constructor = "mlir::createShapeBufferizePass()";
-  let dependentDialects = ["bufferization::BufferizationDialect",
-                           "memref::MemRefDialect"];
+  let dependentDialects = ["memref::MemRefDialect"];
 }
 #endif // MLIR_DIALECT_SHAPE_TRANSFORMS_PASSES

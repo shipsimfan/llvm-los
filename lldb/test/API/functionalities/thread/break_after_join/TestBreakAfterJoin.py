@@ -32,7 +32,7 @@ class BreakpointAfterJoinTestCase(TestBase):
     @expectedFailureNetBSD
     def test(self):
         """Test breakpoint handling after a thread join."""
-        self.build()
+        self.build(dictionary=self.getBuildFlags())
 
         exe = self.getBuildArtifact("a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)

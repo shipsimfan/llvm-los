@@ -1,11 +1,6 @@
 // RUN: %clang_cc1 -fexperimental-strict-floating-point -ffp-exception-behavior=strict -triple %itanium_abi_triple -emit-llvm %s -o - | FileCheck %s
-// RUN: %clang_cc1 -fexperimental-strict-floating-point -ffp-exception-behavior=strict -triple %itanium_abi_triple -emit-llvm %s -o - -fms-extensions -DMS | FileCheck %s
 
-#ifdef MS
-#pragma fenv_access (on)
-#else
 #pragma STDC FENV_ACCESS ON
-#endif
 
 float func_01(float x, float y) {
   return x + y;
@@ -30,11 +25,7 @@ float func_03(float x, float y) {
 // CHECK: call float @llvm.experimental.constrained.fadd.f32(float {{.*}}, float {{.*}}, metadata !"round.dynamic", metadata !"fpexcept.strict")
 
 
-#ifdef MS
-#pragma fenv_access (off)
-#else
 #pragma STDC FENV_ACCESS OFF
-#endif
 
 float func_04(float x, float y) {
   #pragma float_control(except, off)

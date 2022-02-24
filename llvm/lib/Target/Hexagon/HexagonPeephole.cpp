@@ -120,12 +120,16 @@ bool HexagonPeephole::runOnMachineFunction(MachineFunction &MF) {
   if (DisableHexagonPeephole) return false;
 
   // Loop over all of the basic blocks.
-  for (MachineBasicBlock &MBB : MF) {
+  for (MachineFunction::iterator MBBb = MF.begin(), MBBe = MF.end();
+       MBBb != MBBe; ++MBBb) {
+    MachineBasicBlock *MBB = &*MBBb;
     PeepholeMap.clear();
     PeepholeDoubleRegsMap.clear();
 
     // Traverse the basic block.
-    for (MachineInstr &MI : llvm::make_early_inc_range(MBB)) {
+    for (auto I = MBB->begin(), E = MBB->end(), NextI = I; I != E; I = NextI) {
+      NextI = std::next(I);
+      MachineInstr &MI = *I;
       // Look for sign extends:
       // %170 = SXTW %166
       if (!DisableOptSZExt && MI.getOpcode() == Hexagon::A2_sxtw) {
@@ -270,11 +274,11 @@ bool HexagonPeephole::runOnMachineFunction(MachineFunction &MF) {
           if (NewOp) {
             Register PSrc = MI.getOperand(PR).getReg();
             if (unsigned POrig = PeepholeMap.lookup(PSrc)) {
-              BuildMI(MBB, MI.getIterator(), MI.getDebugLoc(), QII->get(NewOp),
-                      MI.getOperand(0).getReg())
-                  .addReg(POrig)
-                  .add(MI.getOperand(S2))
-                  .add(MI.getOperand(S1));
+              BuildMI(*MBB, MI.getIterator(), MI.getDebugLoc(),
+                      QII->get(NewOp), MI.getOperand(0).getReg())
+                .addReg(POrig)
+                .add(MI.getOperand(S2))
+                .add(MI.getOperand(S1));
               MRI->clearKillFlags(POrig);
               MI.eraseFromParent();
             }

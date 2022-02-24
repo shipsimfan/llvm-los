@@ -197,7 +197,7 @@ PWACtx SCEVAffinator::visit(const SCEV *Expr) {
 
   auto Key = std::make_pair(Expr, BB);
   PWACtx PWAC = CachedExpressions[Key];
-  if (!PWAC.first.is_null())
+  if (PWAC.first)
     return PWAC;
 
   auto ConstantAndLeftOverPair = extractConstantFactor(Expr, SE);
@@ -463,11 +463,6 @@ PWACtx SCEVAffinator::visitUMaxExpr(const SCEVUMaxExpr *Expr) {
 
 PWACtx SCEVAffinator::visitUMinExpr(const SCEVUMinExpr *Expr) {
   llvm_unreachable("SCEVUMinExpr not yet supported");
-}
-
-PWACtx
-SCEVAffinator::visitSequentialUMinExpr(const SCEVSequentialUMinExpr *Expr) {
-  llvm_unreachable("SCEVSequentialUMinExpr not yet supported");
 }
 
 PWACtx SCEVAffinator::visitUDivExpr(const SCEVUDivExpr *Expr) {

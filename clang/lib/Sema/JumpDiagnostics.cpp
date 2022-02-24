@@ -377,15 +377,11 @@ void JumpScopeChecker::BuildScopeInformation(Stmt *S,
 
   case Stmt::IfStmtClass: {
     IfStmt *IS = cast<IfStmt>(S);
-    if (!(IS->isConstexpr() || IS->isConsteval() ||
-          IS->isObjCAvailabilityCheck()))
+    if (!(IS->isConstexpr() || IS->isObjCAvailabilityCheck()))
       break;
 
-    unsigned Diag = diag::note_protected_by_if_available;
-    if (IS->isConstexpr())
-      Diag = diag::note_protected_by_constexpr_if;
-    else if (IS->isConsteval())
-      Diag = diag::note_protected_by_consteval_if;
+    unsigned Diag = IS->isConstexpr() ? diag::note_protected_by_constexpr_if
+                                      : diag::note_protected_by_if_available;
 
     if (VarDecl *Var = IS->getConditionVariable())
       BuildScopeInformation(Var, ParentScope);
@@ -393,9 +389,7 @@ void JumpScopeChecker::BuildScopeInformation(Stmt *S,
     // Cannot jump into the middle of the condition.
     unsigned NewParentScope = Scopes.size();
     Scopes.push_back(GotoScope(ParentScope, Diag, 0, IS->getBeginLoc()));
-
-    if (!IS->isConsteval())
-      BuildScopeInformation(IS->getCond(), NewParentScope);
+    BuildScopeInformation(IS->getCond(), NewParentScope);
 
     // Jumps into either arm of an 'if constexpr' are not allowed.
     NewParentScope = Scopes.size();
@@ -493,7 +487,8 @@ void JumpScopeChecker::BuildScopeInformation(Stmt *S,
     }
 
     // Jump from the catch to the finally or try is not valid.
-    for (ObjCAtCatchStmt *AC : AT->catch_stmts()) {
+    for (unsigned I = 0, N = AT->getNumCatchStmts(); I != N; ++I) {
+      ObjCAtCatchStmt *AC = AT->getCatchStmt(I);
       unsigned NewParentScope = Scopes.size();
       Scopes.push_back(GotoScope(ParentScope,
                                  diag::note_protected_by_objc_catch,
@@ -970,9 +965,6 @@ void JumpScopeChecker::CheckJump(Stmt *From, Stmt *To, SourceLocation DiagLoc,
   if (!ToScopesWarning.empty()) {
     S.Diag(DiagLoc, JumpDiagWarning);
     NoteJumpIntoScopes(ToScopesWarning);
-    assert(isa<LabelStmt>(To));
-    LabelStmt *Label = cast<LabelStmt>(To);
-    Label->setSideEntry(true);
   }
 
   // Handle errors.

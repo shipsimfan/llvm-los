@@ -73,7 +73,7 @@ void big_struct(void) {
 // CHECK-IMPOSSIBLE_BIG: impossible constraint in asm: can't store value into a register
 
 // Clang is able to emit LLVM IR for an 16-byte structure.
-void x_constraint_fit(void) {
+void x_constraint_fit() {
 #ifdef POSSIBLE_X
   struct S {
     unsigned x[4];
@@ -90,7 +90,7 @@ void x_constraint_fit(void) {
 // CHECK-X: ret
 
 // Clang is unable to emit LLVM IR for a 32-byte structure.
-void x_constraint_nofit(void) {
+void x_constraint_nofit() {
 #ifdef IMPOSSIBLE_X
   struct S {
     unsigned x[8];
@@ -106,7 +106,7 @@ void x_constraint_nofit(void) {
 // Clang used to report the following message:
 //   "impossible constraint in asm: can't store struct into a register"
 // for the assembly directive below, although there's no struct.
-void crbug_999160_regtest(void) {
+void crbug_999160_regtest() {
 #ifdef IMPOSSIBLE_9BYTES
   char buf[9];
   asm(""

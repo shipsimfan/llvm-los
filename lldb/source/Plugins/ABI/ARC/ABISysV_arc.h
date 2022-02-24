@@ -1,4 +1,4 @@
-//===-- ABISysV_arc.h -------------------------------------------*- C++ -*-===//
+//===-- ArchitectureArc.h ---------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -80,13 +80,15 @@ public:
   static lldb::ABISP CreateInstance(lldb::ProcessSP process_sp,
                                     const lldb_private::ArchSpec &arch);
 
-  static llvm::StringRef GetPluginNameStatic() { return "sysv-arc"; }
+  static lldb_private::ConstString GetPluginNameStatic();
 
   //------------------------------------------------------------------
   // PluginInterface protocol
   //------------------------------------------------------------------
 
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  lldb_private::ConstString GetPluginName() override;
+
+  uint32_t GetPluginVersion() override;
 
 private:
   lldb::ValueObjectSP

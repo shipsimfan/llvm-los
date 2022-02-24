@@ -99,8 +99,6 @@ Optional<uint8_t> getHsaAbiVersion(const MCSubtargetInfo *STI) {
     return ELF::ELFABIVERSION_AMDGPU_HSA_V3;
   case 4:
     return ELF::ELFABIVERSION_AMDGPU_HSA_V4;
-  case 5:
-    return ELF::ELFABIVERSION_AMDGPU_HSA_V5;
   default:
     report_fatal_error(Twine("Unsupported AMDHSA Code Object Version ") +
                        Twine(AmdhsaCodeObjectVersion));
@@ -125,31 +123,8 @@ bool isHsaAbiVersion4(const MCSubtargetInfo *STI) {
   return false;
 }
 
-bool isHsaAbiVersion5(const MCSubtargetInfo *STI) {
-  if (Optional<uint8_t> HsaAbiVer = getHsaAbiVersion(STI))
-    return *HsaAbiVer == ELF::ELFABIVERSION_AMDGPU_HSA_V5;
-  return false;
-}
-
-bool isHsaAbiVersion3AndAbove(const MCSubtargetInfo *STI) {
-  return isHsaAbiVersion3(STI) || isHsaAbiVersion4(STI) ||
-         isHsaAbiVersion5(STI);
-}
-
-// FIXME: All such magic numbers about the ABI should be in a
-// central TD file.
-unsigned getHostcallImplicitArgPosition() {
-  switch (AmdhsaCodeObjectVersion) {
-  case 2:
-  case 3:
-  case 4:
-    return 24;
-  case 5:
-    return 80;
-  default:
-    llvm_unreachable("Unexpected code object version");
-    return 0;
-  }
+bool isHsaAbiVersion3Or4(const MCSubtargetInfo *STI) {
+  return isHsaAbiVersion3(STI) || isHsaAbiVersion4(STI);
 }
 
 #define GET_MIMGBaseOpcodesTable_IMPL
@@ -157,8 +132,6 @@ unsigned getHostcallImplicitArgPosition() {
 #define GET_MIMGInfoTable_IMPL
 #define GET_MIMGLZMappingTable_IMPL
 #define GET_MIMGMIPMappingTable_IMPL
-#define GET_MIMGBiasMappingTable_IMPL
-#define GET_MIMGOffsetMappingTable_IMPL
 #define GET_MIMGG16MappingTable_IMPL
 #include "AMDGPUGenSearchableTables.inc"
 
@@ -182,34 +155,6 @@ int getMaskedMIMGOp(unsigned Opc, unsigned NewChannels) {
   return NewInfo ? NewInfo->Opcode : -1;
 }
 
-unsigned getAddrSizeMIMGOp(const MIMGBaseOpcodeInfo *BaseOpcode,
-                           const MIMGDimInfo *Dim, bool IsA16,
-                           bool IsG16Supported) {
-  unsigned AddrWords = BaseOpcode->NumExtraArgs;
-  unsigned AddrComponents = (BaseOpcode->Coordinates ? Dim->NumCoords : 0) +
-                            (BaseOpcode->LodOrClampOrMip ? 1 : 0);
-  if (IsA16)
-    AddrWords += divideCeil(AddrComponents, 2);
-  else
-    AddrWords += AddrComponents;
-
-  // Note: For subtargets that support A16 but not G16, enabling A16 also
-  // enables 16 bit gradients.
-  // For subtargets that support A16 (operand) and G16 (done with a different
-  // instruction encoding), they are independent.
-
-  if (BaseOpcode->Gradients) {
-    if ((IsA16 && !IsG16Supported) || BaseOpcode->G16)
-      // There are two gradients per coordinate, we pack them separately.
-      // For the 3d case,
-      // we get (dy/du, dx/du) (-, dz/du) (dy/dv, dx/dv) (-, dz/dv)
-      AddrWords += alignTo<2>(Dim->NumGradients / 2);
-    else
-      AddrWords += Dim->NumGradients;
-  }
-  return AddrWords;
-}
-
 struct MUBUFInfo {
   uint16_t Opcode;
   uint16_t BaseOpcode;
@@ -217,7 +162,6 @@ struct MUBUFInfo {
   bool has_vaddr;
   bool has_srsrc;
   bool has_soffset;
-  bool IsBufferInv;
 };
 
 struct MTBUFInfo {
@@ -311,11 +255,6 @@ bool getMUBUFHasSrsrc(unsigned Opc) {
 bool getMUBUFHasSoffset(unsigned Opc) {
   const MUBUFInfo *Info = getMUBUFOpcodeHelper(Opc);
   return Info ? Info->has_soffset : false;
-}
-
-bool getMUBUFIsBufferInv(unsigned Opc) {
-  const MUBUFInfo *Info = getMUBUFOpcodeHelper(Opc);
-  return Info ? Info->IsBufferInv : false;
 }
 
 bool getSMEMIsBuffer(unsigned Opc) {
@@ -437,7 +376,7 @@ void AMDGPUTargetID::setTargetIDFromTargetIDStream(StringRef TargetID) {
 }
 
 std::string AMDGPUTargetID::toString() const {
-  std::string StringRep;
+  std::string StringRep = "";
   raw_string_ostream StreamRep(StringRep);
 
   auto TargetTriple = STI.getTargetTriple();
@@ -448,7 +387,7 @@ std::string AMDGPUTargetID::toString() const {
             << TargetTriple.getOSName() << '-'
             << TargetTriple.getEnvironmentName() << '-';
 
-  std::string Processor;
+  std::string Processor = "";
   // TODO: Following else statement is present here because we used various
   // alias names for GPUs up until GFX9 (e.g. 'fiji' is same as 'gfx803').
   // Remove once all aliases are removed from GCNProcessors.td.
@@ -459,7 +398,7 @@ std::string AMDGPUTargetID::toString() const {
                  Twine(Version.Stepping))
                     .str();
 
-  std::string Features;
+  std::string Features = "";
   if (Optional<uint8_t> HsaAbiVersion = getHsaAbiVersion(&STI)) {
     switch (*HsaAbiVersion) {
     case ELF::ELFABIVERSION_AMDGPU_HSA_V2:
@@ -477,16 +416,16 @@ std::string AMDGPUTargetID::toString() const {
       } else if (Processor == "gfx801") {
         if (!isXnackOnOrAny())
           report_fatal_error(
-              "AMD GPU code object V2 does not support processor " +
-              Twine(Processor) + " without XNACK");
+              "AMD GPU code object V2 does not support processor " + Processor +
+              " without XNACK");
       } else if (Processor == "gfx802") {
       } else if (Processor == "gfx803") {
       } else if (Processor == "gfx805") {
       } else if (Processor == "gfx810") {
         if (!isXnackOnOrAny())
           report_fatal_error(
-              "AMD GPU code object V2 does not support processor " +
-              Twine(Processor) + " without XNACK");
+              "AMD GPU code object V2 does not support processor " + Processor +
+              " without XNACK");
       } else if (Processor == "gfx900") {
         if (isXnackOnOrAny())
           Processor = "gfx901";
@@ -502,12 +441,11 @@ std::string AMDGPUTargetID::toString() const {
       } else if (Processor == "gfx90c") {
         if (isXnackOnOrAny())
           report_fatal_error(
-              "AMD GPU code object V2 does not support processor " +
-              Twine(Processor) + " with XNACK being ON or ANY");
+              "AMD GPU code object V2 does not support processor " + Processor +
+              " with XNACK being ON or ANY");
       } else {
         report_fatal_error(
-            "AMD GPU code object V2 does not support processor " +
-            Twine(Processor));
+            "AMD GPU code object V2 does not support processor " + Processor);
       }
       break;
     case ELF::ELFABIVERSION_AMDGPU_HSA_V3:
@@ -520,7 +458,6 @@ std::string AMDGPUTargetID::toString() const {
         Features += "+sram-ecc";
       break;
     case ELF::ELFABIVERSION_AMDGPU_HSA_V4:
-    case ELF::ELFABIVERSION_AMDGPU_HSA_V5:
       // sramecc.
       if (getSramEccSetting() == TargetIDSetting::Off)
         Features += ":sramecc-";
@@ -700,8 +637,7 @@ unsigned getNumExtraSGPRs(const MCSubtargetInfo *STI, bool VCCUsed,
     if (XNACKUsed)
       ExtraSGPRs = 4;
 
-    if (FlatScrUsed ||
-        STI->getFeatureBits().test(AMDGPU::FeatureArchitectedFlatScratch))
+    if (FlatScrUsed)
       ExtraSGPRs = 6;
   }
 
@@ -1026,9 +962,7 @@ unsigned encodeWaitcnt(const IsaVersion &Version, const Waitcnt &Decoded) {
 
 namespace Hwreg {
 
-int64_t getHwregId(const StringRef Name, const MCSubtargetInfo &STI) {
-  if (isGFX10(STI) && Name == "HW_REG_HW_ID") // An alias
-    return ID_HW_ID1;
+int64_t getHwregId(const StringRef Name) {
   for (int Id = ID_SYMBOLIC_FIRST_; Id < ID_SYMBOLIC_LAST_; ++Id) {
     if (IdSymbolic[Id] && Name == IdSymbolic[Id])
       return Id;
@@ -1048,18 +982,9 @@ static unsigned getLastSymbolicHwreg(const MCSubtargetInfo &STI) {
 }
 
 bool isValidHwreg(int64_t Id, const MCSubtargetInfo &STI) {
-  switch (Id) {
-  case ID_HW_ID:
-    return isSI(STI) || isCI(STI) || isVI(STI) || isGFX9(STI);
-  case ID_HW_ID1:
-  case ID_HW_ID2:
-    return isGFX10Plus(STI);
-  case ID_XNACK_MASK:
-    return isGFX10(STI) && !AMDGPU::isGFX10_BEncoding(STI);
-  default:
-    return ID_SYMBOLIC_FIRST_ <= Id && Id < getLastSymbolicHwreg(STI) &&
-           IdSymbolic[Id];
-  }
+  return
+    ID_SYMBOLIC_FIRST_ <= Id && Id < getLastSymbolicHwreg(STI) &&
+    IdSymbolic[Id] && (Id != ID_XNACK_MASK || !AMDGPU::isGFX10_BEncoding(STI));
 }
 
 bool isValidHwreg(int64_t Id) {
@@ -1385,17 +1310,6 @@ unsigned getInitialPSInputAddr(const Function &F) {
   return getIntegerAttribute(F, "InitialPSInputAddr", 0);
 }
 
-bool getHasColorExport(const Function &F) {
-  // As a safe default always respond as if PS has color exports.
-  return getIntegerAttribute(
-             F, "amdgpu-color-export",
-             F.getCallingConv() == CallingConv::AMDGPU_PS ? 1 : 0) != 0;
-}
-
-bool getHasDepthExport(const Function &F) {
-  return getIntegerAttribute(F, "amdgpu-depth-export", 0) != 0;
-}
-
 bool isShader(CallingConv::ID cc) {
   switch(cc) {
     case CallingConv::AMDGPU_VS:
@@ -1443,10 +1357,6 @@ bool isModuleEntryFunctionCC(CallingConv::ID CC) {
   default:
     return isEntryFunctionCC(CC);
   }
-}
-
-bool isKernelCC(const Function *Func) {
-  return AMDGPU::isModuleEntryFunctionCC(Func->getCallingConv());
 }
 
 bool hasXNACK(const MCSubtargetInfo &STI) {
@@ -1503,10 +1413,6 @@ bool isGCN3Encoding(const MCSubtargetInfo &STI) {
   return STI.getFeatureBits()[AMDGPU::FeatureGCN3Encoding];
 }
 
-bool isGFX10_AEncoding(const MCSubtargetInfo &STI) {
-  return STI.getFeatureBits()[AMDGPU::FeatureGFX10_AEncoding];
-}
-
 bool isGFX10_BEncoding(const MCSubtargetInfo &STI) {
   return STI.getFeatureBits()[AMDGPU::FeatureGFX10_BEncoding];
 }
@@ -1519,26 +1425,18 @@ bool isGFX90A(const MCSubtargetInfo &STI) {
   return STI.getFeatureBits()[AMDGPU::FeatureGFX90AInsts];
 }
 
-bool hasArchitectedFlatScratch(const MCSubtargetInfo &STI) {
-  return STI.getFeatureBits()[AMDGPU::FeatureArchitectedFlatScratch];
-}
-
-bool hasMAIInsts(const MCSubtargetInfo &STI) {
-  return STI.getFeatureBits()[AMDGPU::FeatureMAIInsts];
-}
-
-int32_t getTotalNumVGPRs(bool has90AInsts, int32_t ArgNumAGPR,
-                         int32_t ArgNumVGPR) {
-  if (has90AInsts && ArgNumAGPR)
-    return alignTo(ArgNumVGPR, 4) + ArgNumAGPR;
-  return std::max(ArgNumVGPR, ArgNumAGPR);
-}
-
 bool isSGPR(unsigned Reg, const MCRegisterInfo* TRI) {
   const MCRegisterClass SGPRClass = TRI->getRegClass(AMDGPU::SReg_32RegClassID);
   const unsigned FirstSubReg = TRI->getSubReg(Reg, AMDGPU::sub0);
   return SGPRClass.contains(FirstSubReg != 0 ? FirstSubReg : Reg) ||
     Reg == AMDGPU::SCC;
+}
+
+bool isRegIntersect(unsigned Reg0, unsigned Reg1, const MCRegisterInfo* TRI) {
+  for (MCRegAliasIterator R(Reg0, TRI, true); R.isValid(); ++R) {
+    if (*R == Reg1) return true;
+  }
+  return false;
 }
 
 #define MAP_REG2REG \
@@ -1621,10 +1519,8 @@ bool isSISrcFPOperand(const MCInstrDesc &Desc, unsigned OpNo) {
   unsigned OpType = Desc.OpInfo[OpNo].OperandType;
   switch (OpType) {
   case AMDGPU::OPERAND_REG_IMM_FP32:
-  case AMDGPU::OPERAND_REG_IMM_FP32_DEFERRED:
   case AMDGPU::OPERAND_REG_IMM_FP64:
   case AMDGPU::OPERAND_REG_IMM_FP16:
-  case AMDGPU::OPERAND_REG_IMM_FP16_DEFERRED:
   case AMDGPU::OPERAND_REG_IMM_V2FP16:
   case AMDGPU::OPERAND_REG_IMM_V2INT16:
   case AMDGPU::OPERAND_REG_INLINE_C_FP32:
@@ -1673,14 +1569,13 @@ unsigned getRegBitWidth(unsigned RCID) {
     return 32;
   case AMDGPU::SGPR_64RegClassID:
   case AMDGPU::VS_64RegClassID:
+  case AMDGPU::AV_64RegClassID:
   case AMDGPU::SReg_64RegClassID:
   case AMDGPU::VReg_64RegClassID:
   case AMDGPU::AReg_64RegClassID:
   case AMDGPU::SReg_64_XEXECRegClassID:
   case AMDGPU::VReg_64_Align2RegClassID:
   case AMDGPU::AReg_64_Align2RegClassID:
-  case AMDGPU::AV_64RegClassID:
-  case AMDGPU::AV_64_Align2RegClassID:
     return 64;
   case AMDGPU::SGPR_96RegClassID:
   case AMDGPU::SReg_96RegClassID:
@@ -1689,7 +1584,6 @@ unsigned getRegBitWidth(unsigned RCID) {
   case AMDGPU::VReg_96_Align2RegClassID:
   case AMDGPU::AReg_96_Align2RegClassID:
   case AMDGPU::AV_96RegClassID:
-  case AMDGPU::AV_96_Align2RegClassID:
     return 96;
   case AMDGPU::SGPR_128RegClassID:
   case AMDGPU::SReg_128RegClassID:
@@ -1698,7 +1592,6 @@ unsigned getRegBitWidth(unsigned RCID) {
   case AMDGPU::VReg_128_Align2RegClassID:
   case AMDGPU::AReg_128_Align2RegClassID:
   case AMDGPU::AV_128RegClassID:
-  case AMDGPU::AV_128_Align2RegClassID:
     return 128;
   case AMDGPU::SGPR_160RegClassID:
   case AMDGPU::SReg_160RegClassID:
@@ -1707,7 +1600,6 @@ unsigned getRegBitWidth(unsigned RCID) {
   case AMDGPU::VReg_160_Align2RegClassID:
   case AMDGPU::AReg_160_Align2RegClassID:
   case AMDGPU::AV_160RegClassID:
-  case AMDGPU::AV_160_Align2RegClassID:
     return 160;
   case AMDGPU::SGPR_192RegClassID:
   case AMDGPU::SReg_192RegClassID:
@@ -1715,26 +1607,13 @@ unsigned getRegBitWidth(unsigned RCID) {
   case AMDGPU::AReg_192RegClassID:
   case AMDGPU::VReg_192_Align2RegClassID:
   case AMDGPU::AReg_192_Align2RegClassID:
-  case AMDGPU::AV_192RegClassID:
-  case AMDGPU::AV_192_Align2RegClassID:
     return 192;
-  case AMDGPU::SGPR_224RegClassID:
-  case AMDGPU::SReg_224RegClassID:
-  case AMDGPU::VReg_224RegClassID:
-  case AMDGPU::AReg_224RegClassID:
-  case AMDGPU::VReg_224_Align2RegClassID:
-  case AMDGPU::AReg_224_Align2RegClassID:
-  case AMDGPU::AV_224RegClassID:
-  case AMDGPU::AV_224_Align2RegClassID:
-    return 224;
   case AMDGPU::SGPR_256RegClassID:
   case AMDGPU::SReg_256RegClassID:
   case AMDGPU::VReg_256RegClassID:
   case AMDGPU::AReg_256RegClassID:
   case AMDGPU::VReg_256_Align2RegClassID:
   case AMDGPU::AReg_256_Align2RegClassID:
-  case AMDGPU::AV_256RegClassID:
-  case AMDGPU::AV_256_Align2RegClassID:
     return 256;
   case AMDGPU::SGPR_512RegClassID:
   case AMDGPU::SReg_512RegClassID:
@@ -1742,8 +1621,6 @@ unsigned getRegBitWidth(unsigned RCID) {
   case AMDGPU::AReg_512RegClassID:
   case AMDGPU::VReg_512_Align2RegClassID:
   case AMDGPU::AReg_512_Align2RegClassID:
-  case AMDGPU::AV_512RegClassID:
-  case AMDGPU::AV_512_Align2RegClassID:
     return 512;
   case AMDGPU::SGPR_1024RegClassID:
   case AMDGPU::SReg_1024RegClassID:
@@ -1751,8 +1628,6 @@ unsigned getRegBitWidth(unsigned RCID) {
   case AMDGPU::AReg_1024RegClassID:
   case AMDGPU::VReg_1024_Align2RegClassID:
   case AMDGPU::AReg_1024_Align2RegClassID:
-  case AMDGPU::AV_1024RegClassID:
-  case AMDGPU::AV_1024_Align2RegClassID:
     return 1024;
   default:
     llvm_unreachable("Unexpected register class");
@@ -1890,8 +1765,8 @@ bool isArgPassedInSGPR(const Argument *A) {
   case CallingConv::AMDGPU_Gfx:
     // For non-compute shaders, SGPR inputs are marked with either inreg or byval.
     // Everything else is in VGPRs.
-    return F->getAttributes().hasParamAttr(A->getArgNo(), Attribute::InReg) ||
-           F->getAttributes().hasParamAttr(A->getArgNo(), Attribute::ByVal);
+    return F->getAttributes().hasParamAttribute(A->getArgNo(), Attribute::InReg) ||
+           F->getAttributes().hasParamAttribute(A->getArgNo(), Attribute::ByVal);
   default:
     // TODO: Should calls support inreg for SGPR inputs?
     return false;

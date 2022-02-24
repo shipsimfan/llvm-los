@@ -1,3 +1,4 @@
+; RUN: opt -mtriple=amdgcn-mesa-mesa3d -enable-new-pm=0 -analyze -divergence -use-gpu-divergence-analysis %s | FileCheck %s
 ; RUN: opt -mtriple amdgcn-mesa-mesa3d -passes='print<divergence>' -disable-output %s 2>&1 | FileCheck %s
 
 ; Tests control flow intrinsics that should be treated as uniform

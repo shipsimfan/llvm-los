@@ -3,16 +3,11 @@
 // CHECK-NEXT: acc
 // CHECK-NEXT: affine
 // CHECK-NEXT: amx
-// CHECK-NEXT: arith
 // CHECK-NEXT: arm_neon
 // CHECK-NEXT: arm_sve
 // CHECK-NEXT: async
-// CHECK-NEXT: bufferization
-// CHECK-NEXT: builtin
-// CHECK-NEXT: cf
 // CHECK-NEXT: complex
 // CHECK-NEXT: dlti
-// CHECK-NEXT: emitc
 // CHECK-NEXT: gpu
 // CHECK-NEXT: linalg
 // CHECK-NEXT: llvm
@@ -25,8 +20,9 @@
 // CHECK-NEXT: quant
 // CHECK-NEXT: rocdl
 // CHECK-NEXT: scf
+// CHECK-NEXT: sdbm
 // CHECK-NEXT: shape
-// CHECK-NEXT: sparse_tensor
+// CHECK-NEXT: sparse
 // CHECK-NEXT: spv
 // CHECK-NEXT: std
 // CHECK-NEXT: tensor

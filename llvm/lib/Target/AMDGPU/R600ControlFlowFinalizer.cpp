@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/R600MCTargetDesc.h"
-#include "R600.h"
+#include "AMDGPU.h"
+#include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "R600MachineFunctionInfo.h"
 #include "R600Subtarget.h"
 #include <set>
@@ -440,8 +440,9 @@ private:
     CounterPropagateAddr(*Clause.first, CfCount);
     MachineBasicBlock *BB = Clause.first->getParent();
     BuildMI(BB, DL, TII->get(R600::FETCH_CLAUSE)).addImm(CfCount);
-    for (MachineInstr *MI : Clause.second)
-      BB->splice(InsertPos, BB, MI);
+    for (unsigned i = 0, e = Clause.second.size(); i < e; ++i) {
+      BB->splice(InsertPos, BB, Clause.second[i]);
+    }
     CfCount += 2 * Clause.second.size();
   }
 
@@ -451,8 +452,9 @@ private:
     CounterPropagateAddr(*Clause.first, CfCount);
     MachineBasicBlock *BB = Clause.first->getParent();
     BuildMI(BB, DL, TII->get(R600::ALU_CLAUSE)).addImm(CfCount);
-    for (MachineInstr *MI : Clause.second)
-      BB->splice(InsertPos, BB, MI);
+    for (unsigned i = 0, e = Clause.second.size(); i < e; ++i) {
+      BB->splice(InsertPos, BB, Clause.second[i]);
+    }
     CfCount += Clause.second.size();
   }
 
@@ -633,10 +635,10 @@ public:
             CfCount++;
           }
           MI->eraseFromParent();
-          for (ClauseFile &CF : FetchClauses)
-            EmitFetchClause(I, DL, CF, CfCount);
-          for (ClauseFile &CF : AluClauses)
-            EmitALUClause(I, DL, CF, CfCount);
+          for (unsigned i = 0, e = FetchClauses.size(); i < e; i++)
+            EmitFetchClause(I, DL, FetchClauses[i], CfCount);
+          for (unsigned i = 0, e = AluClauses.size(); i < e; i++)
+            EmitALUClause(I, DL, AluClauses[i], CfCount);
           break;
         }
         default:
@@ -647,7 +649,8 @@ public:
           break;
         }
       }
-      for (MachineInstr *Alu : ToPopAfter) {
+      for (unsigned i = 0, e = ToPopAfter.size(); i < e; ++i) {
+        MachineInstr *Alu = ToPopAfter[i];
         BuildMI(MBB, Alu, MBB.findDebugLoc((MachineBasicBlock::iterator)Alu),
             TII->get(R600::CF_ALU_POP_AFTER))
             .addImm(Alu->getOperand(0).getImm())

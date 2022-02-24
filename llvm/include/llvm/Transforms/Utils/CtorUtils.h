@@ -17,6 +17,7 @@
 
 namespace llvm {
 
+class GlobalVariable;
 class Function;
 class Module;
 

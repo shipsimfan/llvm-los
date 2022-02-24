@@ -16,8 +16,6 @@
 
 namespace llvm {
 
-class raw_ostream;
-
 /// Annotations lets you mark points and ranges inside source code, for tests:
 ///
 ///    Annotations Example(R"cpp(

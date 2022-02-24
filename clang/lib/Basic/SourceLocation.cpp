@@ -51,7 +51,7 @@ static_assert(std::is_trivially_destructible<SourceRange>::value,
               "used in unions");
 
 unsigned SourceLocation::getHashValue() const {
-  return llvm::DenseMapInfo<UIntTy>::getHashValue(ID);
+  return llvm::DenseMapInfo<unsigned>::getHashValue(ID);
 }
 
 void llvm::FoldingSetTrait<SourceLocation>::Profile(
@@ -90,7 +90,7 @@ SourceLocation::printToString(const SourceManager &SM) const {
   std::string S;
   llvm::raw_string_ostream OS(S);
   print(OS, SM);
-  return S;
+  return OS.str();
 }
 
 LLVM_DUMP_METHOD void SourceLocation::dump(const SourceManager &SM) const {
@@ -149,7 +149,7 @@ SourceRange::printToString(const SourceManager &SM) const {
   std::string S;
   llvm::raw_string_ostream OS(S);
   print(OS, SM);
-  return S;
+  return OS.str();
 }
 
 //===----------------------------------------------------------------------===//

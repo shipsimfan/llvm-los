@@ -1,4 +1,6 @@
 ; RUN: opt -mtriple=x86_64-unknown-linux-gnu < %s -dfsan -S --dfsan-abilist=%S/Inputs/shadow-args-abilist.txt | FileCheck %s
+; RUN: opt -mtriple=x86_64-unknown-linux-gnu < %s -dfsan -S --dfsan-abilist=%S/Inputs/shadow-args-abilist.txt -dfsan-fast-16-labels | FileCheck %s
+; RUN: opt -mtriple=x86_64-unknown-linux-gnu < %s -dfsan -S --dfsan-abilist=%S/Inputs/shadow-args-abilist.txt -dfsan-fast-8-labels | FileCheck %s
 
 ; REQUIRES: x86-registered-target
 
@@ -8,7 +10,7 @@
 ; CHECK: @__dfsan_shadow_width_bytes = weak_odr constant i32 [[#SBYTES:]]
 
 define i32 @m() {
-  ; CHECK-LABEL: @m.dfsan
+  ; CHECK-LABEL: @"dfs$m"
   ; CHECK: %{{.*}} = call zeroext i16 @__dfsw_dfsan_get_label(i64 signext 56, i[[#SBITS]] zeroext 0, i[[#SBITS]]* %{{.*}})
 
 entry:
@@ -18,7 +20,7 @@ entry:
 }
 
 define i32 @k() {
-  ; CHECK-LABEL: @k.dfsan
+  ; CHECK-LABEL: @"dfs$k"
   ; CHECK: %{{.*}} = call zeroext i16 @__dfsw_k2(i64 signext 56, i64 signext 67, i[[#SBITS]] zeroext {{.*}}, i[[#SBITS]] zeroext {{.*}}, i[[#SBITS]]* %{{.*}})
 
 entry:
@@ -28,7 +30,7 @@ entry:
 }
 
 define i32 @k3() {
-  ; CHECK-LABEL: @k3.dfsan
+  ; CHECK-LABEL: @"dfs$k3"
   ; CHECK: %{{.*}} = call zeroext i16 @__dfsw_k4(i64 signext 56, i64 signext 67, i64 signext 78, i64 signext 89, i[[#SBITS]] zeroext {{.*}}, i[[#SBITS]] zeroext {{.*}}, i[[#SBITS]] zeroext {{.*}}, i[[#SBITS]] zeroext {{.*}}, i[[#SBITS]]* %{{.*}})
 
 entry:

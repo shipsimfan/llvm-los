@@ -224,7 +224,7 @@ class StringLiteralParser {
   unsigned UDSuffixOffset;
 public:
   StringLiteralParser(ArrayRef<Token> StringToks,
-                      Preprocessor &PP);
+                      Preprocessor &PP, bool Complain = true);
   StringLiteralParser(ArrayRef<Token> StringToks,
                       const SourceManager &sm, const LangOptions &features,
                       const TargetInfo &target,

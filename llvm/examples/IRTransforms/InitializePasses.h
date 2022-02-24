@@ -11,7 +11,6 @@
 #define LLVM_EXAMPLES_IRTRANSFORMS_INITIALIZEPASSES__H
 
 #include "llvm/IR/PassManager.h"
-#include "llvm/PassRegistry.h"
 
 namespace llvm {
 

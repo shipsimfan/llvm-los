@@ -23,6 +23,6 @@ static void bar(void *db) {
 
 char s[5] = "hi";
 
-int foo(void) {
+int foo() {
   bar(0);
 }

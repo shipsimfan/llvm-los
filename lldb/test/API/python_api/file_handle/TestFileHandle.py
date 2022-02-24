@@ -119,6 +119,7 @@ class FileHandleTestCase(lldbtest.TestBase):
         return ret.GetOutput()
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_legacy_file_out_script(self):
         with open(self.out_filename, 'w') as f:
             self.dbg.SetOutputFileHandle(f, False)
@@ -133,6 +134,7 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertEqual(readStrippedLines(f), ['2', 'FOO'])
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_legacy_file_out(self):
         with open(self.out_filename, 'w') as f:
             self.dbg.SetOutputFileHandle(f, False)
@@ -140,6 +142,7 @@ class FileHandleTestCase(lldbtest.TestBase):
         with open(self.out_filename, 'r') as f:
             self.assertIn('deadbeef', f.read())
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_legacy_file_err_with_get(self):
         with open(self.out_filename, 'w') as f:
             self.dbg.SetErrorFileHandle(f, False)
@@ -153,6 +156,7 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertTrue(re.search(r'FOOBAR', errors))
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_legacy_file_err(self):
         with open(self.out_filename, 'w') as f:
             self.dbg.SetErrorFileHandle(f, False)
@@ -161,6 +165,7 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertIn("is not a valid command", f.read())
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_legacy_file_error(self):
         with open(self.out_filename, 'w') as f:
             self.dbg.SetErrorFileHandle(f, False)
@@ -169,6 +174,7 @@ class FileHandleTestCase(lldbtest.TestBase):
             errors = f.read()
             self.assertTrue(re.search(r'error:.*lolwut', errors))
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_type_errors(self):
         sbf = lldb.SBFile()
         self.assertRaises(Exception, sbf.Write, None)
@@ -178,12 +184,13 @@ class FileHandleTestCase(lldbtest.TestBase):
         self.assertRaises(Exception, sbf.Read, u"ham sandwich")
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_write_fileno(self):
         with open(self.out_filename, 'w') as f:
             sbf = lldb.SBFile(f.fileno(), "w", False)
             self.assertTrue(sbf.IsValid())
             e, n = sbf.Write(b'FOO\nBAR')
-            self.assertSuccess(e)
+            self.assertTrue(e.Success())
             self.assertEqual(n, 7)
             sbf.Close()
             self.assertFalse(sbf.IsValid())
@@ -191,11 +198,12 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertEqual(readStrippedLines(f), ['FOO', 'BAR'])
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_write(self):
         with open(self.out_filename, 'w') as f:
             sbf = lldb.SBFile(f)
             e, n = sbf.Write(b'FOO\n')
-            self.assertSuccess(e)
+            self.assertTrue(e.Success())
             self.assertEqual(n, 4)
             sbf.Close()
             self.assertTrue(f.closed)
@@ -203,6 +211,7 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertEqual(f.read().strip(), 'FOO')
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_read_fileno(self):
         with open(self.out_filename, 'w') as f:
             f.write('FOO')
@@ -211,10 +220,11 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertTrue(sbf.IsValid())
             buffer = bytearray(100)
             e, n = sbf.Read(buffer)
-            self.assertSuccess(e)
+            self.assertTrue(e.Success())
             self.assertEqual(buffer[:n], b'FOO')
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_read(self):
         with open(self.out_filename, 'w') as f:
             f.write('foo')
@@ -222,18 +232,19 @@ class FileHandleTestCase(lldbtest.TestBase):
             sbf = lldb.SBFile(f)
             buf = bytearray(100)
             e, n = sbf.Read(buf)
-            self.assertSuccess(e)
+            self.assertTrue(e.Success())
             self.assertEqual(n, 3)
             self.assertEqual(buf[:n], b'foo')
             sbf.Close()
             self.assertTrue(f.closed)
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_fileno_out(self):
         with open(self.out_filename, 'w') as f:
             sbf = lldb.SBFile(f.fileno(), "w", False)
             status = self.dbg.SetOutputFile(sbf)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             self.handleCmd('script 1+2')
             self.dbg.GetOutputFile().Write(b'quux')
             self.dbg.GetOutputFile().Flush()
@@ -242,25 +253,28 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertEqual(readStrippedLines(f), ['3', 'quux'])
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_fileno_help(self):
         with open(self.out_filename, 'w') as f:
             sbf = lldb.SBFile(f.fileno(), "w", False)
             status = self.dbg.SetOutputFile(sbf)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             self.handleCmd("help help", collect_result=False, check=False)
         with open(self.out_filename, 'r') as f:
             self.assertTrue(re.search(r'Show a list of all debugger commands', f.read()))
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_help(self):
         with open(self.out_filename, 'w') as f:
             status = self.dbg.SetOutputFile(lldb.SBFile(f))
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             self.handleCmd("help help", check=False, collect_result=False)
         with open(self.out_filename, 'r') as f:
             self.assertIn('Show a list of all debugger commands', f.read())
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_immediate(self):
         with open(self.out_filename, 'w') as f:
             ret = lldb.SBCommandReturnObject()
@@ -277,6 +291,7 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_immediate_string(self):
         f = io.StringIO()
         ret = lldb.SBCommandReturnObject()
@@ -292,6 +307,7 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_immediate_sbfile_string(self):
         f = io.StringIO()
         ret = lldb.SBCommandReturnObject()
@@ -305,6 +321,7 @@ class FileHandleTestCase(lldbtest.TestBase):
         self.assertTrue(re.search(r'Show a list of all debugger commands', output))
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_fileno_inout(self):
         with open(self.in_filename, 'w') as f:
             f.write("help help\n")
@@ -313,11 +330,11 @@ class FileHandleTestCase(lldbtest.TestBase):
 
             outsbf = lldb.SBFile(outf.fileno(), "w", False)
             status = self.dbg.SetOutputFile(outsbf)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
 
             insbf = lldb.SBFile(inf.fileno(), "r", False)
             status = self.dbg.SetInputFile(insbf)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
 
             opts = lldb.SBCommandInterpreterRunOptions()
             self.dbg.RunCommandInterpreter(True, False, opts, 0, False, False)
@@ -327,15 +344,16 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertTrue(re.search(r'Show a list of all debugger commands', f.read()))
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_inout(self):
         with open(self.in_filename, 'w') as f:
             f.write("help help\n")
         with  open(self.out_filename, 'w') as outf, \
               open(self.in_filename, 'r') as inf:
             status = self.dbg.SetOutputFile(lldb.SBFile(outf))
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             status = self.dbg.SetInputFile(lldb.SBFile(inf))
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             opts = lldb.SBCommandInterpreterRunOptions()
             self.dbg.RunCommandInterpreter(True, False, opts, 0, False, False)
             self.dbg.GetOutputFile().Flush()
@@ -344,15 +362,16 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertIn('Show a list of all debugger commands', output)
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_binary_inout(self):
         with open(self.in_filename, 'w') as f:
             f.write("help help\n")
         with  open(self.out_filename, 'wb') as outf, \
               open(self.in_filename, 'rb') as inf:
             status = self.dbg.SetOutputFile(lldb.SBFile(outf))
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             status = self.dbg.SetInputFile(lldb.SBFile(inf))
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             opts = lldb.SBCommandInterpreterRunOptions()
             self.dbg.RunCommandInterpreter(True, False, opts, 0, False, False)
             self.dbg.GetOutputFile().Flush()
@@ -362,13 +381,14 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_string_inout(self):
         inf = io.StringIO("help help\np/x ~0\n")
         outf = io.StringIO()
         status = self.dbg.SetOutputFile(lldb.SBFile(outf))
-        self.assertSuccess(status)
+        self.assertTrue(status.Success())
         status = self.dbg.SetInputFile(lldb.SBFile(inf))
-        self.assertSuccess(status)
+        self.assertTrue(status.Success())
         opts = lldb.SBCommandInterpreterRunOptions()
         self.dbg.RunCommandInterpreter(True, False, opts, 0, False, False)
         self.dbg.GetOutputFile().Flush()
@@ -378,13 +398,14 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_bytes_inout(self):
         inf = io.BytesIO(b"help help\nhelp b\n")
         outf = io.BytesIO()
         status = self.dbg.SetOutputFile(lldb.SBFile(outf))
-        self.assertSuccess(status)
+        self.assertTrue(status.Success())
         status = self.dbg.SetInputFile(lldb.SBFile(inf))
-        self.assertSuccess(status)
+        self.assertTrue(status.Success())
         opts = lldb.SBCommandInterpreterRunOptions()
         self.dbg.RunCommandInterpreter(True, False, opts, 0, False, False)
         self.dbg.GetOutputFile().Flush()
@@ -393,12 +414,13 @@ class FileHandleTestCase(lldbtest.TestBase):
         self.assertIn(b'Set a breakpoint', output)
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_fileno_error(self):
         with open(self.out_filename, 'w') as f:
 
             sbf = lldb.SBFile(f.fileno(), 'w', False)
             status = self.dbg.SetErrorFile(sbf)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
 
             self.handleCmd('lolwut', check=False, collect_result=False)
 
@@ -410,6 +432,7 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertTrue(re.search(r'zork', errors))
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_replace_stdout(self):
         f = io.StringIO()
         with replace_stdout(f):
@@ -419,6 +442,7 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertEqual(sys.stdout, f)
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_replace_stdout_with_nonfile(self):
         f = io.StringIO()
         with replace_stdout(f):
@@ -433,11 +457,12 @@ class FileHandleTestCase(lldbtest.TestBase):
         self.assertEqual(f.getvalue(), "FOO")
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_write_borrowed(self):
         with open(self.out_filename, 'w') as f:
             sbf = lldb.SBFile.Create(f, borrow=True)
             e, n = sbf.Write(b'FOO')
-            self.assertSuccess(e)
+            self.assertTrue(e.Success())
             self.assertEqual(n, 3)
             sbf.Close()
             self.assertFalse(f.closed)
@@ -448,6 +473,7 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_write_forced(self):
         with open(self.out_filename, 'w') as f:
             written = MutableBool(False)
@@ -459,7 +485,7 @@ class FileHandleTestCase(lldbtest.TestBase):
             sbf = lldb.SBFile.Create(f, force_io_methods=True)
             e, n = sbf.Write(b'FOO')
             self.assertTrue(written)
-            self.assertSuccess(e)
+            self.assertTrue(e.Success())
             self.assertEqual(n, 3)
             sbf.Close()
             self.assertTrue(f.closed)
@@ -468,6 +494,7 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_write_forced_borrowed(self):
         with open(self.out_filename, 'w') as f:
             written = MutableBool(False)
@@ -479,7 +506,7 @@ class FileHandleTestCase(lldbtest.TestBase):
             sbf = lldb.SBFile.Create(f, borrow=True, force_io_methods=True)
             e, n = sbf.Write(b'FOO')
             self.assertTrue(written)
-            self.assertSuccess(e)
+            self.assertTrue(e.Success())
             self.assertEqual(n, 3)
             sbf.Close()
             self.assertFalse(f.closed)
@@ -488,58 +515,64 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_write_string(self):
         f = io.StringIO()
         sbf = lldb.SBFile(f)
         e, n = sbf.Write(b'FOO')
         self.assertEqual(f.getvalue().strip(), "FOO")
-        self.assertSuccess(e)
+        self.assertTrue(e.Success())
         self.assertEqual(n, 3)
         sbf.Close()
         self.assertTrue(f.closed)
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_string_out(self):
         f = io.StringIO()
         status = self.dbg.SetOutputFile(f)
-        self.assertSuccess(status)
+        self.assertTrue(status.Success())
         self.handleCmd("script 'foobar'")
         self.assertEqual(f.getvalue().strip(), "'foobar'")
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_string_error(self):
         f = io.StringIO()
         status = self.dbg.SetErrorFile(f)
-        self.assertSuccess(status)
+        self.assertTrue(status.Success())
         self.handleCmd('lolwut', check=False, collect_result=False)
         errors = f.getvalue()
         self.assertTrue(re.search(r'error:.*lolwut', errors))
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_write_bytes(self):
         f = io.BytesIO()
         sbf = lldb.SBFile(f)
         e, n = sbf.Write(b'FOO')
         self.assertEqual(f.getvalue().strip(), b"FOO")
-        self.assertSuccess(e)
+        self.assertTrue(e.Success())
         self.assertEqual(n, 3)
         sbf.Close()
         self.assertTrue(f.closed)
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_read_string(self):
         f = io.StringIO('zork')
         sbf = lldb.SBFile(f)
         buf = bytearray(100)
         e, n = sbf.Read(buf)
-        self.assertSuccess(e)
+        self.assertTrue(e.Success())
         self.assertEqual(buf[:n], b'zork')
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_read_string_one_byte(self):
         f = io.StringIO('z')
         sbf = lldb.SBFile(f)
@@ -551,57 +584,63 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_read_bytes(self):
         f = io.BytesIO(b'zork')
         sbf = lldb.SBFile(f)
         buf = bytearray(100)
         e, n = sbf.Read(buf)
-        self.assertSuccess(e)
+        self.assertTrue(e.Success())
         self.assertEqual(buf[:n], b'zork')
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_out(self):
         with open(self.out_filename, 'w') as f:
             sbf = lldb.SBFile(f)
             status = self.dbg.SetOutputFile(sbf)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             self.handleCmd('script 2+2')
         with open(self.out_filename, 'r') as f:
             self.assertEqual(f.read().strip(), '4')
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_file_out(self):
         with open(self.out_filename, 'w') as f:
             status = self.dbg.SetOutputFile(f)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             self.handleCmd('script 2+2')
         with open(self.out_filename, 'r') as f:
             self.assertEqual(f.read().strip(), '4')
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbfile_error(self):
         with open(self.out_filename, 'w') as f:
             sbf = lldb.SBFile(f)
             status = self.dbg.SetErrorFile(sbf)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             self.handleCmd('lolwut', check=False, collect_result=False)
         with open(self.out_filename, 'r') as f:
             errors = f.read()
             self.assertTrue(re.search(r'error:.*lolwut', errors))
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_file_error(self):
         with open(self.out_filename, 'w') as f:
             status = self.dbg.SetErrorFile(f)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             self.handleCmd('lolwut', check=False, collect_result=False)
         with open(self.out_filename, 'r') as f:
             errors = f.read()
             self.assertTrue(re.search(r'error:.*lolwut', errors))
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_exceptions(self):
         self.assertRaises(Exception, lldb.SBFile, None)
         self.assertRaises(Exception, lldb.SBFile, "ham sandwich")
@@ -620,6 +659,7 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_exceptions_logged(self):
         messages = list()
         self.dbg.SetLoggingCallback(messages.append)
@@ -630,6 +670,7 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_flush(self):
         flushed = MutableBool(False)
         closed = MutableBool(False)
@@ -658,6 +699,7 @@ class FileHandleTestCase(lldbtest.TestBase):
         self.assertFalse(f.closed)
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_fileno_flush(self):
         with open(self.out_filename, 'w') as f:
             f.write("foo")
@@ -678,10 +720,11 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertEqual(f.read(), 'foobar')
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_close(self):
         with open(self.out_filename, 'w') as f:
             status = self.dbg.SetOutputFile(f)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             self.handleCmd("help help", check=False, collect_result=False)
             # make sure the file wasn't closed early.
             f.write("\nZAP\n")
@@ -696,18 +739,20 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_stdout(self):
         f = io.StringIO()
         status = self.dbg.SetOutputFile(f)
-        self.assertSuccess(status)
+        self.assertTrue(status.Success())
         self.handleCmd(r"script sys.stdout.write('foobar\n')")
         self.assertEqual(f.getvalue().strip().split(), ["foobar", "7"])
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_stdout_file(self):
         with open(self.out_filename, 'w') as f:
             status = self.dbg.SetOutputFile(f)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             self.handleCmd(r"script sys.stdout.write('foobar\n')")
         with open(self.out_filename, 'r') as f:
             # In python2 sys.stdout.write() returns None, which
@@ -719,6 +764,7 @@ class FileHandleTestCase(lldbtest.TestBase):
 
 
     @skipIf(py_version=['<', (3,)])
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_identity(self):
 
         f = io.StringIO()
@@ -773,6 +819,7 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertEqual("foobar", f.read().strip())
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_back_and_forth(self):
         with open(self.out_filename, 'w') as f:
             # at each step here we're borrowing the file, so we have to keep
@@ -791,6 +838,7 @@ class FileHandleTestCase(lldbtest.TestBase):
             self.assertEqual(list(range(10)), list(map(int, f.read().strip().split())))
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_set_filehandle_none(self):
         self.assertRaises(Exception, self.dbg.SetOutputFile, None)
         self.assertRaises(Exception, self.dbg.SetOutputFile, "ham sandwich")
@@ -804,9 +852,9 @@ class FileHandleTestCase(lldbtest.TestBase):
 
         with open(self.out_filename, 'w') as f:
             status = self.dbg.SetOutputFile(f)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             status = self.dbg.SetErrorFile(f)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             self.dbg.SetOutputFileHandle(None, False)
             self.dbg.SetErrorFileHandle(None, False)
             sbf = self.dbg.GetOutputFile()
@@ -821,13 +869,14 @@ class FileHandleTestCase(lldbtest.TestBase):
                 self.assertEqual(sbf.GetFile().fileno(), 2)
         with open(self.out_filename, 'r') as f:
             status = self.dbg.SetInputFile(f)
-            self.assertSuccess(status)
+            self.assertTrue(status.Success())
             self.dbg.SetInputFileHandle(None, False)
             sbf = self.dbg.GetInputFile()
             if sys.version_info.major >= 3:
                 self.assertEqual(sbf.GetFile().fileno(), 0)
 
 
+    @skipIfReproducer # lldb::FileSP used in typemap cannot be instrumented.
     def test_sbstream(self):
 
         with open(self.out_filename, 'w') as f:
@@ -852,19 +901,3 @@ class FileHandleTestCase(lldbtest.TestBase):
         self.assertTrue(f.closed)
         with open(self.out_filename, 'r') as f:
             self.assertEqual(f.read().strip(), "Frobozz")
-
-    def test_set_sbstream(self):
-        with open(self.out_filename, 'w') as outf:
-            outsbf = lldb.SBFile(outf.fileno(), "w", False)
-            status = self.dbg.SetOutputFile(outsbf)
-            self.assertSuccess(status)
-            self.dbg.SetInputString("help apropos\nhelp help\n")
-
-            opts = lldb.SBCommandInterpreterRunOptions()
-            self.dbg.RunCommandInterpreter(True, False, opts, 0, False, False)
-            self.dbg.GetOutputFile().Flush()
-
-        with open(self.out_filename, 'r') as f:
-            output = f.read()
-            self.assertIn('Show a list of all debugger commands', output)
-            self.assertIn('List debugger commands related to a word', output)

@@ -41,8 +41,7 @@ struct NameUniquer {
     INTRINSIC_TYPE_DESC,
     PROCEDURE,
     TYPE_DESC,
-    VARIABLE,
-    NAMELIST_GROUP
+    VARIABLE
   };
 
   /// Components of an unparsed unique name
@@ -54,10 +53,10 @@ struct NameUniquer {
         : modules{modules.begin(), modules.end()}, host{host}, name{name},
           kinds{kinds.begin(), kinds.end()} {}
 
-    llvm::SmallVector<std::string> modules;
+    llvm::SmallVector<std::string, 2> modules;
     llvm::Optional<std::string> host;
     std::string name;
-    llvm::SmallVector<std::int64_t> kinds;
+    llvm::SmallVector<std::int64_t, 4> kinds;
   };
 
   /// Unique a common block name
@@ -113,11 +112,6 @@ struct NameUniquer {
                                 llvm::Optional<llvm::StringRef> host,
                                 llvm::StringRef name);
 
-  /// Unique a namelist group name
-  static std::string doNamelistGroup(llvm::ArrayRef<llvm::StringRef> modules,
-                                     llvm::Optional<llvm::StringRef> host,
-                                     llvm::StringRef name);
-
   /// Entry point for the PROGRAM (called by the runtime)
   /// Can be overridden with the `--main-entry-name=<name>` option.
   static llvm::StringRef doProgramEntry();
@@ -125,17 +119,6 @@ struct NameUniquer {
   /// Decompose `uniquedName` into the parse name, symbol type, and scope info
   static std::pair<NameKind, DeconstructedName>
   deconstruct(llvm::StringRef uniquedName);
-
-  /// Check if the name is an external facing name.
-  static bool isExternalFacingUniquedName(
-      const std::pair<NameKind, DeconstructedName> &deconstructResult);
-
-  /// Check whether the name should be re-mangle with external ABI convention.
-  static bool needExternalNameMangling(llvm::StringRef uniquedName);
-
-  /// Does \p uniquedName belong to module \p moduleName?
-  static bool belongsToModule(llvm::StringRef uniquedName,
-                              llvm::StringRef moduleName);
 
 private:
   static std::string intAsString(std::int64_t i);

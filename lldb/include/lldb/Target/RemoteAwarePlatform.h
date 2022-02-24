@@ -64,8 +64,8 @@ public:
                          FileSpec &local_file) override;
 
   bool GetRemoteOSVersion() override;
-  llvm::Optional<std::string> GetRemoteOSBuildString() override;
-  llvm::Optional<std::string> GetRemoteOSKernelDescription() override;
+  bool GetRemoteOSBuildString(std::string &s) override;
+  bool GetRemoteOSKernelDescription(std::string &s) override;
   ArchSpec GetRemoteSystemArchitecture() override;
 
   Status RunShellCommand(llvm::StringRef command, const FileSpec &working_dir,

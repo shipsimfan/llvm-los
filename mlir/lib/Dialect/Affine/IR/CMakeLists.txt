@@ -11,10 +11,10 @@ add_mlir_dialect_library(MLIRAffine
   MLIRAffineOpsIncGen
 
   LINK_LIBS PUBLIC
-  MLIRArithmetic
+  MLIREDSC
   MLIRIR
   MLIRLoopLikeInterface
   MLIRMemRef
   MLIRSideEffectInterfaces
-  MLIRTensor
+  MLIRStandard
   )

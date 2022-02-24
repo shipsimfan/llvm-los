@@ -360,6 +360,7 @@ protected:
           m_entries.erase(next);
       }
     }
+    return;
   }
 
   Collection m_entries;

@@ -16,11 +16,10 @@
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Utility/ArchSpec.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Timer.h"
-#include <cstring>
 #include <list>
+#include <cstring>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -397,7 +396,7 @@ DWARFCallFrameInfo::ParseCIE(const dw_offset_t cie_offset) {
 
 void DWARFCallFrameInfo::GetCFIData() {
   if (!m_cfi_data_initialized) {
-    Log *log = GetLog(LLDBLog::Unwind);
+    Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
     if (log)
       m_objfile.GetModule()->LogMessage(log, "Reading EH frame info");
     m_objfile.ReadSectionData(m_section_sp.get(), m_cfi_data);
@@ -526,7 +525,7 @@ void DWARFCallFrameInfo::GetFDEIndex() {
 bool DWARFCallFrameInfo::FDEToUnwindPlan(dw_offset_t dwarf_offset,
                                          Address startaddr,
                                          UnwindPlan &unwind_plan) {
-  Log *log = GetLog(LLDBLog::Unwind);
+  Log *log = GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND);
   lldb::offset_t offset = dwarf_offset;
   lldb::offset_t current_entry = offset;
 

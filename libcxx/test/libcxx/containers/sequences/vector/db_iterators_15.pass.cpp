@@ -13,11 +13,15 @@
 // UNSUPPORTED: libcxx-no-debug-mode
 
 // ADDITIONAL_COMPILE_FLAGS: -D_LIBCPP_DEBUG=1
+#define _LIBCPP_ASSERT(x, m) ((x) ? (void)0 : std::exit(0))
 
 #include <vector>
+#include <cassert>
+#include <iterator>
+#include <exception>
+#include <cstdlib>
 
 #include "test_macros.h"
-#include "debug_macros.h"
 #include "min_allocator.h"
 
 int main(int, char**) {
@@ -25,7 +29,9 @@ int main(int, char**) {
   typedef std::vector<T, min_allocator<T> > C;
   C c(1);
   C::iterator i = c.end();
-  TEST_LIBCPP_ASSERT_FAILURE(*i, "Attempted to dereference a non-dereferenceable iterator");
+  T j = *i;
+  (void)j;
+  assert(false);
 
   return 0;
 }

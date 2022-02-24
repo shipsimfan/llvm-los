@@ -15,6 +15,6 @@
 
 int a[], b;
 float *c;
-int main(void) {
+int main() {
   return -(*c = &b != a);
 }

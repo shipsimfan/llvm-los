@@ -37,7 +37,7 @@ namespace {
 /// that the analysis of accesses in a statement is becoming too complex. Chosen
 /// to be relatively small because all the common cases should access only few
 /// array elements per statement.
-static unsigned const SimplifyMaxDisjuncts = 4;
+static int const SimplifyMaxDisjuncts = 4;
 
 TWO_STATISTICS(ScopsProcessed, "Number of SCoPs processed");
 TWO_STATISTICS(ScopsModified, "Number of SCoPs simplified");
@@ -81,7 +81,7 @@ static bool isImplicitWrite(MemoryAccess *MA) {
   return MA->isWrite() && MA->isOriginalScalarKind();
 }
 
-/// Like isl::union_map::unite, but may also return an underapproximated
+/// Like isl::union_map::add_map, but may also return an underapproximated
 /// result if getting too complex.
 ///
 /// This is implemented by adding disjuncts to the results until the limit is
@@ -95,26 +95,25 @@ static isl::union_map underapproximatedAddMap(isl::union_map UMap,
 
   // Fast path: If known that we cannot exceed the disjunct limit, just add
   // them.
-  if (unsignedFromIslSize(PrevMap.n_basic_map()) +
-          unsignedFromIslSize(Map.n_basic_map()) <=
+  if (isl_map_n_basic_map(PrevMap.get()) + isl_map_n_basic_map(Map.get()) <=
       SimplifyMaxDisjuncts)
-    return UMap.unite(Map);
+    return UMap.add_map(Map);
 
   isl::map Result = isl::map::empty(PrevMap.get_space());
   for (isl::basic_map BMap : PrevMap.get_basic_map_list()) {
-    if (unsignedFromIslSize(Result.n_basic_map()) > SimplifyMaxDisjuncts)
+    if (Result.n_basic_map() > SimplifyMaxDisjuncts)
       break;
     Result = Result.unite(BMap);
   }
   for (isl::basic_map BMap : Map.get_basic_map_list()) {
-    if (unsignedFromIslSize(Result.n_basic_map()) > SimplifyMaxDisjuncts)
+    if (isl_map_n_basic_map(Result.get()) > SimplifyMaxDisjuncts)
       break;
     Result = Result.unite(BMap);
   }
 
   isl::union_map UResult =
       UMap.subtract(isl::map::universe(PrevMap.get_space()));
-  UResult.unite(Result);
+  UResult.add_map(Result);
 
   return UResult;
 }
@@ -249,7 +248,8 @@ void SimplifyImpl::removeEmptyDomainStmts() {
 void SimplifyImpl::removeOverwrites() {
   for (auto &Stmt : *S) {
     isl::set Domain = Stmt.getDomain();
-    isl::union_map WillBeOverwritten = isl::union_map::empty(S->getIslCtx());
+    isl::union_map WillBeOverwritten =
+        isl::union_map::empty(S->getParamSpace());
 
     SmallVector<MemoryAccess *, 32> Accesses(getAccessesInOrder(Stmt));
 
@@ -330,7 +330,7 @@ void SimplifyImpl::coalesceWrites() {
 
     // List of all eligible (for coalescing) writes of the future.
     // { [Domain[] -> Element[]] -> [Value[] -> MemoryAccess[]] }
-    isl::union_map FutureWrites = isl::union_map::empty(S->getIslCtx());
+    isl::union_map FutureWrites = isl::union_map::empty(S->getParamSpace());
 
     // Iterate over accesses from the last to the first.
     SmallVector<MemoryAccess *, 32> Accesses(getAccessesInOrder(Stmt));
@@ -444,7 +444,7 @@ void SimplifyImpl::coalesceWrites() {
         TouchedAccesses.insert(MA);
       }
       isl::union_map NewFutureWrites =
-          isl::union_map::empty(FutureWrites.ctx());
+          isl::union_map::empty(FutureWrites.get_space());
       for (isl::map FutureWrite : FutureWrites.get_map_list()) {
         MemoryAccess *MA = (MemoryAccess *)FutureWrite.get_space()
                                .range()
@@ -452,7 +452,7 @@ void SimplifyImpl::coalesceWrites() {
                                .get_tuple_id(isl::dim::out)
                                .get_user();
         if (!TouchedAccesses.count(MA))
-          NewFutureWrites = NewFutureWrites.unite(FutureWrite);
+          NewFutureWrites = NewFutureWrites.add_map(FutureWrite);
       }
       FutureWrites = NewFutureWrites;
 
@@ -468,7 +468,7 @@ void SimplifyImpl::coalesceWrites() {
         // { [Domain[] -> Element[]] -> [Value[] -> MemoryAccess[]] }
         isl::map AccRelValAcc =
             isl::map::from_domain_and_range(AccRelWrapped, ValAccSet.wrap());
-        FutureWrites = FutureWrites.unite(AccRelValAcc);
+        FutureWrites = FutureWrites.add_map(AccRelValAcc);
       }
     }
   }
@@ -499,7 +499,7 @@ void SimplifyImpl::removeRedundantWrites() {
     // List of element reads that still have the same value while iterating
     // through the MemoryAccesses.
     // { [Domain[] -> Element[]] -> Val[] }
-    isl::union_map Known = isl::union_map::empty(S->getIslCtx());
+    isl::union_map Known = isl::union_map::empty(S->getParamSpace());
 
     SmallVector<MemoryAccess *, 32> Accesses(getAccessesInOrder(Stmt));
     for (MemoryAccess *MA : Accesses) {
@@ -552,7 +552,7 @@ void SimplifyImpl::removeRedundantWrites() {
           isl::map AccRelVal = isl::map::from_domain_and_range(
               AccRelWrapped, makeValueSet(LoadedVal));
 
-          Known = Known.unite(AccRelVal);
+          Known = Known.add_map(AccRelVal);
         }
       } else if (MA->isWrite()) {
         // Remove (possibly) overwritten values from the known elements set.

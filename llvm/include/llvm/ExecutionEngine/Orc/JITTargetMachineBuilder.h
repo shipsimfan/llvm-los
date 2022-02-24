@@ -79,9 +79,6 @@ public:
     return *this;
   }
 
-  /// Returns the CPU string.
-  const std::string &getCPU() const { return CPU; }
-
   /// Set the relocation model.
   JITTargetMachineBuilder &setRelocationModel(Optional<Reloc::Model> RM) {
     this->RM = std::move(RM);

@@ -10,7 +10,6 @@ from libcxx.test.dsl import *
 import re
 import shutil
 import sys
-import subprocess
 
 _isClang      = lambda cfg: '__clang__' in compilerMacros(cfg) and '__apple_build_version__' not in compilerMacros(cfg)
 _isAppleClang = lambda cfg: '__apple_build_version__' in compilerMacros(cfg)
@@ -36,12 +35,22 @@ DEFAULT_FEATURES = [
   Feature(name='-fsized-deallocation',          when=lambda cfg: hasCompileFlag(cfg, '-fsized-deallocation')),
   Feature(name='-faligned-allocation',          when=lambda cfg: hasCompileFlag(cfg, '-faligned-allocation')),
   Feature(name='fdelayed-template-parsing',     when=lambda cfg: hasCompileFlag(cfg, '-fdelayed-template-parsing')),
+  Feature(name='libcpp-no-if-constexpr',        when=lambda cfg: '__cpp_if_constexpr' not in featureTestMacros(cfg)),
+  Feature(name='libcpp-no-structured-bindings', when=lambda cfg: '__cpp_structured_bindings' not in featureTestMacros(cfg)),
+  Feature(name='libcpp-no-deduction-guides',    when=lambda cfg: featureTestMacros(cfg).get('__cpp_deduction_guides', 0) < 201611),
   Feature(name='libcpp-no-concepts',            when=lambda cfg: featureTestMacros(cfg).get('__cpp_concepts', 0) < 201907),
-  Feature(name='libcpp-no-coroutines',          when=lambda cfg: featureTestMacros(cfg).get('__cpp_impl_coroutine', 0) < 201902),
   Feature(name='has-fobjc-arc',                 when=lambda cfg: hasCompileFlag(cfg, '-xobjective-c++ -fobjc-arc') and
                                                                  sys.platform.lower().strip() == 'darwin'), # TODO: this doesn't handle cross-compiling to Apple platforms.
   Feature(name='objective-c++',                 when=lambda cfg: hasCompileFlag(cfg, '-xobjective-c++ -fobjc-arc')),
-  Feature(name='verify-support',                when=lambda cfg: hasCompileFlag(cfg, '-Xclang -verify-ignore-unexpected')),
+
+  # Note: We use a custom modules cache path to make sure that we don't reuse
+  #       the default one, which can be shared across builds. This is important
+  #       because we define macros in headers files, and a change in these macros
+  #       doesn't seem to invalidate modules cache entries, which means we could
+  #       build against now-invalid cached headers from a previous build.
+  Feature(name='modules-support',
+          when=lambda cfg: hasCompileFlag(cfg, '-fmodules'),
+          actions=lambda cfg: [AddCompileFlag('-fmodules-cache-path=%t/ModuleCache')]),
 
   Feature(name='non-lockfree-atomics',
           when=lambda cfg: sourceBuilds(cfg, """
@@ -60,51 +69,12 @@ DEFAULT_FEATURES = [
             int main(int, char**) { return x.is_lock_free(); }
           """)),
 
-  # Some tests rely on creating shared libraries which link in the C++ Standard Library. In some
-  # cases, this doesn't work (e.g. if the library was built as a static archive and wasn't compiled
-  # as position independent). This feature informs the test suite of whether it's possible to create
-  # a shared library in a shell test by using the '-shared' compiler flag.
-  #
-  # Note: To implement this check properly, we need to make sure that we use something inside the
-  # compiled library, not only in the headers. It should be safe to assume that all implementations
-  # define `operator new` in the compiled library.
-  Feature(name='cant-build-shared-library',
-          when=lambda cfg: not sourceBuilds(cfg, """
-            void f() { new int(3); }
-          """, ['-shared'])),
-
-  # Check for a Windows UCRT bug (fixed in UCRT/Windows 10.0.20348.0):
-  # https://developercommunity.visualstudio.com/t/utf-8-locales-break-ctype-functions-for-wchar-type/1653678
-  Feature(name='broken-utf8-wchar-ctype',
-          when=lambda cfg: '_WIN32' in compilerMacros(cfg) and not programSucceeds(cfg, """
-          #include <locale.h>
-          #include <wctype.h>
-          int main(int, char**) {
-            setlocale(LC_ALL, "en_US.UTF-8");
-            return towlower(L'\\xDA') != L'\\xFA';
-          }
-          """)),
-
-  # Whether Bash can run on the executor.
-  # This is not always the case, for example when running on embedded systems.
-  #
-  # For the corner case of bash existing, but it being missing in the path
-  # set in %{exec} as "--env PATH=one-single-dir", the executor does find
-  # and executes bash, but bash then can't find any other common shell
-  # utilities. Test executing "bash -c 'bash --version'" to see if bash
-  # manages to find binaries to execute.
-  Feature(name='executor-has-no-bash',
-          when=lambda cfg: runScriptExitCode(cfg, ['%{exec} bash -c \'bash --version\'']) != 0),
-  Feature(name='has-clang-tidy',
-          when=lambda cfg: runScriptExitCode(cfg, ['clang-tidy --version']) == 0),
-
   Feature(name='apple-clang',                                                                                                      when=_isAppleClang),
   Feature(name=lambda cfg: 'apple-clang-{__clang_major__}'.format(**compilerMacros(cfg)),                                          when=_isAppleClang),
   Feature(name=lambda cfg: 'apple-clang-{__clang_major__}.{__clang_minor__}'.format(**compilerMacros(cfg)),                        when=_isAppleClang),
   Feature(name=lambda cfg: 'apple-clang-{__clang_major__}.{__clang_minor__}.{__clang_patchlevel__}'.format(**compilerMacros(cfg)), when=_isAppleClang),
 
-  Feature(name='clang',                                                                                                            when=_isClang,
-          actions=[AddCompileFlag('-D_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER')]),
+  Feature(name='clang',                                                                                                            when=_isClang),
   Feature(name=lambda cfg: 'clang-{__clang_major__}'.format(**compilerMacros(cfg)),                                                when=_isClang),
   Feature(name=lambda cfg: 'clang-{__clang_major__}.{__clang_minor__}'.format(**compilerMacros(cfg)),                              when=_isClang),
   Feature(name=lambda cfg: 'clang-{__clang_major__}.{__clang_minor__}.{__clang_patchlevel__}'.format(**compilerMacros(cfg)),       when=_isClang),
@@ -127,25 +97,38 @@ DEFAULT_FEATURES = [
 # `libcpp-xxx-yyy-zzz`. When a macro is defined to a specific value
 # (e.g. `_LIBCPP_ABI_VERSION=2`), the feature is `libcpp-xxx-yyy-zzz=<value>`.
 macros = {
+  '_LIBCPP_HAS_NO_GLOBAL_FILESYSTEM_NAMESPACE': 'libcpp-has-no-global-filesystem-namespace',
   '_LIBCPP_HAS_NO_MONOTONIC_CLOCK': 'libcpp-has-no-monotonic-clock',
+  '_LIBCPP_HAS_NO_STDIN': 'libcpp-has-no-stdin',
+  '_LIBCPP_HAS_NO_STDOUT': 'libcpp-has-no-stdout',
+  '_LIBCPP_HAS_NO_THREAD_UNSAFE_C_FUNCTIONS': 'libcpp-has-no-thread-unsafe-c-functions',
   '_LIBCPP_HAS_NO_THREADS': 'libcpp-has-no-threads',
   '_LIBCPP_HAS_THREAD_API_EXTERNAL': 'libcpp-has-thread-api-external',
   '_LIBCPP_HAS_THREAD_API_PTHREAD': 'libcpp-has-thread-api-pthread',
   '_LIBCPP_NO_VCRUNTIME': 'libcpp-no-vcruntime',
   '_LIBCPP_ABI_VERSION': 'libcpp-abi-version',
+  '_LIBCPP_ABI_UNSTABLE': 'libcpp-abi-unstable',
   '_LIBCPP_HAS_NO_FILESYSTEM_LIBRARY': 'libcpp-has-no-filesystem-library',
   '_LIBCPP_HAS_NO_RANDOM_DEVICE': 'libcpp-has-no-random-device',
   '_LIBCPP_HAS_NO_LOCALIZATION': 'libcpp-has-no-localization',
-  '_LIBCPP_HAS_NO_WIDE_CHARACTERS': 'libcpp-has-no-wide-characters',
-  '_LIBCPP_HAS_NO_INCOMPLETE_FORMAT': 'libcpp-has-no-incomplete-format',
-  '_LIBCPP_HAS_NO_INCOMPLETE_RANGES': 'libcpp-has-no-incomplete-ranges',
-  '_LIBCPP_HAS_NO_UNICODE': 'libcpp-has-no-unicode',
 }
 for macro, feature in macros.items():
-  DEFAULT_FEATURES.append(
-    Feature(name=lambda cfg, m=macro, f=feature: f + ('={}'.format(compilerMacros(cfg)[m]) if compilerMacros(cfg)[m] else ''),
-            when=lambda cfg, m=macro: m in compilerMacros(cfg))
-  )
+  DEFAULT_FEATURES += [
+    Feature(name=lambda cfg, m=macro, f=feature: f + (
+              '={}'.format(compilerMacros(cfg)[m]) if compilerMacros(cfg)[m] else ''
+            ),
+            when=lambda cfg, m=macro: m in compilerMacros(cfg),
+
+            # FIXME: This is a hack that should be fixed using module maps.
+            # If modules are enabled then we have to lift all of the definitions
+            # in <__config_site> onto the command line.
+            actions=lambda cfg, m=macro: [
+              AddCompileFlag('-Wno-macro-redefined -D{}'.format(m) + (
+                '={}'.format(compilerMacros(cfg)[m]) if compilerMacros(cfg)[m] else ''
+              ))
+            ]
+    )
+  ]
 
 
 # Mapping from canonical locale names (used in the tests) to possible locale
@@ -176,46 +159,58 @@ DEFAULT_FEATURES += [
   Feature(name='freebsd', when=lambda cfg: '__FreeBSD__' in compilerMacros(cfg))
 ]
 
-# Add features representing the build host platform name.
-# The build host could differ from the target platform for cross-compilation.
+
+# Detect whether GDB is on the system, and if so add a substitution to access it.
 DEFAULT_FEATURES += [
-  Feature(name='buildhost={}'.format(sys.platform.lower().strip())),
-  # sys.platform can be represented by "sub-system" on Windows host, such as 'win32', 'cygwin', 'mingw' & etc.
-  # Here is a consolidated feature for the build host plaform name on Windows.
-  Feature(name='buildhost=windows', when=lambda cfg: platform.system().lower().startswith('windows'))
-]
-
-# Detect whether GDB is on the system, has Python scripting and supports
-# adding breakpoint commands. If so add a substitution to access it.
-def check_gdb(cfg):
-  gdb_path = shutil.which('gdb')
-  if gdb_path is None:
-    return False
-
-  # Check that we can set breakpoint commands, which was added in 8.3.
-  # Using the quit command here means that gdb itself exits, not just
-  # the "python <...>" command.
-  test_src = """\
-try:
-  gdb.Breakpoint(\"main\").commands=\"foo\"
-except AttributeError:
-  gdb.execute(\"quit 1\")
-gdb.execute(\"quit\")"""
-
-  try:
-    stdout = subprocess.check_output(
-              [gdb_path, "-ex", "python " + test_src, "--batch"],
-              stderr=subprocess.DEVNULL, universal_newlines=True)
-  except subprocess.CalledProcessError:
-    # We can't set breakpoint commands
-    return False
-
-  # Check we actually ran the Python
-  return not "Python scripting is not supported" in stdout
-
-DEFAULT_FEATURES += [
-  Feature(name='host-has-gdb-with-python',
-    when=check_gdb,
+  Feature(name='host-has-gdb',
+    when=lambda cfg: shutil.which('gdb') is not None,
     actions=[AddSubstitution('%{gdb}', lambda cfg: shutil.which('gdb'))]
   )
+]
+
+
+# When vendor-specific availability annotations are enabled, add Lit features
+# with various forms of the target triple to make it easier to write XFAIL or
+# UNSUPPORTED markup for tests that are known to fail on a particular triple.
+#
+# More specifically, when the `use_system_cxx_lib` parameter is enabled, then
+# assuming the `target_triple` is set to `x86_64-apple-macosx10.12`, the
+# following features will be made available:
+#   - with_system_cxx_lib=macosx
+#   - with_system_cxx_lib=macosx10.12
+#   - with_system_cxx_lib=x86_64-apple-macosx10.12
+#
+# These features can be used to XFAIL a test that fails when deployed on (or is
+# compiled for) an older system. For example, if the test exhibits a bug in the
+# libc on a particular system version, or if the test uses a symbol that is not
+# available on an older version of the dylib, it can be marked as XFAIL with
+# one of the above features.
+#
+# It is sometimes useful to check that a test fails specifically when compiled
+# for a given deployment target. For example, this is the case when testing
+# availability markup, where we want to make sure that using the annotated
+# facility on a deployment target that doesn't support it will fail at compile
+# time, not at runtime. This can be achieved by creating a `.compile.pass.cpp`
+# and XFAILing it for the right deployment target. If the test doesn't fail at
+# compile-time like it's supposed to, the test will XPASS. Another option is to
+# create a `.verify.cpp` test that checks for the right errors, and mark that
+# test as requiring `with_system_cxx_lib=<something>`.
+#
+# TODO: This is very unclean -- we assume that the 'use_system_cxx_lib' parameter
+#       is set before this feature gets detected, and we also set a dummy name
+#       for the main feature. We also take for granted that `target_triple`
+#       exists in the config object. This should be refactored so that the
+#       'use_system_cxx_lib' Parameter can set these features itself.
+def _addSystemCxxLibDeclinations(cfg):
+  (arch, vendor, platform) = cfg.target_triple.split('-', 2)
+  (sysname, version) = re.match(r'([^0-9]+)([0-9\.]*)', platform).groups()
+  return [
+    AddFeature('with_system_cxx_lib={}-{}-{}{}'.format(arch, vendor, sysname, version)),
+    AddFeature('with_system_cxx_lib={}{}'.format(sysname, version)),
+    AddFeature('with_system_cxx_lib={}'.format(sysname)),
+  ]
+DEFAULT_FEATURES += [
+  Feature(name='__dummy_use_system_cxx_lib',
+          when=lambda cfg: 'use_system_cxx_lib' in cfg.available_features,
+          actions=_addSystemCxxLibDeclinations)
 ]

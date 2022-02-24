@@ -1,3 +1,4 @@
+; RUN: opt < %s -strip -S | FileCheck %s
 ; RUN: opt < %s -passes=strip -S | FileCheck %s
 
 ; CHECK: foo

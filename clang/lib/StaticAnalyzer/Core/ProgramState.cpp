@@ -54,7 +54,11 @@ ProgramState::ProgramState(ProgramStateManager *mgr, const Environment& env,
 }
 
 ProgramState::ProgramState(const ProgramState &RHS)
-    : stateMgr(RHS.stateMgr), Env(RHS.Env), store(RHS.store), GDM(RHS.GDM),
+    : llvm::FoldingSetNode(),
+      stateMgr(RHS.stateMgr),
+      Env(RHS.Env),
+      store(RHS.store),
+      GDM(RHS.GDM),
       refCount(0) {
   stateMgr->getStoreManager().incrementReferenceCount(store);
 }

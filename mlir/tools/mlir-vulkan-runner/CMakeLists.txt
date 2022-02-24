@@ -5,7 +5,7 @@ set(LLVM_OPTIONAL_SOURCES
   VulkanRuntime.h
   )
 
-if (MLIR_ENABLE_VULKAN_RUNNER)
+if (MLIR_VULKAN_RUNNER_ENABLED)
   message(STATUS "Building the Vulkan runner")
 
   # At first try "FindVulkan" from:
@@ -56,16 +56,14 @@ if (MLIR_ENABLE_VULKAN_RUNNER)
   set(LIBS
     ${conversion_libs}
     MLIRAnalysis
-    MLIRArithmetic
+    MLIREDSC
     MLIRExecutionEngine
-    MLIRGPUOps
+    MLIRGPU
     MLIRIR
     MLIRJitRunner
     MLIRLLVMIR
-    MLIRLLVMCommonConversion
     MLIRLLVMToLLVMIRTranslation
     MLIRMemRef
-    MLIRMemRefToLLVM
     MLIRParser
     MLIRSPIRV
     MLIRSPIRVTransforms

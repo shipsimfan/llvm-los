@@ -35,10 +35,10 @@
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include <algorithm>
 #include <cassert>
 #include <iterator>
-#include <utility>
+#include <string>
+#include <vector>
 
 using namespace llvm;
 
@@ -467,9 +467,8 @@ VPInstruction *VPlanSlp::buildGraph(ArrayRef<VPValue *> Values) {
     return markFailed();
 
   assert(CombinedOperands.size() > 0 && "Need more some operands");
-  auto *Inst = cast<VPInstruction>(Values[0])->getUnderlyingInstr();
-  auto *VPI = new VPInstruction(Opcode, CombinedOperands, Inst->getDebugLoc());
-  VPI->setUnderlyingInstr(Inst);
+  auto *VPI = new VPInstruction(Opcode, CombinedOperands);
+  VPI->setUnderlyingInstr(cast<VPInstruction>(Values[0])->getUnderlyingInstr());
 
   LLVM_DEBUG(dbgs() << "Create VPInstruction " << *VPI << " "
                     << *cast<VPInstruction>(Values[0]) << "\n");

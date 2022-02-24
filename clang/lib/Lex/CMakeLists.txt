@@ -6,7 +6,6 @@ add_clang_library(clangLex
   DependencyDirectivesSourceMinimizer.cpp
   HeaderMap.cpp
   HeaderSearch.cpp
-  InitHeaderSearch.cpp
   Lexer.cpp
   LiteralSupport.cpp
   MacroArgs.cpp

@@ -5,11 +5,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// This file defines the SparseBitVector class.  See the doxygen comment for
-/// SparseBitVector for more details on the algorithm used.
-///
+//
+// This file defines the SparseBitVector class.  See the doxygen comment for
+// SparseBitVector for more details on the algorithm used.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_SPARSEBITVECTOR_H

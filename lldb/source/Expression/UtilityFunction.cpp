@@ -6,8 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cstdio>
+#include "lldb/Host/Config.h"
+
+#include <stdio.h>
+#if HAVE_SYS_TYPES_H
 #include <sys/types.h>
+#endif
+
 
 #include "lldb/Core/Module.h"
 #include "lldb/Core/StreamFile.h"

@@ -78,7 +78,8 @@ def SPV_ResourceLimitsAttr : StructAttr<"ResourceLimitsAttr", SPIRV_Dialect, [
                     DefaultValuedAttr<I32ElementsAttr, "{128, 128, 64}">>,
 
     // The default number of invocations in each subgroup.
-    StructFieldAttr<"subgroup_size", DefaultValuedAttr<I32Attr, "32">>,
+    // 0x7FFFFFFF means unknown.
+    StructFieldAttr<"subgroup_size", DefaultValuedAttr<I32Attr, "0x7FFFFFFF">>,
 
     // The configurations of cooperative matrix operations
     // supported. Default is an empty list.

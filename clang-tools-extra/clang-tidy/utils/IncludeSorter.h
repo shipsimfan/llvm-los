@@ -41,12 +41,12 @@ public:
                 StringRef FileName, IncludeStyle Style);
 
   /// Adds the given include directive to the sorter.
-  void addInclude(StringRef FileName, bool IsAngled,
+  void AddInclude(StringRef FileName, bool IsAngled,
                   SourceLocation HashLocation, SourceLocation EndLocation);
 
   /// Creates a quoted inclusion directive in the right sort order. Returns None
   /// on error or if header inclusion directive for header already exists.
-  Optional<FixItHint> createIncludeInsertion(StringRef FileName, bool IsAngled);
+  Optional<FixItHint> CreateIncludeInsertion(StringRef FileName, bool IsAngled);
 
 private:
   typedef SmallVector<SourceRange, 1> SourceRangeVector;

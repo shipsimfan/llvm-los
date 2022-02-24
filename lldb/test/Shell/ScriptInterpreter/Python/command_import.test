@@ -1,3 +1,5 @@
+# REQUIRES: python
+
 # RUN: rm -rf %t && mkdir -p %t
 # RUN: echo "print('Rene Magritte')" >> %t/foo.py
 # RUN: echo "print('Jan van Eyck')" >> %t/foo-bar.py

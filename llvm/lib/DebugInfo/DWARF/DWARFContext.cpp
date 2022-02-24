@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
-#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -16,7 +15,6 @@
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/DebugInfo/DWARF/DWARFAcceleratorTable.h"
 #include "llvm/DebugInfo/DWARF/DWARFCompileUnit.h"
-#include "llvm/DebugInfo/DWARF/DWARFDataExtractor.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugAbbrev.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugAddr.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugArangeSet.h"
@@ -31,15 +29,10 @@
 #include "llvm/DebugInfo/DWARF/DWARFDie.h"
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
 #include "llvm/DebugInfo/DWARF/DWARFGdbIndex.h"
-#include "llvm/DebugInfo/DWARF/DWARFListTable.h"
-#include "llvm/DebugInfo/DWARF/DWARFLocationExpression.h"
-#include "llvm/DebugInfo/DWARF/DWARFRelocMap.h"
 #include "llvm/DebugInfo/DWARF/DWARFSection.h"
-#include "llvm/DebugInfo/DWARF/DWARFTypeUnit.h"
 #include "llvm/DebugInfo/DWARF/DWARFUnitIndex.h"
 #include "llvm/DebugInfo/DWARF/DWARFVerifier.h"
 #include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/Decompressor.h"
 #include "llvm/Object/MachO.h"
 #include "llvm/Object/ObjectFile.h"
@@ -51,6 +44,7 @@
 #include "llvm/Support/LEB128.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cstdint>
@@ -699,34 +693,6 @@ void DWARFContext::dump(
     getDebugNames().dump(OS);
 }
 
-DWARFTypeUnit *DWARFContext::getTypeUnitForHash(uint16_t Version, uint64_t Hash,
-                                                bool IsDWO) {
-  parseDWOUnits(LazyParse);
-
-  if (const auto &TUI = getTUIndex()) {
-    if (const auto *R = TUI.getFromHash(Hash))
-      return dyn_cast_or_null<DWARFTypeUnit>(
-          DWOUnits.getUnitForIndexEntry(*R));
-    return nullptr;
-  }
-
-  struct UnitContainers {
-    const DWARFUnitVector &Units;
-    Optional<DenseMap<uint64_t, DWARFTypeUnit *>> &Map;
-  };
-  UnitContainers Units = IsDWO ? UnitContainers{DWOUnits, DWOTypeUnits}
-                               : UnitContainers{NormalUnits, NormalTypeUnits};
-  if (!Units.Map) {
-    Units.Map.emplace();
-    for (const auto &U : IsDWO ? dwo_units() : normal_units()) {
-      if (DWARFTypeUnit *TU = dyn_cast<DWARFTypeUnit>(U.get()))
-        (*Units.Map)[TU->getTypeHash()] = TU;
-    }
-  }
-
-  return (*Units.Map)[Hash];
-}
-
 DWARFCompileUnit *DWARFContext::getDWOCompileUnitForHash(uint64_t Hash) {
   parseDWOUnits(LazyParse);
 
@@ -1069,11 +1035,13 @@ DWARFContext::DIEsForAddress DWARFContext::getDIEsForAddress(uint64_t Address) {
 
 /// TODO: change input parameter from "uint64_t Address"
 ///       into "SectionedAddress Address"
-static bool getFunctionNameAndStartLineForAddress(
-    DWARFCompileUnit *CU, uint64_t Address, FunctionNameKind Kind,
-    DILineInfoSpecifier::FileLineInfoKind FileNameKind,
-    std::string &FunctionName, std::string &StartFile, uint32_t &StartLine,
-    Optional<uint64_t> &StartAddress) {
+static bool getFunctionNameAndStartLineForAddress(DWARFCompileUnit *CU,
+                                                  uint64_t Address,
+                                                  FunctionNameKind Kind,
+                                                  DILineInfoSpecifier::FileLineInfoKind FileNameKind,
+                                                  std::string &FunctionName,
+                                                  std::string &StartFile,
+                                                  uint32_t &StartLine) {
   // The address may correspond to instruction in some inlined function,
   // so we have to build the chain of inlined functions and take the
   // name of the topmost function in it.
@@ -1098,8 +1066,7 @@ static bool getFunctionNameAndStartLineForAddress(
     StartLine = DeclLineResult;
     FoundResult = true;
   }
-  if (auto LowPcAddr = toSectionedAddress(DIE.find(DW_AT_low_pc)))
-    StartAddress = LowPcAddr->Address;
+
   return FoundResult;
 }
 
@@ -1120,7 +1087,6 @@ static Optional<uint64_t> getTypeSize(DWARFDie Type, uint64_t PointerSize) {
     return PointerSize;
   }
   case DW_TAG_const_type:
-  case DW_TAG_immutable_type:
   case DW_TAG_volatile_type:
   case DW_TAG_restrict_type:
   case DW_TAG_typedef: {
@@ -1218,7 +1184,7 @@ void DWARFContext::addLocalsForDie(DWARFCompileUnit *CU, DWARFDie Subprogram,
             Die.getAttributeValueAsReferencedDie(DW_AT_abstract_origin))
       Die = Origin;
     if (auto NameAttr = Die.find(DW_AT_name))
-      if (Optional<const char *> Name = dwarf::toString(*NameAttr))
+      if (Optional<const char *> Name = NameAttr->getAsCString())
         Local.Name = *Name;
     if (auto Type = Die.getAttributeValueAsReferencedDie(DW_AT_type))
       Local.Size = getTypeSize(Type, getCUAddrSize());
@@ -1267,9 +1233,9 @@ DILineInfo DWARFContext::getLineInfoForAddress(object::SectionedAddress Address,
   if (!CU)
     return Result;
 
-  getFunctionNameAndStartLineForAddress(
-      CU, Address.Address, Spec.FNKind, Spec.FLIKind, Result.FunctionName,
-      Result.StartFileName, Result.StartLine, Result.StartAddress);
+  getFunctionNameAndStartLineForAddress(CU, Address.Address, Spec.FNKind, Spec.FLIKind,
+                                        Result.FunctionName,
+                                        Result.StartFileName, Result.StartLine);
   if (Spec.FLIKind != FileLineInfoKind::None) {
     if (const DWARFLineTable *LineTable = getLineTableForUnit(CU)) {
       LineTable->getFileLineInfoForAddress(
@@ -1282,7 +1248,7 @@ DILineInfo DWARFContext::getLineInfoForAddress(object::SectionedAddress Address,
 
 DILineInfoTable DWARFContext::getLineInfoForAddressRange(
     object::SectionedAddress Address, uint64_t Size, DILineInfoSpecifier Spec) {
-  DILineInfoTable Lines;
+  DILineInfoTable  Lines;
   DWARFCompileUnit *CU = getCompileUnitForAddress(Address.Address);
   if (!CU)
     return Lines;
@@ -1290,10 +1256,8 @@ DILineInfoTable DWARFContext::getLineInfoForAddressRange(
   uint32_t StartLine = 0;
   std::string StartFileName;
   std::string FunctionName(DILineInfo::BadString);
-  Optional<uint64_t> StartAddress;
-  getFunctionNameAndStartLineForAddress(CU, Address.Address, Spec.FNKind,
-                                        Spec.FLIKind, FunctionName,
-                                        StartFileName, StartLine, StartAddress);
+  getFunctionNameAndStartLineForAddress(CU, Address.Address, Spec.FNKind, Spec.FLIKind,
+                                        FunctionName, StartFileName, StartLine);
 
   // If the Specifier says we don't need FileLineInfo, just
   // return the top-most function at the starting address.
@@ -1302,7 +1266,6 @@ DILineInfoTable DWARFContext::getLineInfoForAddressRange(
     Result.FunctionName = FunctionName;
     Result.StartFileName = StartFileName;
     Result.StartLine = StartLine;
-    Result.StartAddress = StartAddress;
     Lines.push_back(std::make_pair(Address.Address, Result));
     return Lines;
   }
@@ -1327,7 +1290,6 @@ DILineInfoTable DWARFContext::getLineInfoForAddressRange(
     Result.Column = Row.Column;
     Result.StartFileName = StartFileName;
     Result.StartLine = StartLine;
-    Result.StartAddress = StartAddress;
     Lines.push_back(std::make_pair(Row.Address.Address, Result));
   }
 
@@ -1370,8 +1332,6 @@ DWARFContext::getInliningInfoForAddress(object::SectionedAddress Address,
     if (auto DeclLineResult = FunctionDIE.getDeclLine())
       Frame.StartLine = DeclLineResult;
     Frame.StartFileName = FunctionDIE.getDeclFile(Spec.FLIKind);
-    if (auto LowPcAddr = toSectionedAddress(FunctionDIE.find(DW_AT_low_pc)))
-      Frame.StartAddress = LowPcAddr->Address;
     if (Spec.FLIKind != FileLineInfoKind::None) {
       if (i == 0) {
         // For the topmost frame, initialize the line table of this
@@ -1446,8 +1406,7 @@ DWARFContext::getDWOContext(StringRef AbsolutePath) {
 
   auto S = std::make_shared<DWOFile>();
   S->File = std::move(Obj.get());
-  S->Context = DWARFContext::create(*S->File.getBinary(),
-                                    ProcessDebugRelocations::Ignore);
+  S->Context = DWARFContext::create(*S->File.getBinary());
   *Entry = S;
   auto *Ctxt = S->Context.get();
   return std::shared_ptr<DWARFContext>(std::move(S), Ctxt);
@@ -1688,9 +1647,7 @@ public:
     }
   }
   DWARFObjInMemory(const object::ObjectFile &Obj, const LoadedObjectInfo *L,
-                   function_ref<void(Error)> HandleError,
-                   function_ref<void(Error)> HandleWarning,
-                   DWARFContext::ProcessDebugRelocations RelocAction)
+                   function_ref<void(Error)> HandleError, function_ref<void(Error)> HandleWarning )
       : IsLittleEndian(Obj.isLittleEndian()),
         AddressSize(Obj.getBytesInAddress()), FileName(Obj.getFileName()),
         Obj(&Obj) {
@@ -1725,8 +1682,7 @@ public:
       // Try to obtain an already relocated version of this section.
       // Else use the unrelocated section from the object file. We'll have to
       // apply relocations ourselves later.
-      section_iterator RelocatedSection =
-          Obj.isRelocatableObject() ? *SecOrErr : Obj.section_end();
+      section_iterator RelocatedSection = *SecOrErr;
       if (!L || !L->getLoadedSectionContents(*RelocatedSection, Data)) {
         Expected<StringRef> E = Section.getContents();
         if (E)
@@ -1773,12 +1729,7 @@ public:
         S.Data = Data;
       }
 
-      if (RelocatedSection != Obj.section_end() && Name.contains(".dwo"))
-        HandleWarning(
-            createError("Unexpected relocations for dwo section " + Name));
-
-      if (RelocatedSection == Obj.section_end() ||
-          (RelocAction == DWARFContext::ProcessDebugRelocations::Ignore))
+      if (RelocatedSection == Obj.section_end())
         continue;
 
       StringRef RelSecName;
@@ -1815,10 +1766,18 @@ public:
         if (RelSecName == "debug_info")
           Map = &static_cast<DWARFSectionMap &>(InfoSections[*RelocatedSection])
                      .Relocs;
+        else if (RelSecName == "debug_info.dwo")
+          Map = &static_cast<DWARFSectionMap &>(
+                     InfoDWOSections[*RelocatedSection])
+                     .Relocs;
         else if (RelSecName == "debug_types")
           Map =
               &static_cast<DWARFSectionMap &>(TypesSections[*RelocatedSection])
                    .Relocs;
+        else if (RelSecName == "debug_types.dwo")
+          Map = &static_cast<DWARFSectionMap &>(
+                     TypesDWOSections[*RelocatedSection])
+                     .Relocs;
         else
           continue;
       }
@@ -2001,13 +1960,12 @@ public:
 } // namespace
 
 std::unique_ptr<DWARFContext>
-DWARFContext::create(const object::ObjectFile &Obj,
-                     ProcessDebugRelocations RelocAction,
-                     const LoadedObjectInfo *L, std::string DWPName,
+DWARFContext::create(const object::ObjectFile &Obj, const LoadedObjectInfo *L,
+                     std::string DWPName,
                      std::function<void(Error)> RecoverableErrorHandler,
                      std::function<void(Error)> WarningHandler) {
-  auto DObj = std::make_unique<DWARFObjInMemory>(
-      Obj, L, RecoverableErrorHandler, WarningHandler, RelocAction);
+  auto DObj =
+      std::make_unique<DWARFObjInMemory>(Obj, L, RecoverableErrorHandler, WarningHandler);
   return std::make_unique<DWARFContext>(std::move(DObj), std::move(DWPName),
                                         RecoverableErrorHandler,
                                         WarningHandler);

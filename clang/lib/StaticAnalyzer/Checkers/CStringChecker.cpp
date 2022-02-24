@@ -17,7 +17,6 @@
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/CallDescription.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicExtent.h"
@@ -257,6 +256,7 @@ public:
   void emitNotCStringBug(CheckerContext &C, ProgramStateRef State,
                          const Stmt *S, StringRef WarningMsg) const;
   void emitAdditionOverflowBug(CheckerContext &C, ProgramStateRef State) const;
+
   ProgramStateRef checkAdditionOverflow(CheckerContext &C,
                                             ProgramStateRef state,
                                             NonLoc left,
@@ -419,6 +419,7 @@ ProgramStateRef CStringChecker::CheckBufferAccess(CheckerContext &C,
 
     SVal BufEnd =
         svalBuilder.evalBinOpLN(State, BO_Add, *BufLoc, LastOffset, PtrTy);
+
     State = CheckLocation(C, State, Buffer, BufEnd, Access);
 
     // If the buffer isn't large enough, abort.
@@ -620,8 +621,8 @@ void CStringChecker::emitNotCStringBug(CheckerContext &C, ProgramStateRef State,
 void CStringChecker::emitAdditionOverflowBug(CheckerContext &C,
                                              ProgramStateRef State) const {
   if (ExplodedNode *N = C.generateErrorNode(State)) {
-    if (!BT_AdditionOverflow)
-      BT_AdditionOverflow.reset(
+    if (!BT_NotCString)
+      BT_NotCString.reset(
           new BuiltinBug(Filter.CheckNameCStringOutOfBounds, "API",
                          "Sum of expressions causes overflow."));
 
@@ -632,8 +633,8 @@ void CStringChecker::emitAdditionOverflowBug(CheckerContext &C,
         "This expression will create a string whose length is too big to "
         "be represented as a size_t";
 
-    auto Report = std::make_unique<PathSensitiveBugReport>(*BT_AdditionOverflow,
-                                                           WarningMsg, N);
+    auto Report =
+        std::make_unique<PathSensitiveBugReport>(*BT_NotCString, WarningMsg, N);
     C.emitReport(std::move(Report));
   }
 }
@@ -1515,7 +1516,7 @@ void CStringChecker::evalStrcat(CheckerContext &C, const CallExpr *CE) const {
 }
 
 void CStringChecker::evalStrncat(CheckerContext &C, const CallExpr *CE) const {
-  // char *strncat(char *restrict s1, const char *restrict s2, size_t n);
+  //char *strncat(char *restrict s1, const char *restrict s2, size_t n);
   evalStrcpyCommon(C, CE,
                    /* ReturnEnd = */ false,
                    /* IsBounded = */ true,
@@ -2038,7 +2039,7 @@ void CStringChecker::evalStrcmpCommon(CheckerContext &C, const CallExpr *CE,
         RightStrRef = RightStrRef.substr(0, s2Term);
 
       // Use StringRef's comparison methods to compute the actual result.
-      int compareRes = IgnoreCase ? LeftStrRef.compare_insensitive(RightStrRef)
+      int compareRes = IgnoreCase ? LeftStrRef.compare_lower(RightStrRef)
                                   : LeftStrRef.compare(RightStrRef);
 
       // The strcmp function returns an integer greater than, equal to, or less
@@ -2067,8 +2068,8 @@ void CStringChecker::evalStrcmpCommon(CheckerContext &C, const CallExpr *CE,
 }
 
 void CStringChecker::evalStrsep(CheckerContext &C, const CallExpr *CE) const {
-  // char *strsep(char **stringp, const char *delim);
-  // Verify whether the search string parameter matches the return type.
+  //char *strsep(char **stringp, const char *delim);
+  // Sanity: does the search string parameter match the return type?
   SourceArgExpr SearchStrPtr = {CE->getArg(0), 0};
 
   QualType CharPtrTy = SearchStrPtr.Expression->getType()->getPointeeType();
@@ -2270,10 +2271,11 @@ CStringChecker::FnCheck CStringChecker::identifyCall(const CallEvent &Call,
   if (!FD)
     return nullptr;
 
-  if (StdCopy.matches(Call))
+  if (Call.isCalled(StdCopy)) {
     return &CStringChecker::evalStdCopy;
-  if (StdCopyBackward.matches(Call))
+  } else if (Call.isCalled(StdCopyBackward)) {
     return &CStringChecker::evalStdCopyBackward;
+  }
 
   // Pro-actively check that argument types are safe to do arithmetic upon.
   // We do not want to crash if someone accidentally passes a structure

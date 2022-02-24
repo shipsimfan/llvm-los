@@ -23,6 +23,7 @@ class TestDetachVrsProfile(TestBase):
 
     @skipUnlessDarwin
     @skipIfOutOfTreeDebugserver
+    @skipIfReproducer
     def test_profile_and_detach(self):
         """There can be many tests in a test case - describe this test here."""
         self.build()
@@ -73,4 +74,4 @@ class TestDetachVrsProfile(TestBase):
 
         # Now detach:
         error = process.Detach()
-        self.assertSuccess(error, "Detached successfully")
+        self.assertTrue(error.Success(), "Detached successfully")

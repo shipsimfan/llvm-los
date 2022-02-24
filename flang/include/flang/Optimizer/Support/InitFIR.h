@@ -21,30 +21,20 @@
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Transforms/LocationSnapshot.h"
 #include "mlir/Transforms/Passes.h"
+#include "flang/Optimizer/CodeGen/CodeGen.h"
 
 namespace fir::support {
 
-#define FLANG_NONCODEGEN_DIALECT_LIST                                          \
-  mlir::AffineDialect, FIROpsDialect, mlir::acc::OpenACCDialect,               \
-      mlir::omp::OpenMPDialect, mlir::scf::SCFDialect,                         \
-      mlir::arith::ArithmeticDialect, mlir::cf::ControlFlowDialect,            \
-      mlir::StandardOpsDialect, mlir::vector::VectorDialect
-
 // The definitive list of dialects used by flang.
 #define FLANG_DIALECT_LIST                                                     \
-  FLANG_NONCODEGEN_DIALECT_LIST, FIRCodeGenDialect, mlir::LLVM::LLVMDialect
-
-inline void registerNonCodegenDialects(mlir::DialectRegistry &registry) {
-  registry.insert<FLANG_NONCODEGEN_DIALECT_LIST>();
-}
+  mlir::AffineDialect, FIROpsDialect, FIRCodeGenDialect,                       \
+      mlir::LLVM::LLVMDialect, mlir::acc::OpenACCDialect,                      \
+      mlir::omp::OpenMPDialect, mlir::scf::SCFDialect,                         \
+      mlir::StandardOpsDialect, mlir::vector::VectorDialect
 
 /// Register all the dialects used by flang.
 inline void registerDialects(mlir::DialectRegistry &registry) {
   registry.insert<FLANG_DIALECT_LIST>();
-}
-
-inline void loadNonCodegenDialects(mlir::MLIRContext &context) {
-  context.loadDialect<FLANG_NONCODEGEN_DIALECT_LIST>();
 }
 
 /// Forced load of all the dialects used by flang.  Lowering is not an MLIR
@@ -66,7 +56,7 @@ inline void registerMLIRPassesForFortranTools() {
   mlir::registerPrintOpStatsPass();
   mlir::registerInlinerPass();
   mlir::registerSCCPPass();
-  mlir::registerAffineScalarReplacementPass();
+  mlir::registerMemRefDataFlowOptPass();
   mlir::registerSymbolDCEPass();
   mlir::registerLocationSnapshotPass();
   mlir::registerAffinePipelineDataTransferPass();
@@ -80,10 +70,10 @@ inline void registerMLIRPassesForFortranTools() {
   mlir::registerAffineDataCopyGenerationPass();
 
   mlir::registerConvertAffineToStandardPass();
-}
 
-/// Register the interfaces needed to lower to LLVM IR.
-void registerLLVMTranslation(mlir::MLIRContext &context);
+  // Flang passes
+  fir::registerOptCodeGenPasses();
+}
 
 } // namespace fir::support
 

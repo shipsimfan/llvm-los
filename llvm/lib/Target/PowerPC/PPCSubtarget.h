@@ -139,7 +139,6 @@ protected:
   bool HasICBT;
   bool HasInvariantFunctionDescriptors;
   bool HasPartwordAtomics;
-  bool HasQuadwordAtomics;
   bool HasDirectMove;
   bool HasHTM;
   bool HasFloat128;
@@ -147,17 +146,6 @@ protected:
   bool HasStoreFusion;
   bool HasAddiLoadFusion;
   bool HasAddisLoadFusion;
-  bool HasArithAddFusion;
-  bool HasAddLogicalFusion;
-  bool HasLogicalAddFusion;
-  bool HasLogicalFusion;
-  bool HasSha3Fusion;
-  bool HasCompareFusion;
-  bool HasWideImmFusion;
-  bool HasZeroMoveFusion;
-  bool HasBack2BackFusion;
-  bool IsISA2_06;
-  bool IsISA2_07;
   bool IsISA3_0;
   bool IsISA3_1;
   bool UseLongCalls;
@@ -313,7 +301,6 @@ public:
   bool usePPCPreRASchedStrategy() const { return UsePPCPreRASchedStrategy; }
   bool usePPCPostRASchedStrategy() const { return UsePPCPostRASchedStrategy; }
   bool hasPartwordAtomics() const { return HasPartwordAtomics; }
-  bool hasQuadwordAtomics() const { return HasQuadwordAtomics; }
   bool hasDirectMove() const { return HasDirectMove; }
 
   Align getPlatformStackAlignment() const {
@@ -332,8 +319,6 @@ public:
 
   bool hasHTM() const { return HasHTM; }
   bool hasFloat128() const { return HasFloat128; }
-  bool isISA2_06() const { return IsISA2_06; }
-  bool isISA2_07() const { return IsISA2_07; }
   bool isISA3_0() const { return IsISA3_0; }
   bool isISA3_1() const { return IsISA3_1; }
   bool useLongCalls() const { return UseLongCalls; }
@@ -341,15 +326,6 @@ public:
   bool hasStoreFusion() const { return HasStoreFusion; }
   bool hasAddiLoadFusion() const { return HasAddiLoadFusion; }
   bool hasAddisLoadFusion() const { return HasAddisLoadFusion; }
-  bool hasArithAddFusion() const { return HasArithAddFusion; }
-  bool hasAddLogicalFusion() const { return HasAddLogicalFusion; }
-  bool hasLogicalAddFusion() const { return HasLogicalAddFusion; }
-  bool hasLogicalFusion() const { return HasLogicalFusion; }
-  bool hasCompareFusion() const { return HasCompareFusion; }
-  bool hasWideImmFusion() const { return HasWideImmFusion; }
-  bool hasSha3Fusion() const { return HasSha3Fusion; }
-  bool hasZeroMoveFusion() const { return HasZeroMoveFusion; }
-  bool hasBack2BackFusion() const { return HasBack2BackFusion; }
   bool needsSwapsForVSXMemOps() const {
     return hasVSX() && isLittleEndian() && !hasP9Vector();
   }
@@ -433,16 +409,6 @@ public:
 
   bool isPredictableSelectIsExpensive() const {
     return PredictableSelectIsExpensive;
-  }
-
-  // Select allocation orders of GPRC and G8RC. It should be strictly consistent
-  // with corresponding AltOrders in PPCRegisterInfo.td.
-  unsigned getGPRAllocationOrderIdx() const {
-    if (is64BitELFABI())
-      return 1;
-    if (isAIXABI())
-      return 2;
-    return 0;
   }
 
   // GlobalISEL

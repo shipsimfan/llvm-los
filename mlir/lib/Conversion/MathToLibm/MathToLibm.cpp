@@ -9,12 +9,9 @@
 #include "mlir/Conversion/MathToLibm/MathToLibm.h"
 
 #include "../PassDetail.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/Dialect/Utils/IndexingUtils.h"
-#include "mlir/Dialect/Vector/IR/VectorOps.h"
-#include "mlir/Dialect/Vector/Utils/VectorUtils.h"
+#include "mlir/Dialect/Vector/VectorOps.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/PatternMatch.h"
 
@@ -60,23 +57,21 @@ VecOpToScalarOp<Op>::matchAndRewrite(Op op, PatternRewriter &rewriter) const {
   if (!vecType.hasRank())
     return failure();
   auto shape = vecType.getShape();
-  int64_t numElements = vecType.getNumElements();
+  // TODO: support multidimensional vectors
+  if (shape.size() != 1)
+    return failure();
 
-  Value result = rewriter.create<arith::ConstantOp>(
+  Value result = rewriter.create<ConstantOp>(
       loc, DenseElementsAttr::get(
                vecType, FloatAttr::get(vecType.getElementType(), 0.0)));
-  SmallVector<int64_t> ones(shape.size(), 1);
-  SmallVector<int64_t> strides = computeStrides(shape, ones);
-  for (auto linearIndex = 0; linearIndex < numElements; ++linearIndex) {
-    SmallVector<int64_t> positions = delinearize(strides, linearIndex);
+  for (auto i = 0; i < shape.front(); ++i) {
     SmallVector<Value> operands;
     for (auto input : op->getOperands())
       operands.push_back(
-          rewriter.create<vector::ExtractOp>(loc, input, positions));
+          rewriter.create<vector::ExtractElementOp>(loc, input, i));
     Value scalarOp =
         rewriter.create<Op>(loc, vecType.getElementType(), operands);
-    result =
-        rewriter.create<vector::InsertOp>(loc, scalarOp, result, positions);
+    result = rewriter.create<vector::InsertElementOp>(loc, scalarOp, result, i);
   }
   rewriter.replaceOp(op, {result});
   return success();
@@ -86,29 +81,30 @@ template <typename Op>
 LogicalResult
 ScalarOpToLibmCall<Op>::matchAndRewrite(Op op,
                                         PatternRewriter &rewriter) const {
-  auto module = SymbolTable::getNearestSymbolTable(op);
+  auto module = op->template getParentOfType<ModuleOp>();
   auto type = op.getType();
   // TODO: Support Float16 by upcasting to Float32
   if (!type.template isa<Float32Type, Float64Type>())
     return failure();
 
   auto name = type.getIntOrFloatBitWidth() == 64 ? doubleFunc : floatFunc;
-  auto opFunc = dyn_cast_or_null<SymbolOpInterface>(
-      SymbolTable::lookupSymbolIn(module, name));
+  auto opFunc = module.template lookupSymbol<FuncOp>(name);
   // Forward declare function if it hasn't already been
   if (!opFunc) {
     OpBuilder::InsertionGuard guard(rewriter);
-    rewriter.setInsertionPointToStart(&module->getRegion(0).front());
+    rewriter.setInsertionPointToStart(module.getBody());
     auto opFunctionTy = FunctionType::get(
         rewriter.getContext(), op->getOperandTypes(), op->getResultTypes());
     opFunc =
         rewriter.create<FuncOp>(rewriter.getUnknownLoc(), name, opFunctionTy);
     opFunc.setPrivate();
   }
-  assert(isa<FunctionOpInterface>(SymbolTable::lookupSymbolIn(module, name)));
+  assert(opFunc.getType().template cast<FunctionType>().getResults() ==
+         op->getResultTypes());
+  assert(opFunc.getType().template cast<FunctionType>().getInputs() ==
+         op->getOperandTypes());
 
-  rewriter.replaceOpWithNewOp<CallOp>(op, name, op.getType(),
-                                      op->getOperands());
+  rewriter.replaceOpWithNewOp<CallOp>(op, opFunc, op->getOperands());
 
   return success();
 }
@@ -119,8 +115,6 @@ void mlir::populateMathToLibmConversionPatterns(RewritePatternSet &patterns,
                VecOpToScalarOp<math::TanhOp>>(patterns.getContext(), benefit);
   patterns.add<ScalarOpToLibmCall<math::Atan2Op>>(patterns.getContext(),
                                                   "atan2f", "atan2", benefit);
-  patterns.add<ScalarOpToLibmCall<math::ErfOp>>(patterns.getContext(), "erff",
-                                                "erf", benefit);
   patterns.add<ScalarOpToLibmCall<math::ExpM1Op>>(patterns.getContext(),
                                                   "expm1f", "expm1", benefit);
   patterns.add<ScalarOpToLibmCall<math::TanhOp>>(patterns.getContext(), "tanhf",
@@ -141,8 +135,8 @@ void ConvertMathToLibmPass::runOnOperation() {
   populateMathToLibmConversionPatterns(patterns, /*benefit=*/1);
 
   ConversionTarget target(getContext());
-  target.addLegalDialect<arith::ArithmeticDialect, BuiltinDialect,
-                         StandardOpsDialect, vector::VectorDialect>();
+  target.addLegalDialect<BuiltinDialect, StandardOpsDialect,
+                         vector::VectorDialect>();
   target.addIllegalDialect<math::MathDialect>();
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();

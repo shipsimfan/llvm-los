@@ -1,3 +1,4 @@
+// -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -6,14 +7,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-// ADDITIONAL_COMPILE_FLAGS: -Wno-macro-redefined -D_LIBCPP_DEBUG=0
+// ADDITIONAL_COMPILE_FLAGS: -D_LIBCPP_DEBUG=0
 // UNSUPPORTED: libcxx-no-debug-mode
 
 // Test that the default debug handler aborts the program.
 
-#include <__assert>
 #include <csignal>
 #include <cstdlib>
+#include <__debug>
 
 #include "test_macros.h"
 

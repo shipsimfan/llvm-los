@@ -15,11 +15,9 @@ set(LLVM_OPTIONAL_SOURCES
   ${NETBSD_SOURCES})
 
 add_lldb_unittest(ProcessUtilityTests
-  LinuxProcMapsTest.cpp
-  MemoryTagManagerAArch64MTETest.cpp
   RegisterContextTest.cpp
+  LinuxProcMapsTest.cpp
   ${PLATFORM_SOURCES}
 
   LINK_LIBS
-    lldbPluginProcessUtility
-    LLVMTestingSupport)
+    lldbPluginProcessUtility)

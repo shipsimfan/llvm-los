@@ -30,13 +30,13 @@
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include <algorithm>
 #include <string>
@@ -115,13 +115,6 @@ static cl::opt<unsigned>
     NumRepetitions("num-repetitions",
                    cl::desc("number of time to repeat the asm snippet"),
                    cl::cat(BenchmarkOptions), cl::init(10000));
-
-static cl::opt<unsigned>
-    LoopBodySize("loop-body-size",
-                 cl::desc("when repeating the instruction snippet by looping "
-                          "over it, duplicate the snippet until the loop body "
-                          "contains at least this many instruction"),
-                 cl::cat(BenchmarkOptions), cl::init(0));
 
 static cl::opt<unsigned> MaxConfigsPerOpcode(
     "max-configs-per-opcode",
@@ -372,7 +365,7 @@ void benchmarkMain() {
 
   for (const BenchmarkCode &Conf : Configurations) {
     InstructionBenchmark Result = ExitOnErr(Runner->runConfiguration(
-        Conf, NumRepetitions, LoopBodySize, Repetitors, DumpObjectToDisk));
+        Conf, NumRepetitions, Repetitors, DumpObjectToDisk));
     ExitOnFileError(BenchmarkFile, Result.writeYaml(State, BenchmarkFile));
   }
   exegesis::pfm::pfmTerminate();
@@ -435,19 +428,16 @@ static void analysisMain() {
     return;
   }
 
-  std::unique_ptr<MCSubtargetInfo> SubtargetInfo(
-      TheTarget->createMCSubtargetInfo(Points[0].LLVMTriple, CpuName, ""));
-
   std::unique_ptr<MCInstrInfo> InstrInfo(TheTarget->createMCInstrInfo());
   assert(InstrInfo && "Unable to create instruction info!");
 
   const auto Clustering = ExitOnErr(InstructionBenchmarkClustering::create(
       Points, AnalysisClusteringAlgorithm, AnalysisDbscanNumPoints,
-      AnalysisClusteringEpsilon, SubtargetInfo.get(), InstrInfo.get()));
+      AnalysisClusteringEpsilon, InstrInfo->getNumOpcodes()));
 
-  const Analysis Analyzer(
-      *TheTarget, std::move(SubtargetInfo), std::move(InstrInfo), Clustering,
-      AnalysisInconsistencyEpsilon, AnalysisDisplayUnstableOpcodes, CpuName);
+  const Analysis Analyzer(*TheTarget, std::move(InstrInfo), Clustering,
+                          AnalysisInconsistencyEpsilon,
+                          AnalysisDisplayUnstableOpcodes, CpuName);
 
   maybeRunAnalysis<Analysis::PrintClusters>(Analyzer, "analysis clusters",
                                             AnalysisClustersOutputFile);

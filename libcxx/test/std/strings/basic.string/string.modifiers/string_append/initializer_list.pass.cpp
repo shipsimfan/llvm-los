@@ -18,28 +18,19 @@
 #include "test_macros.h"
 #include "min_allocator.h"
 
-bool test() {
-  {
-    std::string s("123");
-    s.append({'a', 'b', 'c'});
-    assert(s == "123abc");
-  }
-  {
-    typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
-    S s("123");
-    s.append({'a', 'b', 'c'});
-    assert(s == "123abc");
-  }
-
-  return true;
-}
-
 int main(int, char**)
 {
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
-#endif
+    {
+        std::string s("123");
+        s.append({'a', 'b', 'c'});
+        assert(s == "123abc");
+    }
+    {
+        typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
+        S s("123");
+        s.append({'a', 'b', 'c'});
+        assert(s == "123abc");
+    }
 
   return 0;
 }

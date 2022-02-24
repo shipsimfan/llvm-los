@@ -77,14 +77,13 @@ public:
 
   static lldb::ABISP CreateInstance(lldb::ProcessSP process_sp, const lldb_private::ArchSpec &arch);
 
-  static llvm::StringRef GetPluginNameStatic() { return "SysV-arm64"; }
+  static lldb_private::ConstString GetPluginNameStatic();
 
   // PluginInterface protocol
 
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  lldb_private::ConstString GetPluginName() override;
 
-  lldb::addr_t FixCodeAddress(lldb::addr_t pc) override;
-  lldb::addr_t FixDataAddress(lldb::addr_t pc) override;
+  uint32_t GetPluginVersion() override;
 
 protected:
   lldb::ValueObjectSP

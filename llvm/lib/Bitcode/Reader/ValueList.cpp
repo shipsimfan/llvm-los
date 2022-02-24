@@ -18,7 +18,9 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <algorithm>
 #include <cstddef>
+#include <limits>
 
 using namespace llvm;
 
@@ -60,39 +62,38 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(ConstantPlaceHolder, Value)
 
 } // end namespace llvm
 
-void BitcodeReaderValueList::assignValue(unsigned Idx, Value *V,
-                                         unsigned TypeID) {
+void BitcodeReaderValueList::assignValue(Value *V, unsigned Idx, Type *FullTy) {
   if (Idx == size()) {
-    push_back(V, TypeID);
+    push_back(V, FullTy);
     return;
   }
 
   if (Idx >= size())
     resize(Idx + 1);
 
-  auto &Old = ValuePtrs[Idx];
-  if (!Old.first) {
-    Old.first = V;
-    Old.second = TypeID;
+  assert(FullTypes[Idx] == nullptr || FullTypes[Idx] == FullTy);
+  FullTypes[Idx] = FullTy;
+
+  WeakTrackingVH &OldV = ValuePtrs[Idx];
+  if (!OldV) {
+    OldV = V;
     return;
   }
 
   // Handle constants and non-constants (e.g. instrs) differently for
   // efficiency.
-  if (Constant *PHC = dyn_cast<Constant>(&*Old.first)) {
+  if (Constant *PHC = dyn_cast<Constant>(&*OldV)) {
     ResolveConstants.push_back(std::make_pair(PHC, Idx));
-    Old.first = V;
-    Old.second = TypeID;
+    OldV = V;
   } else {
     // If there was a forward reference to this value, replace it.
-    Value *PrevVal = Old.first;
-    Old.first->replaceAllUsesWith(V);
+    Value *PrevVal = OldV;
+    OldV->replaceAllUsesWith(V);
     PrevVal->deleteValue();
   }
 }
 
-Constant *BitcodeReaderValueList::getConstantFwdRef(unsigned Idx, Type *Ty,
-                                                    unsigned TyID) {
+Constant *BitcodeReaderValueList::getConstantFwdRef(unsigned Idx, Type *Ty) {
   // Bail out for a clearly invalid value.
   if (Idx >= RefsUpperBound)
     return nullptr;
@@ -100,7 +101,7 @@ Constant *BitcodeReaderValueList::getConstantFwdRef(unsigned Idx, Type *Ty,
   if (Idx >= size())
     resize(Idx + 1);
 
-  if (Value *V = ValuePtrs[Idx].first) {
+  if (Value *V = ValuePtrs[Idx]) {
     if (Ty != V->getType())
       report_fatal_error("Type mismatch in constant table!");
     return cast<Constant>(V);
@@ -108,12 +109,12 @@ Constant *BitcodeReaderValueList::getConstantFwdRef(unsigned Idx, Type *Ty,
 
   // Create and return a placeholder, which will later be RAUW'd.
   Constant *C = new ConstantPlaceHolder(Ty, Context);
-  ValuePtrs[Idx] = {C, TyID};
+  ValuePtrs[Idx] = C;
   return C;
 }
 
 Value *BitcodeReaderValueList::getValueFwdRef(unsigned Idx, Type *Ty,
-                                              unsigned TyID) {
+                                              Type **FullTy) {
   // Bail out for a clearly invalid value.
   if (Idx >= RefsUpperBound)
     return nullptr;
@@ -121,10 +122,12 @@ Value *BitcodeReaderValueList::getValueFwdRef(unsigned Idx, Type *Ty,
   if (Idx >= size())
     resize(Idx + 1);
 
-  if (Value *V = ValuePtrs[Idx].first) {
+  if (Value *V = ValuePtrs[Idx]) {
     // If the types don't match, it's invalid.
     if (Ty && Ty != V->getType())
       return nullptr;
+    if (FullTy)
+      *FullTy = FullTypes[Idx];
     return V;
   }
 
@@ -134,7 +137,7 @@ Value *BitcodeReaderValueList::getValueFwdRef(unsigned Idx, Type *Ty,
 
   // Create and return a placeholder, which will later be RAUW'd.
   Value *V = new Argument(Ty);
-  ValuePtrs[Idx] = {V, TyID};
+  ValuePtrs[Idx] = V;
   return V;
 }
 

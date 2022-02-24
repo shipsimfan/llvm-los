@@ -10,7 +10,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUAliasAnalysis.h"
-#include "AMDGPU.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/Instructions.h"
 
@@ -36,10 +35,6 @@ ImmutablePass *llvm::createAMDGPUAAWrapperPass() {
 
 ImmutablePass *llvm::createAMDGPUExternalAAWrapperPass() {
   return new AMDGPUExternalAAWrapper();
-}
-
-AMDGPUAAWrapperPass::AMDGPUAAWrapperPass() : ImmutablePass(ID) {
-  initializeAMDGPUAAWrapperPassPass(*PassRegistry::getPassRegistry());
 }
 
 void AMDGPUAAWrapperPass::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -99,7 +94,7 @@ AliasResult AMDGPUAAResult::alias(const MemoryLocation &LocA,
         getUnderlyingObject(A.Ptr->stripPointerCastsForAliasAnalysis());
     if (const LoadInst *LI = dyn_cast<LoadInst>(ObjA)) {
       // If a generic pointer is loaded from the constant address space, it
-      // could only be a GLOBAL or CONSTANT one as that address space is solely
+      // could only be a GLOBAL or CONSTANT one as that address space is soley
       // prepared on the host side, where only GLOBAL or CONSTANT variables are
       // visible. Note that this even holds for regular functions.
       if (LI->getPointerAddressSpace() == AMDGPUAS::CONSTANT_ADDRESS)

@@ -20,7 +20,7 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(AssumingOp op, OpAdaptor adaptor,
+  matchAndRewrite(AssumingOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const final {
     SmallVector<Type, 2> newResultTypes;
     newResultTypes.reserve(op.getNumResults());
@@ -30,10 +30,10 @@ public:
       newResultTypes.push_back(convertedType);
     }
 
-    auto newAssumingOp = rewriter.create<AssumingOp>(
-        op.getLoc(), newResultTypes, op.getWitness());
-    rewriter.inlineRegionBefore(op.getDoRegion(), newAssumingOp.getDoRegion(),
-                                newAssumingOp.getDoRegion().end());
+    auto newAssumingOp =
+        rewriter.create<AssumingOp>(op.getLoc(), newResultTypes, op.witness());
+    rewriter.inlineRegionBefore(op.doRegion(), newAssumingOp.doRegion(),
+                                newAssumingOp.doRegion().end());
     rewriter.replaceOp(op, newAssumingOp.getResults());
 
     return success();
@@ -48,9 +48,9 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(AssumingYieldOp op, OpAdaptor adaptor,
+  matchAndRewrite(AssumingYieldOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const final {
-    rewriter.replaceOpWithNewOp<AssumingYieldOp>(op, adaptor.getOperands());
+    rewriter.replaceOpWithNewOp<AssumingYieldOp>(op, operands);
     return success();
   }
 };

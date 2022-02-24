@@ -21,39 +21,42 @@ class OperationPass;
 /// This should kept in sync with VectorToLLVM options defined for the
 /// ConvertVectorToLLVM pass in include/mlir/Conversion/Passes.td
 struct LowerVectorToLLVMOptions {
-  LowerVectorToLLVMOptions() {}
+  LowerVectorToLLVMOptions()
+      : reassociateFPReductions(false), enableIndexOptimizations(true),
+        enableArmNeon(false), enableArmSVE(false), enableAMX(false),
+        enableX86Vector(false) {}
 
-  LowerVectorToLLVMOptions &enableReassociateFPReductions(bool b = true) {
+  LowerVectorToLLVMOptions &setReassociateFPReductions(bool b) {
     reassociateFPReductions = b;
     return *this;
   }
-  LowerVectorToLLVMOptions &enableIndexOptimizations(bool b = true) {
-    indexOptimizations = b;
+  LowerVectorToLLVMOptions &setEnableIndexOptimizations(bool b) {
+    enableIndexOptimizations = b;
     return *this;
   }
-  LowerVectorToLLVMOptions &enableArmNeon(bool b = true) {
-    armNeon = b;
+  LowerVectorToLLVMOptions &setEnableArmNeon(bool b) {
+    enableArmNeon = b;
     return *this;
   }
-  LowerVectorToLLVMOptions &enableArmSVE(bool b = true) {
-    armSVE = b;
+  LowerVectorToLLVMOptions &setEnableArmSVE(bool b) {
+    enableArmSVE = b;
     return *this;
   }
-  LowerVectorToLLVMOptions &enableAMX(bool b = true) {
-    amx = b;
+  LowerVectorToLLVMOptions &setEnableAMX(bool b) {
+    enableAMX = b;
     return *this;
   }
-  LowerVectorToLLVMOptions &enableX86Vector(bool b = true) {
-    x86Vector = b;
+  LowerVectorToLLVMOptions &setEnableX86Vector(bool b) {
+    enableX86Vector = b;
     return *this;
   }
 
-  bool reassociateFPReductions{false};
-  bool indexOptimizations{true};
-  bool armNeon{false};
-  bool armSVE{false};
-  bool amx{false};
-  bool x86Vector{false};
+  bool reassociateFPReductions;
+  bool enableIndexOptimizations;
+  bool enableArmNeon;
+  bool enableArmSVE;
+  bool enableAMX;
+  bool enableX86Vector;
 };
 
 /// Collect a set of patterns to convert from Vector contractions to LLVM Matrix

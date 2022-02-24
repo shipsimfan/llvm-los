@@ -8,11 +8,11 @@
 !-----------------
 ! EXPECTED OUTPUT
 !-----------------
-! UNDEFINED:program B
-! UNDEFINED-NOT:program A
+! UNDEFINED:program b
+! UNDEFINED-NOT:program a
 
-! DEFINED:program A
-! DEFINED-NOT:program B
+! DEFINED:program a
+! DEFINED-NOT:program b
 
 #ifdef X
 program X

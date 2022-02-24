@@ -310,6 +310,7 @@ ConversionToDecimalResult ConvertToDecimal(char *buffer, std::size_t size,
         more.Next();
       }
       number.Minimize(Big{less, rounding}, Big{more, rounding});
+    } else {
     }
     return number.ConvertToDecimal(buffer, size, flags, digits);
   }

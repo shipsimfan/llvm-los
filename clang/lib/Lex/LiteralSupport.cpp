@@ -95,8 +95,6 @@ static unsigned ProcessCharEscape(const char *ThisTokBegin,
                                   DiagnosticsEngine *Diags,
                                   const LangOptions &Features) {
   const char *EscapeBegin = ThisTokBuf;
-  bool Delimited = false;
-  bool EndDelimiterFound = false;
 
   // Skip the '\' char.
   ++ThisTokBuf;
@@ -145,47 +143,26 @@ static unsigned ProcessCharEscape(const char *ThisTokBegin,
     break;
   case 'x': { // Hex escape.
     ResultChar = 0;
-    if (ThisTokBuf != ThisTokEnd && *ThisTokBuf == '{') {
-      Delimited = true;
-      ThisTokBuf++;
-      if (*ThisTokBuf == '}') {
-        Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
-             diag::err_delimited_escape_empty);
-        return ResultChar;
-      }
-    } else if (ThisTokBuf == ThisTokEnd || !isHexDigit(*ThisTokBuf)) {
+    if (ThisTokBuf == ThisTokEnd || !isHexDigit(*ThisTokBuf)) {
       if (Diags)
         Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
              diag::err_hex_escape_no_digits) << "x";
-      return ResultChar;
+      HadError = true;
+      break;
     }
 
     // Hex escapes are a maximal series of hex digits.
     bool Overflow = false;
     for (; ThisTokBuf != ThisTokEnd; ++ThisTokBuf) {
-      if (Delimited && *ThisTokBuf == '}') {
-        ThisTokBuf++;
-        EndDelimiterFound = true;
-        break;
-      }
-      int CharVal = llvm::hexDigitValue(*ThisTokBuf);
-      if (CharVal == -1) {
-        // Non delimited hex escape sequences stop at the first non-hex digit.
-        if (!Delimited)
-          break;
-        HadError = true;
-        if (Diags)
-          Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
-               diag::err_delimited_escape_invalid)
-              << StringRef(ThisTokBuf, 1);
-        continue;
-      }
+      int CharVal = llvm::hexDigitValue(ThisTokBuf[0]);
+      if (CharVal == -1) break;
       // About to shift out a digit?
       if (ResultChar & 0xF0000000)
         Overflow = true;
       ResultChar <<= 4;
       ResultChar |= CharVal;
     }
+
     // See if any bits will be truncated when evaluated as a character.
     if (CharWidth != 32 && (ResultChar >> CharWidth) != 0) {
       Overflow = true;
@@ -193,13 +170,9 @@ static unsigned ProcessCharEscape(const char *ThisTokBegin,
     }
 
     // Check for overflow.
-    if (!HadError && Overflow) { // Too many digits to fit in
-      HadError = true;
-      if (Diags)
-        Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
-             diag::err_escape_too_large)
-            << 0;
-    }
+    if (Overflow && Diags)   // Too many digits to fit in
+      Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
+           diag::err_escape_too_large) << 0;
     break;
   }
   case '0': case '1': case '2': case '3':
@@ -227,58 +200,7 @@ static unsigned ProcessCharEscape(const char *ThisTokBegin,
     }
     break;
   }
-  case 'o': {
-    bool Overflow = false;
-    if (ThisTokBuf == ThisTokEnd || *ThisTokBuf != '{') {
-      HadError = true;
-      if (Diags)
-        Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
-             diag::err_delimited_escape_missing_brace);
 
-      break;
-    }
-    ResultChar = 0;
-    Delimited = true;
-    ++ThisTokBuf;
-    if (*ThisTokBuf == '}') {
-      Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
-           diag::err_delimited_escape_empty);
-      return ResultChar;
-    }
-
-    while (ThisTokBuf != ThisTokEnd) {
-      if (*ThisTokBuf == '}') {
-        EndDelimiterFound = true;
-        ThisTokBuf++;
-        break;
-      }
-      if (*ThisTokBuf < '0' || *ThisTokBuf > '7') {
-        HadError = true;
-        if (Diags)
-          Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
-               diag::err_delimited_escape_invalid)
-              << StringRef(ThisTokBuf, 1);
-        ThisTokBuf++;
-        continue;
-      }
-      if (ResultChar & 0x020000000)
-        Overflow = true;
-
-      ResultChar <<= 3;
-      ResultChar |= *ThisTokBuf++ - '0';
-    }
-    // Check for overflow.  Reject '\777', but not L'\777'.
-    if (!HadError &&
-        (Overflow || (CharWidth != 32 && (ResultChar >> CharWidth) != 0))) {
-      HadError = true;
-      if (Diags)
-        Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
-             diag::err_escape_too_large)
-            << 1;
-      ResultChar &= ~0U >> (32 - CharWidth);
-    }
-    break;
-  }
     // Otherwise, these are not valid escapes.
   case '(': case '{': case '[': case '%':
     // GCC accepts these as extensions.  We warn about them as such though.
@@ -302,17 +224,6 @@ static unsigned ProcessCharEscape(const char *ThisTokBegin,
     break;
   }
 
-  if (Delimited && Diags) {
-    if (!EndDelimiterFound)
-      Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
-           diag::err_expected)
-          << tok::r_brace;
-    else if (!HadError) {
-      Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
-           diag::ext_delimited_escape_sequence);
-    }
-  }
-
   return ResultChar;
 }
 
@@ -334,32 +245,18 @@ void clang::expandUCNs(SmallVectorImpl<char> &Buf, StringRef Input) {
     }
 
     ++I;
-    char Kind = *I;
-    ++I;
-
-    assert(Kind == 'u' || Kind == 'U');
-    uint32_t CodePoint = 0;
-
-    if (Kind == 'u' && *I == '{') {
-      for (++I; *I != '}'; ++I) {
-        unsigned Value = llvm::hexDigitValue(*I);
-        assert(Value != -1U);
-        CodePoint <<= 4;
-        CodePoint += Value;
-      }
-      appendCodePoint(CodePoint, Buf);
-      continue;
-    }
+    assert(*I == 'u' || *I == 'U');
 
     unsigned NumHexDigits;
-    if (Kind == 'u')
+    if (*I == 'u')
       NumHexDigits = 4;
     else
       NumHexDigits = 8;
 
     assert(I + NumHexDigits <= E);
 
-    for (; NumHexDigits != 0; ++I, --NumHexDigits) {
+    uint32_t CodePoint = 0;
+    for (++I; NumHexDigits != 0; ++I, --NumHexDigits) {
       unsigned Value = llvm::hexDigitValue(*I);
       assert(Value != -1U);
 
@@ -385,81 +282,27 @@ static bool ProcessUCNEscape(const char *ThisTokBegin, const char *&ThisTokBuf,
   // Skip the '\u' char's.
   ThisTokBuf += 2;
 
-  bool Delimited = false;
-  bool EndDelimiterFound = false;
-  bool HasError = false;
-
-  if (UcnBegin[1] == 'u' && in_char_string_literal &&
-      ThisTokBuf != ThisTokEnd && *ThisTokBuf == '{') {
-    Delimited = true;
-    ThisTokBuf++;
-  } else if (ThisTokBuf == ThisTokEnd || !isHexDigit(*ThisTokBuf)) {
+  if (ThisTokBuf == ThisTokEnd || !isHexDigit(*ThisTokBuf)) {
     if (Diags)
       Diag(Diags, Features, Loc, ThisTokBegin, UcnBegin, ThisTokBuf,
            diag::err_hex_escape_no_digits) << StringRef(&ThisTokBuf[-1], 1);
     return false;
   }
   UcnLen = (ThisTokBuf[-1] == 'u' ? 4 : 8);
-
-  bool Overflow = false;
-  unsigned short Count = 0;
-  for (; ThisTokBuf != ThisTokEnd && (Delimited || Count != UcnLen);
-       ++ThisTokBuf) {
-    if (Delimited && *ThisTokBuf == '}') {
-      ++ThisTokBuf;
-      EndDelimiterFound = true;
-      break;
-    }
-    int CharVal = llvm::hexDigitValue(*ThisTokBuf);
-    if (CharVal == -1) {
-      HasError = true;
-      if (!Delimited)
-        break;
-      if (Diags) {
-        Diag(Diags, Features, Loc, ThisTokBegin, UcnBegin, ThisTokBuf,
-             diag::err_delimited_escape_invalid)
-            << StringRef(ThisTokBuf, 1);
-      }
-      Count++;
-      continue;
-    }
-    if (UcnVal & 0xF0000000) {
-      Overflow = true;
-      continue;
-    }
+  unsigned short UcnLenSave = UcnLen;
+  for (; ThisTokBuf != ThisTokEnd && UcnLenSave; ++ThisTokBuf, UcnLenSave--) {
+    int CharVal = llvm::hexDigitValue(ThisTokBuf[0]);
+    if (CharVal == -1) break;
     UcnVal <<= 4;
     UcnVal |= CharVal;
-    Count++;
   }
-
-  if (Overflow) {
-    if (Diags)
-      Diag(Diags, Features, Loc, ThisTokBegin, UcnBegin, ThisTokBuf,
-           diag::err_escape_too_large)
-          << 0;
-    return false;
-  }
-
-  if (Delimited && !EndDelimiterFound) {
-    if (Diags) {
-      Diag(Diags, Features, Loc, ThisTokBegin, UcnBegin, ThisTokBuf,
-           diag::err_expected)
-          << tok::r_brace;
-    }
-    return false;
-  }
-
   // If we didn't consume the proper number of digits, there is a problem.
-  if (Count == 0 || (!Delimited && Count != UcnLen)) {
+  if (UcnLenSave) {
     if (Diags)
       Diag(Diags, Features, Loc, ThisTokBegin, UcnBegin, ThisTokBuf,
-           Delimited ? diag::err_delimited_escape_empty
-                     : diag::err_ucn_escape_incomplete);
+           diag::err_ucn_escape_incomplete);
     return false;
   }
-
-  if (HasError)
-    return false;
 
   // Check UCN constraints (C99 6.4.3p2) [C++11 lex.charset p2]
   if ((0xD800 <= UcnVal && UcnVal <= 0xDFFF) || // surrogate codepoints
@@ -494,10 +337,6 @@ static bool ProcessUCNEscape(const char *ThisTokBegin, const char *&ThisTokBuf,
   if (!Features.CPlusPlus && !Features.C99 && Diags)
     Diag(Diags, Features, Loc, ThisTokBegin, UcnBegin, ThisTokBuf,
          diag::warn_ucn_not_valid_in_c89_literal);
-
-  if (Delimited && Diags)
-    Diag(Diags, Features, Loc, ThisTokBegin, UcnBegin, ThisTokBuf,
-         diag::ext_delimited_escape_sequence);
 
   return true;
 }
@@ -693,6 +532,12 @@ NumericLiteralParser::NumericLiteralParser(StringRef TokSpelling,
     : SM(SM), LangOpts(LangOpts), Diags(Diags),
       ThisTokBegin(TokSpelling.begin()), ThisTokEnd(TokSpelling.end()) {
 
+  // This routine assumes that the range begin/end matches the regex for integer
+  // and FP constants (specifically, the 'pp-number' regex), and assumes that
+  // the byte at "*end" is both valid and not part of the regex.  Because of
+  // this, it doesn't have to check for 'overscan' in various places.
+  assert(!isPreprocessingNumberBody(*ThisTokEnd) && "didn't maximally munch?");
+
   s = DigitsBegin = ThisTokBegin;
   saw_exponent = false;
   saw_period = false;
@@ -711,16 +556,6 @@ NumericLiteralParser::NumericLiteralParser(StringRef TokSpelling,
   isFract = false;
   isAccum = false;
   hadError = false;
-
-  // This routine assumes that the range begin/end matches the regex for integer
-  // and FP constants (specifically, the 'pp-number' regex), and assumes that
-  // the byte at "*end" is both valid and not part of the regex.  Because of
-  // this, it doesn't have to check for 'overscan' in various places.
-  if (isPreprocessingNumberBody(*ThisTokEnd)) {
-    Diags.Report(TokLoc, diag::err_lexing_numeric);
-    hadError = true;
-    return;
-  }
 
   if (*s == '0') { // parse radix
     ParseNumberStartingWithZero(TokLoc);
@@ -1246,7 +1081,7 @@ NumericLiteralParser::GetFloatValue(llvm::APFloat &Result) {
 
   llvm::SmallString<16> Buffer;
   StringRef Str(ThisTokBegin, n);
-  if (Str.contains('\'')) {
+  if (Str.find('\'') != StringRef::npos) {
     Buffer.reserve(n);
     std::remove_copy_if(Str.begin(), Str.end(), std::back_inserter(Buffer),
                         &isDigitSeparator);
@@ -1361,7 +1196,7 @@ bool NumericLiteralParser::GetFixedPointValue(llvm::APInt &StoreVal, unsigned Sc
       Val *= Base;
     }
   } else if (BaseShift < 0) {
-    for (int64_t i = BaseShift; i < 0 && !Val.isZero(); ++i)
+    for (int64_t i = BaseShift; i < 0 && !Val.isNullValue(); ++i)
       Val = Val.udiv(Base);
   }
 
@@ -1436,12 +1271,7 @@ CharLiteralParser::CharLiteralParser(const char *begin, const char *end,
     ++begin;
 
   // Skip over the entry quote.
-  if (begin[0] != '\'') {
-    PP.Diag(Loc, diag::err_lexing_char);
-    HadError = true;
-    return;
-  }
-
+  assert(begin[0] == '\'' && "Invalid token lexed");
   ++begin;
 
   // Remove an optional ud-suffix.
@@ -1560,14 +1390,14 @@ CharLiteralParser::CharLiteralParser(const char *begin, const char *end,
   unsigned NumCharsSoFar = buffer_begin - &codepoint_buffer.front();
 
   if (NumCharsSoFar > 1) {
-    if (isAscii() && NumCharsSoFar == 4)
+    if (isWide())
+      PP.Diag(Loc, diag::warn_extraneous_char_constant);
+    else if (isAscii() && NumCharsSoFar == 4)
       PP.Diag(Loc, diag::warn_four_char_character_literal);
     else if (isAscii())
       PP.Diag(Loc, diag::warn_multichar_character_literal);
-    else {
-      PP.Diag(Loc, diag::err_multichar_character_literal) << (isWide() ? 0 : 1);
-      HadError = true;
-    }
+    else
+      PP.Diag(Loc, diag::err_multichar_utf_character_literal);
     IsMultiChar = true;
   } else {
     IsMultiChar = false;
@@ -1663,9 +1493,9 @@ CharLiteralParser::CharLiteralParser(const char *begin, const char *end,
 ///
 StringLiteralParser::
 StringLiteralParser(ArrayRef<Token> StringToks,
-                    Preprocessor &PP)
+                    Preprocessor &PP, bool Complain)
   : SM(PP.getSourceManager()), Features(PP.getLangOpts()),
-    Target(PP.getTargetInfo()), Diags(&PP.getDiagnostics()),
+    Target(PP.getTargetInfo()), Diags(Complain ? &PP.getDiagnostics() :nullptr),
     MaxTokenLength(0), SizeBound(0), CharByteWidth(0), Kind(tok::unknown),
     ResultPtr(ResultBuf.data()), hadError(false), Pascal(false) {
   init(StringToks);
@@ -1830,8 +1660,7 @@ void StringLiteralParser::init(ArrayRef<Token> StringToks){
       constexpr unsigned MaxRawStrDelimLen = 16;
 
       const char *Prefix = ThisTokBuf;
-      while (static_cast<unsigned>(ThisTokBuf - Prefix) < MaxRawStrDelimLen &&
-             ThisTokBuf[0] != '(')
+      while (ThisTokBuf - Prefix < MaxRawStrDelimLen && ThisTokBuf[0] != '(')
         ++ThisTokBuf;
       if (ThisTokBuf[0] != '(')
         return DiagnoseLexingError(StringToks[i].getLocation());

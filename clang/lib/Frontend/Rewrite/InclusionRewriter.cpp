@@ -14,6 +14,7 @@
 #include "clang/Rewrite/Frontend/Rewriters.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Frontend/PreprocessorOutputOptions.h"
+#include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/Pragma.h"
 #include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/SmallString.h"
@@ -30,8 +31,10 @@ class InclusionRewriter : public PPCallbacks {
   struct IncludedFile {
     FileID Id;
     SrcMgr::CharacteristicKind FileType;
-    IncludedFile(FileID Id, SrcMgr::CharacteristicKind FileType)
-        : Id(Id), FileType(FileType) {}
+    const DirectoryLookup *DirLookup;
+    IncludedFile(FileID Id, SrcMgr::CharacteristicKind FileType,
+                 const DirectoryLookup *DirLookup)
+        : Id(Id), FileType(FileType), DirLookup(DirLookup) {}
   };
   Preprocessor &PP; ///< Used to find inclusion directives.
   SourceManager &SM; ///< Used to read and manage source files.
@@ -54,7 +57,8 @@ class InclusionRewriter : public PPCallbacks {
 public:
   InclusionRewriter(Preprocessor &PP, raw_ostream &OS, bool ShowLineMarkers,
                     bool UseLineDirectives);
-  void Process(FileID FileId, SrcMgr::CharacteristicKind FileType);
+  void Process(FileID FileId, SrcMgr::CharacteristicKind FileType,
+               const DirectoryLookup *DirLookup);
   void setPredefinesBuffer(const llvm::MemoryBufferRef &Buf) {
     PredefinesBuffer = Buf;
   }
@@ -158,7 +162,8 @@ void InclusionRewriter::FileChanged(SourceLocation Loc,
     return;
   FileID Id = FullSourceLoc(Loc, SM).getFileID();
   auto P = FileIncludes.insert(
-      std::make_pair(LastInclusionLocation, IncludedFile(Id, NewFileType)));
+      std::make_pair(LastInclusionLocation,
+                     IncludedFile(Id, NewFileType, PP.GetCurDirLookup())));
   (void)P;
   assert(P.second && "Unexpected revisitation of the same include directive");
   LastInclusionLocation = SourceLocation();
@@ -251,12 +256,28 @@ bool InclusionRewriter::IsIfAtLocationTrue(SourceLocation Loc) const {
   return false;
 }
 
+/// Detect the likely line ending style of \p FromFile by examining the first
+/// newline found within it.
+static StringRef DetectEOL(const MemoryBufferRef &FromFile) {
+  // Detect what line endings the file uses, so that added content does not mix
+  // the style. We need to check for "\r\n" first because "\n\r" will match
+  // "\r\n\r\n".
+  const char *Pos = strchr(FromFile.getBufferStart(), '\n');
+  if (!Pos)
+    return "\n";
+  if (Pos - 1 >= FromFile.getBufferStart() && Pos[-1] == '\r')
+    return "\r\n";
+  if (Pos + 1 < FromFile.getBufferEnd() && Pos[1] == '\r')
+    return "\n\r";
+  return "\n";
+}
+
 void InclusionRewriter::detectMainFileEOL() {
   Optional<MemoryBufferRef> FromFile = *SM.getBufferOrNone(SM.getMainFileID());
   assert(FromFile);
   if (!FromFile)
     return; // Should never happen, but whatever.
-  MainEOL = FromFile->getBuffer().detectEOL();
+  MainEOL = DetectEOL(*FromFile);
 }
 
 /// Writes out bytes from \p FromFile, starting at \p NextToWrite and ending at
@@ -350,7 +371,8 @@ StringRef InclusionRewriter::NextIdentifierName(Lexer &RawLex,
 /// Use a raw lexer to analyze \p FileId, incrementally copying parts of it
 /// and including content of included files recursively.
 void InclusionRewriter::Process(FileID FileId,
-                                SrcMgr::CharacteristicKind FileType) {
+                                SrcMgr::CharacteristicKind FileType,
+                                const DirectoryLookup *DirLookup) {
   MemoryBufferRef FromFile;
   {
     auto B = SM.getBufferOrNone(FileId);
@@ -362,7 +384,7 @@ void InclusionRewriter::Process(FileID FileId,
   Lexer RawLex(FileId, FromFile, PP.getSourceManager(), PP.getLangOpts());
   RawLex.SetCommentRetentionState(false);
 
-  StringRef LocalEOL = FromFile.getBuffer().detectEOL();
+  StringRef LocalEOL = DetectEOL(FromFile);
 
   // Per the GNU docs: "1" indicates entering a new file.
   if (FileId == SM.getMainFileID() || FileId == PP.getPredefinesFileID())
@@ -411,7 +433,7 @@ void InclusionRewriter::Process(FileID FileId,
                    << Mod->getFullModuleName(true) << "\n";
 
               // Include and recursively process the file.
-              Process(Inc->Id, Inc->FileType);
+              Process(Inc->Id, Inc->FileType, Inc->DirLookup);
 
               if (Mod)
                 OS << "#pragma clang module end /*"
@@ -537,7 +559,7 @@ void clang::RewriteIncludesInInput(Preprocessor &PP, raw_ostream *OS,
       Rewrite->handleModuleBegin(Tok);
   } while (Tok.isNot(tok::eof));
   Rewrite->setPredefinesBuffer(SM.getBufferOrFake(PP.getPredefinesFileID()));
-  Rewrite->Process(PP.getPredefinesFileID(), SrcMgr::C_User);
-  Rewrite->Process(SM.getMainFileID(), SrcMgr::C_User);
+  Rewrite->Process(PP.getPredefinesFileID(), SrcMgr::C_User, nullptr);
+  Rewrite->Process(SM.getMainFileID(), SrcMgr::C_User, nullptr);
   OS->flush();
 }

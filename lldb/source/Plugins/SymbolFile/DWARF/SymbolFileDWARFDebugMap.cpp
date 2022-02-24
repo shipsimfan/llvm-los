@@ -61,7 +61,7 @@ SymbolFileDWARFDebugMap::CompileUnitInfo::GetFileRangeMap(
   if (!oso_objfile)
     return file_range_map;
 
-  Log *log = GetLog(DWARFLog::DebugMap);
+  Log *log(LogChannelDWARF::GetLogIfAll(DWARF_LOG_DEBUG_MAP));
   LLDB_LOGF(
       log,
       "%p: SymbolFileDWARFDebugMap::CompileUnitInfo::GetFileRangeMap ('%s')",
@@ -228,7 +228,12 @@ void SymbolFileDWARFDebugMap::Terminate() {
   PluginManager::UnregisterPlugin(CreateInstance);
 }
 
-llvm::StringRef SymbolFileDWARFDebugMap::GetPluginDescriptionStatic() {
+lldb_private::ConstString SymbolFileDWARFDebugMap::GetPluginNameStatic() {
+  static ConstString g_name("dwarf-debugmap");
+  return g_name;
+}
+
+const char *SymbolFileDWARFDebugMap::GetPluginDescriptionStatic() {
   return "DWARF and DWARF3 debug symbol file reader (debug map).";
 }
 
@@ -241,7 +246,7 @@ SymbolFileDWARFDebugMap::SymbolFileDWARFDebugMap(ObjectFileSP objfile_sp)
       m_func_indexes(), m_glob_indexes(),
       m_supports_DW_AT_APPLE_objc_complete_type(eLazyBoolCalculate) {}
 
-SymbolFileDWARFDebugMap::~SymbolFileDWARFDebugMap() = default;
+SymbolFileDWARFDebugMap::~SymbolFileDWARFDebugMap() {}
 
 void SymbolFileDWARFDebugMap::InitializeObject() {}
 
@@ -281,7 +286,7 @@ void SymbolFileDWARFDebugMap::InitOSO() {
 
   Symtab *symtab = m_objfile_sp->GetSymtab();
   if (symtab) {
-    Log *log = GetLog(DWARFLog::DebugMap);
+    Log *log(LogChannelDWARF::GetLogIfAll(DWARF_LOG_DEBUG_MAP));
 
     std::vector<uint32_t> oso_indexes;
     // When a mach-o symbol is encoded, the n_type field is encoded in bits
@@ -801,7 +806,7 @@ SymbolFileDWARFDebugMap::ResolveSymbolContext(const Address &exe_so_addr,
 }
 
 uint32_t SymbolFileDWARFDebugMap::ResolveSymbolContext(
-    const SourceLocationSpec &src_location_spec,
+    const FileSpec &file_spec, uint32_t line, bool check_inlines,
     SymbolContextItem resolve_scope, SymbolContextList &sc_list) {
   std::lock_guard<std::recursive_mutex> guard(GetModuleMutex());
   const uint32_t initial = sc_list.GetSize();
@@ -810,19 +815,18 @@ uint32_t SymbolFileDWARFDebugMap::ResolveSymbolContext(
   for (uint32_t i = 0; i < cu_count; ++i) {
     // If we are checking for inlines, then we need to look through all compile
     // units no matter if "file_spec" matches.
-    bool resolve = src_location_spec.GetCheckInlines();
+    bool resolve = check_inlines;
 
     if (!resolve) {
       FileSpec so_file_spec;
       if (GetFileSpecForSO(i, so_file_spec))
-        resolve =
-            FileSpec::Match(src_location_spec.GetFileSpec(), so_file_spec);
+        resolve = FileSpec::Match(file_spec, so_file_spec);
     }
     if (resolve) {
       SymbolFileDWARF *oso_dwarf = GetSymbolFileByOSOIndex(i);
       if (oso_dwarf)
-        oso_dwarf->ResolveSymbolContext(src_location_spec, resolve_scope,
-                                        sc_list);
+        oso_dwarf->ResolveSymbolContext(file_spec, line, check_inlines,
+                                        resolve_scope, sc_list);
     }
   }
   return sc_list.GetSize() - initial;
@@ -1229,6 +1233,13 @@ void SymbolFileDWARFDebugMap::DumpClangAST(Stream &s) {
   });
 }
 
+// PluginInterface protocol
+lldb_private::ConstString SymbolFileDWARFDebugMap::GetPluginName() {
+  return GetPluginNameStatic();
+}
+
+uint32_t SymbolFileDWARFDebugMap::GetPluginVersion() { return 1; }
+
 lldb::CompUnitSP
 SymbolFileDWARFDebugMap::GetCompileUnit(SymbolFileDWARF *oso_dwarf) {
   if (oso_dwarf) {
@@ -1428,18 +1439,4 @@ SymbolFileDWARFDebugMap::AddOSOARanges(SymbolFileDWARF *dwarf2Data,
     }
   }
   return num_line_entries_added;
-}
-
-ModuleList SymbolFileDWARFDebugMap::GetDebugInfoModules() {
-  ModuleList oso_modules;
-  ForEachSymbolFile([&](SymbolFileDWARF *oso_dwarf) -> bool {
-    ObjectFile *oso_objfile = oso_dwarf->GetObjectFile();
-    if (oso_objfile) {
-      ModuleSP module_sp = oso_objfile->GetModule();
-      if (module_sp)
-        oso_modules.Append(module_sp);
-    }
-    return false; // Keep iterating
-  });
-  return oso_modules;
 }

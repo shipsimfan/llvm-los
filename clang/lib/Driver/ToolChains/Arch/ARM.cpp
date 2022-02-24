@@ -12,7 +12,6 @@
 #include "clang/Driver/Options.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Option/ArgList.h"
-#include "llvm/Support/ARMTargetParser.h"
 #include "llvm/Support/TargetParser.h"
 #include "llvm/Support/Host.h"
 
@@ -148,30 +147,14 @@ bool arm::useAAPCSForMachO(const llvm::Triple &T) {
          T.getOS() == llvm::Triple::UnknownOS || isARMMProfile(T);
 }
 
-// We follow GCC and support when the backend has support for the MRC/MCR
-// instructions that are used to set the hard thread pointer ("CP15 C13
-// Thread id").
-bool arm::isHardTPSupported(const llvm::Triple &Triple) {
-  int Ver = getARMSubArchVersionNumber(Triple);
-  llvm::ARM::ArchKind AK = llvm::ARM::parseArch(Triple.getArchName());
-  return Triple.isARM() || AK == llvm::ARM::ArchKind::ARMV6T2 ||
-         (Ver >= 7 && AK != llvm::ARM::ArchKind::ARMV8MBaseline);
-}
-
 // Select mode for reading thread pointer (-mtp=soft/cp15).
-arm::ReadTPMode arm::getReadTPMode(const Driver &D, const ArgList &Args,
-                                   const llvm::Triple &Triple, bool ForAS) {
+arm::ReadTPMode arm::getReadTPMode(const Driver &D, const ArgList &Args) {
   if (Arg *A = Args.getLastArg(options::OPT_mtp_mode_EQ)) {
     arm::ReadTPMode ThreadPointer =
         llvm::StringSwitch<arm::ReadTPMode>(A->getValue())
             .Case("cp15", ReadTPMode::Cp15)
             .Case("soft", ReadTPMode::Soft)
             .Default(ReadTPMode::Invalid);
-    if (ThreadPointer == ReadTPMode::Cp15 && !isHardTPSupported(Triple) &&
-        !ForAS) {
-      D.Diag(diag::err_target_unsupported_tp_hard) << Triple.getArchName();
-      return ReadTPMode::Invalid;
-    }
     if (ThreadPointer != ReadTPMode::Invalid)
       return ThreadPointer;
     if (StringRef(A->getValue()).empty())
@@ -331,10 +314,6 @@ arm::FloatABI arm::getDefaultFloatABI(const llvm::Triple &Triple) {
 
   // FIXME: this is invalid for WindowsCE
   case llvm::Triple::Win32:
-    // It is incorrect to select hard float ABI on MachO platforms if the ABI is
-    // "apcs-gnu".
-    if (Triple.isOSBinFormatMachO() && !useAAPCSForMachO(Triple))
-      return FloatABI::Soft;
     return FloatABI::Hard;
 
   case llvm::Triple::NetBSD:
@@ -434,11 +413,12 @@ static bool hasIntegerMVE(const std::vector<StringRef> &F) {
 }
 
 void arm::getARMTargetFeatures(const Driver &D, const llvm::Triple &Triple,
-                               const ArgList &Args,
+                               const ArgList &Args, ArgStringList &CmdArgs,
                                std::vector<StringRef> &Features, bool ForAS) {
   bool KernelOrKext =
       Args.hasArg(options::OPT_mkernel, options::OPT_fapple_kext);
   arm::FloatABI ABI = arm::getARMFloatABI(D, Triple, Args);
+  arm::ReadTPMode ThreadPointer = arm::getReadTPMode(D, Args);
   llvm::Optional<std::pair<const Arg *, StringRef>> WaCPU, WaFPU, WaHDiv,
       WaArch;
 
@@ -490,7 +470,7 @@ void arm::getARMTargetFeatures(const Driver &D, const llvm::Triple &Triple,
     }
   }
 
-  if (getReadTPMode(D, Args, Triple, ForAS) == ReadTPMode::Cp15)
+  if (ThreadPointer == arm::ReadTPMode::Cp15)
     Features.push_back("+read-tp-hard");
 
   const Arg *ArchArg = Args.getLastArg(options::OPT_march_EQ);
@@ -656,10 +636,6 @@ fp16_fml_fallthrough:
   // FIXME: this needs reimplementation after the TargetParser rewrite
   bool HasSHA2 = false;
   bool HasAES = false;
-  const auto ItCrypto =
-      llvm::find_if(llvm::reverse(Features), [](const StringRef F) {
-        return F.contains("crypto");
-      });
   const auto ItSHA2 =
       llvm::find_if(llvm::reverse(Features), [](const StringRef F) {
         return F.contains("crypto") || F.contains("sha2");
@@ -674,7 +650,7 @@ fp16_fml_fallthrough:
     HasSHA2 = ItSHA2->take_front() == "+";
   if (FoundAES)
     HasAES = ItAES->take_front() == "+";
-  if (ItCrypto != Features.rend()) {
+  if (FoundSHA2 || FoundAES) {
     if (HasSHA2 && HasAES)
       Features.push_back("+crypto");
     else
@@ -721,18 +697,6 @@ fp16_fml_fallthrough:
   if (Args.getLastArg(options::OPT_mcmse))
     Features.push_back("+8msecext");
 
-  if (Arg *A = Args.getLastArg(options::OPT_mfix_cmse_cve_2021_35465,
-                               options::OPT_mno_fix_cmse_cve_2021_35465)) {
-    if (!Args.getLastArg(options::OPT_mcmse))
-      D.Diag(diag::err_opt_not_valid_without_opt)
-          << A->getOption().getName() << "-mcmse";
-
-    if (A->getOption().matches(options::OPT_mfix_cmse_cve_2021_35465))
-      Features.push_back("+fix-cmse-cve-2021-35465");
-    else
-      Features.push_back("-fix-cmse-cve-2021-35465");
-  }
-
   // Look for the last occurrence of -mlong-calls or -mno-long-calls. If
   // neither options are specified, see if we are compiling for kernel/kext and
   // decide whether to pass "+long-calls" based on the OS and its version.
@@ -770,10 +734,10 @@ fp16_fml_fallthrough:
   }
 
   // Kernel code has more strict alignment requirements.
-  if (KernelOrKext) {
+  if (KernelOrKext)
     Features.push_back("+strict-align");
-  } else if (Arg *A = Args.getLastArg(options::OPT_mno_unaligned_access,
-                                      options::OPT_munaligned_access)) {
+  else if (Arg *A = Args.getLastArg(options::OPT_mno_unaligned_access,
+                                    options::OPT_munaligned_access)) {
     if (A->getOption().matches(options::OPT_munaligned_access)) {
       // No v6M core supports unaligned memory access (v6M ARM ARM A3.2).
       if (Triple.getSubArch() == llvm::Triple::SubArchType::ARMSubArch_v6m)
@@ -795,8 +759,7 @@ fp16_fml_fallthrough:
     // which raises an alignment fault on unaligned accesses. Linux
     // defaults this bit to 0 and handles it as a system-wide (not
     // per-process) setting. It is therefore safe to assume that ARMv7+
-    // Linux targets support unaligned accesses. The same goes for NaCl
-    // and Windows.
+    // Linux targets support unaligned accesses. The same goes for NaCl.
     //
     // The above behavior is consistent with GCC.
     int VersionNum = getARMSubArchVersionNumber(Triple);
@@ -804,8 +767,7 @@ fp16_fml_fallthrough:
       if (VersionNum < 6 ||
           Triple.getSubArch() == llvm::Triple::SubArchType::ARMSubArch_v6m)
         Features.push_back("+strict-align");
-    } else if (Triple.isOSLinux() || Triple.isOSNaCl() ||
-               Triple.isOSWindows()) {
+    } else if (Triple.isOSLinux() || Triple.isOSNaCl()) {
       if (VersionNum < 7)
         Features.push_back("+strict-align");
     } else
@@ -830,17 +792,11 @@ fp16_fml_fallthrough:
     StringRef Scope = A->getValue();
     bool EnableRetBr = false;
     bool EnableBlr = false;
-    bool DisableComdat = false;
-    if (Scope != "none") {
+    if (Scope != "none" && Scope != "all") {
       SmallVector<StringRef, 4> Opts;
       Scope.split(Opts, ",");
       for (auto Opt : Opts) {
         Opt = Opt.trim();
-        if (Opt == "all") {
-          EnableBlr = true;
-          EnableRetBr = true;
-          continue;
-        }
         if (Opt == "retbr") {
           EnableRetBr = true;
           continue;
@@ -849,18 +805,13 @@ fp16_fml_fallthrough:
           EnableBlr = true;
           continue;
         }
-        if (Opt == "comdat") {
-          DisableComdat = false;
-          continue;
-        }
-        if (Opt == "nocomdat") {
-          DisableComdat = true;
-          continue;
-        }
         D.Diag(diag::err_invalid_sls_hardening)
             << Scope << A->getAsString(Args);
         break;
       }
+    } else if (Scope == "all") {
+      EnableRetBr = true;
+      EnableBlr = true;
     }
 
     if (EnableRetBr || EnableBlr)
@@ -872,16 +823,11 @@ fp16_fml_fallthrough:
       Features.push_back("+harden-sls-retbr");
     if (EnableBlr)
       Features.push_back("+harden-sls-blr");
-    if (DisableComdat) {
-      Features.push_back("+harden-sls-nocomdat");
-    }
   }
 
-  if (Args.getLastArg(options::OPT_mno_bti_at_return_twice))
-    Features.push_back("+no-bti-at-return-twice");
 }
 
-std::string arm::getARMArch(StringRef Arch, const llvm::Triple &Triple) {
+const std::string arm::getARMArch(StringRef Arch, const llvm::Triple &Triple) {
   std::string MArch;
   if (!Arch.empty())
     MArch = std::string(Arch);

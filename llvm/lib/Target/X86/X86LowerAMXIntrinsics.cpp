@@ -34,7 +34,6 @@
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
@@ -52,10 +51,6 @@ static bool isV256I32Ty(Type *Ty) {
   return false;
 }
 #endif
-
-static cl::opt<bool>
-    X86ScalarizeAMX("enable-x86-scalar-amx", cl::init(false), cl::Hidden,
-                    cl::desc("X86: enable AMX scalarizition."));
 
 namespace {
 class X86LowerAMXIntrinsics {
@@ -98,7 +93,6 @@ private:
   lowerTileDP(Instruction *TileDP);
   bool lowerTileZero(Instruction *TileZero);
 };
-} // anonymous namespace
 
 BasicBlock *X86LowerAMXIntrinsics::createLoop(BasicBlock *Preheader,
                                               BasicBlock *Exit, Value *Bound,
@@ -498,8 +492,8 @@ X86LowerAMXIntrinsics::lowerTileDP(Instruction *TileDP) {
   Value *ResAMX =
       Builder.CreateBitCast(ResVec, Type::getX86_AMXTy(Builder.getContext()));
   // Delete TileDP intrinsic and do some clean-up.
-  for (Use &U : llvm::make_early_inc_range(TileDP->uses())) {
-    Instruction *I = cast<Instruction>(U.getUser());
+  for (auto UI = TileDP->use_begin(), UE = TileDP->use_end(); UI != UE;) {
+    Instruction *I = cast<Instruction>((UI++)->getUser());
     Value *Vec;
     if (match(I, m_BitCast(m_Value(Vec)))) {
       I->replaceAllUsesWith(ResVec);
@@ -542,8 +536,9 @@ bool X86LowerAMXIntrinsics::lowerTileLoadStore(Instruction *TileLoadStore) {
     Value *ResAMX =
         Builder.CreateBitCast(ResVec, Type::getX86_AMXTy(Builder.getContext()));
     // Delete tileloadd6 intrinsic and do some clean-up
-    for (Use &U : llvm::make_early_inc_range(TileLoadStore->uses())) {
-      Instruction *I = cast<Instruction>(U.getUser());
+    for (auto UI = TileLoadStore->use_begin(), UE = TileLoadStore->use_end();
+         UI != UE;) {
+      Instruction *I = cast<Instruction>((UI++)->getUser());
       Value *Vec;
       if (match(I, m_BitCast(m_Value(Vec)))) {
         I->replaceAllUsesWith(ResVec);
@@ -560,8 +555,8 @@ bool X86LowerAMXIntrinsics::lowerTileZero(Instruction *TileZero) {
   IRBuilder<> Builder(TileZero);
   FixedVectorType *V256I32Ty = FixedVectorType::get(Builder.getInt32Ty(), 256);
   Value *VecZero = Constant::getNullValue(V256I32Ty);
-  for (Use &U : llvm::make_early_inc_range(TileZero->uses())) {
-    Instruction *I = cast<Instruction>(U.getUser());
+  for (auto UI = TileZero->use_begin(), UE = TileZero->use_end(); UI != UE;) {
+    Instruction *I = cast<Instruction>((UI++)->getUser());
     Value *Vec;
     if (match(I, m_BitCast(m_Value(Vec)))) {
       I->replaceAllUsesWith(VecZero);
@@ -629,8 +624,10 @@ bool X86LowerAMXIntrinsics::visit() {
 
   return C;
 }
+} // anonymous namespace
 
 namespace {
+
 class X86LowerAMXIntrinsicsLegacyPass : public FunctionPass {
 public:
   static char ID;
@@ -641,8 +638,6 @@ public:
   }
 
   bool runOnFunction(Function &F) override {
-    if (!X86ScalarizeAMX)
-      return false;
     TargetMachine *TM = &getAnalysis<TargetPassConfig>().getTM<TargetMachine>();
     if (!F.hasFnAttribute(Attribute::OptimizeNone) &&
         TM->getOptLevel() != CodeGenOpt::None)
@@ -665,7 +660,8 @@ public:
     AU.addRequired<TargetPassConfig>();
   }
 };
-} // namespace
+
+} // anonymous namespace
 
 static const char PassName[] = "Lower AMX intrinsics";
 char X86LowerAMXIntrinsicsLegacyPass::ID = 0;

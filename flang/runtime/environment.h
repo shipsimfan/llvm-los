@@ -14,11 +14,9 @@
 
 namespace Fortran::runtime {
 
-class Terminator;
-
-#if FLANG_BIG_ENDIAN
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 constexpr bool isHostLittleEndian{false};
-#elif FLANG_LITTLE_ENDIAN
+#elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 constexpr bool isHostLittleEndian{true};
 #else
 #error host endianness is not known
@@ -31,17 +29,13 @@ std::optional<Convert> GetConvertFromString(const char *, std::size_t);
 
 struct ExecutionEnvironment {
   void Configure(int argc, const char *argv[], const char *envp[]);
-  const char *GetEnv(
-      const char *name, std::size_t name_length, const Terminator &terminator);
 
   int argc;
   const char **argv;
   const char **envp;
-
-  int listDirectedOutputLineLengthLimit; // FORT_FMT_RECL
+  int listDirectedOutputLineLengthLimit;
   enum decimal::FortranRounding defaultOutputRoundingMode;
-  Convert conversion; // FORT_CONVERT
-  bool noStopMessage; // NO_STOP_MESSAGE=1 inhibits "Fortran STOP"
+  Convert conversion;
 };
 extern ExecutionEnvironment executionEnvironment;
 } // namespace Fortran::runtime

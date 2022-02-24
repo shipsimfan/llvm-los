@@ -3,6 +3,20 @@
 import gdb.printing
 
 
+class IdentifierPrinter:
+  """Prints an mlir::Identifier instance."""
+
+  def __init__(self, val):
+    self.entry = val['entry']
+
+  def to_string(self):
+    ptr = (self.entry + 1).cast(gdb.lookup_type('char').pointer())
+    return ptr.string(length=self.entry['keyLength'])
+
+  def display_hint(self):
+    return 'string'
+
+
 class StoragePrinter:
   """Prints bases of a struct and its fields."""
 
@@ -12,9 +26,9 @@ class StoragePrinter:
   def children(self):
     for field in self.val.type.fields():
       if field.is_base_class:
-        yield '<%s>' % field.name, self.val.cast(field.type)
+        yield ('<%s>' % field.name, self.val.cast(field.type))
       else:
-        yield field.name, self.val[field.name]
+        yield (field.name, self.val[field.name])
 
 
 class TupleTypeStoragePrinter(StoragePrinter):
@@ -28,6 +42,24 @@ class TupleTypeStoragePrinter(StoragePrinter):
       yield 'elements[%u]' % i, elements[i]
 
 
+class RankedTypeStoragePrinter(StoragePrinter):
+
+  def children(self):
+    for child in StoragePrinter.children(self):
+      yield child
+    for i in range(self.val['shapeSize']):
+      yield 'shapeElements[%u]' % i, self.val['shapeElements'][i]
+
+
+class MemRefTypeStoragePrinter(RankedTypeStoragePrinter):
+
+  def children(self):
+    for child in RankedTypeStoragePrinter.children(self):
+      yield child
+    for i in range(self.val['numAffineMaps']):
+      yield 'affineMapsList[%u]' % i, self.val['affineMapsList'][i]
+
+
 class FusedLocationStoragePrinter(StoragePrinter):
 
   def children(self):
@@ -39,8 +71,19 @@ class FusedLocationStoragePrinter(StoragePrinter):
       yield 'locs[%u]' % i, elements[i]
 
 
+class StorageUserBasePrinter:
+  """Printer for an mlir::detail::StorageUserBase instance."""
+
+  def __init__(self, val):
+    self.val = val
+
+  def children(self):
+    storage_type = self.val.type.template_argument(2)
+    yield 'impl', self.val['impl'].dereference().cast(storage_type)
+
+
 class StorageTypeMap:
-  """Maps a TypeID to the corresponding concrete type.
+  """Maps a TypeID to the corresponding type derived from StorageUserBase.
 
   Types need to be registered by name before the first lookup.
   """
@@ -80,7 +123,7 @@ storage_type_map = StorageTypeMap()
 def get_type_id_printer(val):
   """Returns a printer of the name of a mlir::TypeID."""
 
-  class TypeIdPrinter:
+  class StringPrinter:
 
     def __init__(self, string):
       self.string = string
@@ -91,45 +134,50 @@ def get_type_id_printer(val):
   concrete_type = storage_type_map[val]
   if not concrete_type:
     return None
-  return TypeIdPrinter('mlir::TypeID::get<%s>()' % concrete_type)
+  return StringPrinter('"%s"' % concrete_type.name)
 
 
 def get_attr_or_type_printer(val, get_type_id):
   """Returns a printer for mlir::Attribute or mlir::Type."""
 
-  class AttrOrTypePrinter:
+  class UpcastPrinter:
 
-    def __init__(self, type_id, impl):
-      self.type_id = type_id
-      self.impl = impl
+    def __init__(self, val, type):
+      self.val = val.cast(type)
 
     def children(self):
-      yield 'typeID', self.type_id
-      yield 'cast<%s>(impl)' % self.impl.type, self.impl
+      yield 'cast<%s>' % self.val.type.name, self.val
 
   if not val['impl']:
     return None
-  impl = val['impl'].dereference()
-  type_id = get_type_id(impl)
+  type_id = get_type_id(val['impl'].dereference())
   concrete_type = storage_type_map[type_id]
   if not concrete_type:
     return None
-  # 3rd template argument of StorageUserBase is the storage type.
-  storage_type = concrete_type.fields()[0].type.template_argument(2)
-  if not storage_type:
-    return None
-  return AttrOrTypePrinter(type_id, impl.cast(storage_type))
+  return UpcastPrinter(val, concrete_type)
 
 
-class ImplPrinter:
-  """Printer for an instance with a single 'impl' member pointer."""
+pp = gdb.printing.RegexpCollectionPrettyPrinter('MLIRSupport')
 
-  def __init__(self, val):
-    self.impl = val['impl']
+pp.add_printer('mlir::Identifier', '^mlir::Identifier$', IdentifierPrinter)
 
-  def children(self):
-    yield 'impl', (self.impl.dereference() if self.impl else self.impl)
+# Printers for types deriving from AttributeStorage or TypeStorage.
+pp.add_printer('mlir::detail::FusedLocationStorage',
+               '^mlir::detail::FusedLocationStorage',
+               FusedLocationStoragePrinter)
+pp.add_printer('mlir::detail::VectorTypeStorage',
+               '^mlir::detail::VectorTypeStorage', RankedTypeStoragePrinter)
+pp.add_printer('mlir::detail::RankedTensorTypeStorage',
+               '^mlir::detail::RankedTensorTypeStorage',
+               RankedTypeStoragePrinter)
+pp.add_printer('mlir::detail::MemRefTypeStorage',
+               '^mlir::detail::MemRefTypeStorage$', MemRefTypeStoragePrinter)
+pp.add_printer('mlir::detail::TupleTypeStorage',
+               '^mlir::detail::TupleTypeStorage$', TupleTypeStoragePrinter)
 
+# Printers for Attribute::AttrBase or Type::TypeBase typedefs.
+pp.add_printer('mlir::detail::StorageUserBase',
+               '^mlir::detail::StorageUserBase<.*>$', StorageUserBasePrinter)
 
 # Printers of types deriving from Attribute::AttrBase or Type::TypeBase.
 for name in [
@@ -173,20 +221,6 @@ for name in [
     'UnknownLoc'
 ]:
   storage_type_map.register_type('mlir::%s' % name)  # Register for upcasting.
-storage_type_map.register_type('void')  # Register default.
-
-
-pp = gdb.printing.RegexpCollectionPrettyPrinter('MLIRSupport')
-
-pp.add_printer('mlir::OperationName', '^mlir::OperationName$', ImplPrinter)
-pp.add_printer('mlir::Value', '^mlir::Value$', ImplPrinter)
-
-# Printers for types deriving from AttributeStorage or TypeStorage.
-pp.add_printer('mlir::detail::FusedLocationStorage',
-               '^mlir::detail::FusedLocationStorage',
-               FusedLocationStoragePrinter)
-pp.add_printer('mlir::detail::TupleTypeStorage',
-               '^mlir::detail::TupleTypeStorage$', TupleTypeStoragePrinter)
 
 pp.add_printer('mlir::TypeID', '^mlir::TypeID$', get_type_id_printer)
 
@@ -196,6 +230,8 @@ def add_attr_or_type_printers(name):
   get_type_id = lambda val: val['abstract%s' % name]['typeID']
   pp.add_printer('mlir::%s' % name, '^mlir::%s$' % name,
                  lambda val: get_attr_or_type_printer(val, get_type_id))
+  pp.add_printer('mlir::%sStorage' % name, '^mlir::%sStorage$' % name,
+                 lambda val: get_type_id_printer(get_type_id(val)))
 
 
 # Upcasting printers of mlir::Attribute and mlir::Type.

@@ -21,13 +21,20 @@ class StringRef;
 class Twine;
 
 namespace object {
+class ELFObjectFileBase;
+class ELFSectionRef;
+class MachOObjectFile;
+class MachOUniversalBinary;
 class RelocationRef;
-struct VersionEntry;
 } // namespace object
 
 namespace objdump {
 
-enum DebugVarsFormat { DVDisabled, DVUnicode, DVASCII, DVInvalid };
+enum DebugVarsFormat {
+  DVDisabled,
+  DVUnicode,
+  DVASCII,
+};
 
 extern bool ArchiveHeaders;
 extern int DbgIndent;
@@ -130,13 +137,12 @@ void printSymbolTable(const object::ObjectFile *O, StringRef ArchiveName,
                       StringRef ArchitectureName = StringRef(),
                       bool DumpDynamic = false);
 void printSymbol(const object::ObjectFile *O, const object::SymbolRef &Symbol,
-                 ArrayRef<object::VersionEntry> SymbolVersions,
                  StringRef FileName, StringRef ArchiveName,
                  StringRef ArchitectureName, bool DumpDynamic);
-[[noreturn]] void reportError(StringRef File, const Twine &Message);
-[[noreturn]] void reportError(Error E, StringRef FileName,
-                              StringRef ArchiveName = "",
-                              StringRef ArchitectureName = "");
+LLVM_ATTRIBUTE_NORETURN void reportError(StringRef File, const Twine &Message);
+LLVM_ATTRIBUTE_NORETURN void reportError(Error E, StringRef FileName,
+                                         StringRef ArchiveName = "",
+                                         StringRef ArchitectureName = "");
 void reportWarning(const Twine &Message, StringRef File);
 
 template <typename T, typename... Ts>

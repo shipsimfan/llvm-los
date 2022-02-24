@@ -16,17 +16,13 @@ namespace mlir {
 
 class AtomicRMWOp;
 
-namespace bufferization {
-class BufferizationDialect;
-} // namespace bufferization
-
 namespace memref {
 class MemRefDialect;
-} // namespace memref
+} // end namespace memref
 
 #define GEN_PASS_CLASSES
 #include "mlir/Dialect/StandardOps/Transforms/Passes.h.inc"
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // DIALECT_STANDARD_TRANSFORMS_PASSDETAIL_H_

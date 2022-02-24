@@ -6,15 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <__config>
-
+#include "__config"
 #ifndef _LIBCPP_HAS_NO_THREADS
 
-#include <exception>
-#include <future>
-#include <limits>
-#include <thread>
-#include <vector>
+#include "thread"
+#include "exception"
+#include "vector"
+#include "future"
+#include "limits"
 
 #if __has_include(<unistd.h>)
 # include <unistd.h> // for sysconf

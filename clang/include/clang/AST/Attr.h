@@ -34,7 +34,12 @@
 namespace clang {
 class ASTContext;
 class AttributeCommonInfo;
+class IdentifierInfo;
+class ObjCInterfaceDecl;
+class Expr;
+class QualType;
 class FunctionDecl;
+class TypeSourceInfo;
 class OMPTraitInfo;
 
 /// Attr - This represents one attribute.
@@ -104,8 +109,6 @@ public:
 
   // Pretty print this attribute.
   void printPretty(raw_ostream &OS, const PrintingPolicy &Policy) const;
-
-  static StringRef getDocumentation(attr::Kind);
 };
 
 class TypeAttr : public Attr {
@@ -205,8 +208,6 @@ public:
     switch (getKind()) {
     case attr::SwiftContext:
       return ParameterABI::SwiftContext;
-    case attr::SwiftAsyncContext:
-      return ParameterABI::SwiftAsyncContext;
     case attr::SwiftErrorResult:
       return ParameterABI::SwiftErrorResult;
     case attr::SwiftIndirectResult:
@@ -369,7 +370,8 @@ struct ParsedTargetAttr {
 
 inline const StreamingDiagnostic &operator<<(const StreamingDiagnostic &DB,
                                              const Attr *At) {
-  DB.AddTaggedVal(reinterpret_cast<uint64_t>(At), DiagnosticsEngine::ak_attr);
+  DB.AddTaggedVal(reinterpret_cast<intptr_t>(At),
+                  DiagnosticsEngine::ak_attr);
   return DB;
 }
 }  // end namespace clang

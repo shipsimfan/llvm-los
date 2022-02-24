@@ -16,7 +16,6 @@
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstBuilder.h"
-#include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
@@ -24,9 +23,9 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCValue.h"
-#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/TargetRegistry.h"
 
 #define DEBUG_TYPE "msp430-asm-parser"
 
@@ -115,14 +114,13 @@ class MSP430Operand : public MCParsedAsmOperand {
 
 public:
   MSP430Operand(StringRef Tok, SMLoc const &S)
-      : Kind(k_Tok), Tok(Tok), Start(S), End(S) {}
+      : Base(), Kind(k_Tok), Tok(Tok), Start(S), End(S) {}
   MSP430Operand(KindTy Kind, unsigned Reg, SMLoc const &S, SMLoc const &E)
-      : Kind(Kind), Reg(Reg), Start(S), End(E) {}
+      : Base(), Kind(Kind), Reg(Reg), Start(S), End(E) {}
   MSP430Operand(MCExpr const *Imm, SMLoc const &S, SMLoc const &E)
-      : Kind(k_Imm), Imm(Imm), Start(S), End(E) {}
-  MSP430Operand(unsigned Reg, MCExpr const *Expr, SMLoc const &S,
-                SMLoc const &E)
-      : Kind(k_Mem), Mem({Reg, Expr}), Start(S), End(E) {}
+      : Base(), Kind(k_Imm), Imm(Imm), Start(S), End(E) {}
+  MSP430Operand(unsigned Reg, MCExpr const *Expr, SMLoc const &S, SMLoc const &E)
+      : Base(), Kind(k_Mem), Mem({Reg, Expr}), Start(S), End(E) {}
 
   void addRegOperands(MCInst &Inst, unsigned N) const {
     assert((Kind == k_Reg || Kind == k_IndReg || Kind == k_PostIndReg) &&
@@ -329,7 +327,7 @@ OperandMatchResultTy MSP430AsmParser::tryParseRegister(unsigned &RegNo,
 bool MSP430AsmParser::parseJccInstruction(ParseInstructionInfo &Info,
                                           StringRef Name, SMLoc NameLoc,
                                           OperandVector &Operands) {
-  if (!Name.startswith_insensitive("j"))
+  if (!Name.startswith_lower("j"))
     return true;
 
   auto CC = Name.drop_front().lower();
@@ -392,7 +390,7 @@ bool MSP430AsmParser::ParseInstruction(ParseInstructionInfo &Info,
                                        StringRef Name, SMLoc NameLoc,
                                        OperandVector &Operands) {
   // Drop .w suffix
-  if (Name.endswith_insensitive(".w"))
+  if (Name.endswith_lower(".w"))
     Name = Name.drop_back(2);
 
   if (!parseJccInstruction(Info, Name, NameLoc, Operands))

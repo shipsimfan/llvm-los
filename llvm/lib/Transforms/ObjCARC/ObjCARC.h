@@ -105,7 +105,8 @@ CallInst *createCallInstWithColors(
 
 class BundledRetainClaimRVs {
 public:
-  BundledRetainClaimRVs(bool ContractPass) : ContractPass(ContractPass) {}
+  BundledRetainClaimRVs(ARCRuntimeEntryPoints &P, bool ContractPass)
+      : EP(P), ContractPass(ContractPass) {}
   ~BundledRetainClaimRVs();
 
   /// Insert a retainRV/claimRV call to the normal destination blocks of invokes
@@ -154,6 +155,7 @@ private:
   /// A map of inserted retainRV/claimRV calls to annotated calls/invokes.
   DenseMap<CallInst *, CallBase *> RVCalls;
 
+  ARCRuntimeEntryPoints &EP;
   bool ContractPass;
 };
 

@@ -13,6 +13,8 @@
 
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/CommandLine.h"
+#define DEBUG_TYPE "float2int"
+
 #include "llvm/Transforms/Scalar/Float2Int.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/APSInt.h"
@@ -29,9 +31,6 @@
 #include "llvm/Transforms/Scalar.h"
 #include <deque>
 #include <functional> // For std::function
-
-#define DEBUG_TYPE "float2int"
-
 using namespace llvm;
 
 // The algorithm is simple. Start at instructions that convert from the
@@ -256,7 +255,7 @@ void Float2IntPass::walkForwards() {
       Op = [](ArrayRef<ConstantRange> Ops) {
         assert(Ops.size() == 1 && "FNeg is a unary operator!");
         unsigned Size = Ops[0].getBitWidth();
-        auto Zero = ConstantRange(APInt::getZero(Size));
+        auto Zero = ConstantRange(APInt::getNullValue(Size));
         return Zero.sub(Ops[0]);
       };
       break;
@@ -372,7 +371,7 @@ bool Float2IntPass::validateAndTransform() {
       // If it does, transformation would be illegal.
       //
       // Don't count the roots, as they terminate the graphs.
-      if (!Roots.contains(I)) {
+      if (Roots.count(I) == 0) {
         // Set the type of the conversion while we're here.
         if (!ConvertedToTy)
           ConvertedToTy = I->getType();
@@ -545,6 +544,7 @@ PreservedAnalyses Float2IntPass::run(Function &F, FunctionAnalysisManager &AM) {
 
   PreservedAnalyses PA;
   PA.preserveSet<CFGAnalyses>();
+  PA.preserve<GlobalsAA>();
   return PA;
 }
 } // End namespace llvm

@@ -46,7 +46,8 @@ enum DependenceKind {
   AutoreleasePoolBoundary,
   CanChangeRetainCount,
   RetainAutoreleaseDep,       ///< Blocks objc_retainAutorelease.
-  RetainAutoreleaseRVDep      ///< Blocks objc_retainAutoreleaseReturnValue.
+  RetainAutoreleaseRVDep,     ///< Blocks objc_retainAutoreleaseReturnValue.
+  RetainRVDep                 ///< Blocks objc_retainAutoreleasedReturnValue.
 };
 
 /// Find dependent instructions. If there is exactly one dependent instruction,

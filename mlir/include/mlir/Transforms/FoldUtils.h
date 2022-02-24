@@ -138,6 +138,6 @@ private:
   DialectInterfaceCollection<DialectFoldInterface> interfaces;
 };
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // MLIR_TRANSFORMS_FOLDUTILS_H

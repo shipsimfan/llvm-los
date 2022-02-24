@@ -27,6 +27,7 @@
 namespace clang {
 
 class DiagnosticsEngine;
+class Rewriter;
 
 namespace replace {
 

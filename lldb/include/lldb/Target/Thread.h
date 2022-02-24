@@ -22,7 +22,6 @@
 #include "lldb/Utility/CompletionRequest.h"
 #include "lldb/Utility/Event.h"
 #include "lldb/Utility/StructuredData.h"
-#include "lldb/Utility/UnimplementedError.h"
 #include "lldb/Utility/UserID.h"
 #include "lldb/lldb-private.h"
 
@@ -57,6 +56,8 @@ public:
 
   uint64_t GetMaxBacktraceDepth() const;
 };
+
+typedef std::shared_ptr<ThreadProperties> ThreadPropertiesSP;
 
 class Thread : public std::enable_shared_from_this<Thread>,
                public ThreadProperties,
@@ -148,7 +149,7 @@ public:
 
   static void SettingsTerminate();
 
-  static ThreadProperties &GetGlobalProperties();
+  static const ThreadPropertiesSP &GetGlobalProperties();
 
   lldb::ProcessSP GetProcess() const { return m_process_wp.lock(); }
 
@@ -1016,8 +1017,7 @@ public:
 
   /// Discards the plans queued on the plan stack of the current thread.  This
   /// is
-  /// arbitrated by the "Controlling" ThreadPlans, using the "OkayToDiscard"
-  /// call.
+  /// arbitrated by the "Master" ThreadPlans, using the "OkayToDiscard" call.
   //  But if \a force is true, all thread plans are discarded.
   void DiscardThreadPlans(bool force);
 
@@ -1185,8 +1185,6 @@ public:
 
   lldb::ThreadSP GetCurrentExceptionBacktrace();
 
-  lldb::ValueObjectSP GetSiginfoValue();
-
 protected:
   friend class ThreadPlan;
   friend class ThreadList;
@@ -1236,11 +1234,6 @@ protected:
 
   void FrameSelectedCallback(lldb_private::StackFrame *frame);
 
-  virtual llvm::Expected<std::unique_ptr<llvm::MemoryBuffer>>
-  GetSiginfo(size_t max_size) const {
-    return llvm::make_error<UnimplementedError>();
-  }
-
   // Classes that inherit from Process can see and modify these
   lldb::ProcessWP m_process_wp;    ///< The process that owns this thread.
   lldb::StopInfoSP m_stop_info_sp; ///< The private stop reason for this thread
@@ -1252,7 +1245,7 @@ protected:
                                          // the stop info was checked against
                                          // the stop info override
   const uint32_t m_index_id; ///< A unique 1 based index assigned to each thread
-                             /// for easy UI/command line access.
+                             ///for easy UI/command line access.
   lldb::RegisterContextSP m_reg_context_sp; ///< The register context for this
                                             ///thread's current register state.
   lldb::StateType m_state;                  ///< The state of our process.

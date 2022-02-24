@@ -1,5 +1,6 @@
 add_lldb_library(lldbPluginProcessUtility
   AuxVector.cpp
+  DynamicRegisterInfo.cpp
   FreeBSDSignals.cpp
   GDBRemoteSignals.cpp
   HistoryThread.cpp
@@ -7,7 +8,6 @@ add_lldb_library(lldbPluginProcessUtility
   InferiorCallPOSIX.cpp
   LinuxProcMaps.cpp
   LinuxSignals.cpp
-  MemoryTagManagerAArch64MTE.cpp
   MipsLinuxSignals.cpp
   NativeProcessSoftwareSingleStep.cpp
   NativeRegisterContextDBReg_arm64.cpp

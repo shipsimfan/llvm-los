@@ -51,7 +51,7 @@ static WasmYAML::Table makeTable(uint32_t Index,
 std::unique_ptr<WasmYAML::CustomSection>
 WasmDumper::dumpCustomSection(const WasmSection &WasmSec) {
   std::unique_ptr<WasmYAML::CustomSection> CustomSec;
-  if (WasmSec.Name == "dylink" || WasmSec.Name == "dylink.0") {
+  if (WasmSec.Name == "dylink") {
     std::unique_ptr<WasmYAML::DylinkSection> DylinkSec =
         std::make_unique<WasmYAML::DylinkSection>();
     const wasm::WasmDylinkInfo& Info = Obj.dylinkInfo();
@@ -60,10 +60,6 @@ WasmDumper::dumpCustomSection(const WasmSection &WasmSec) {
     DylinkSec->TableSize = Info.TableSize;
     DylinkSec->TableAlignment = Info.TableAlignment;
     DylinkSec->Needed = Info.Needed;
-    for (const auto &Imp : Info.ImportInfo)
-      DylinkSec->ImportInfo.push_back({Imp.Module, Imp.Field, Imp.Flags});
-    for (const auto &Exp : Info.ExportInfo)
-      DylinkSec->ExportInfo.push_back({Exp.Name, Exp.Flags});
     CustomSec = std::move(DylinkSec);
   } else if (WasmSec.Name == "name") {
     std::unique_ptr<WasmYAML::NameSection> NameSec =
@@ -104,7 +100,7 @@ WasmDumper::dumpCustomSection(const WasmSection &WasmSec) {
         SegmentInfo.Name = Segment.Data.Name;
         SegmentInfo.Index = SegmentIndex;
         SegmentInfo.Alignment = Segment.Data.Alignment;
-        SegmentInfo.Flags = Segment.Data.LinkingFlags;
+        SegmentInfo.Flags = Segment.Data.LinkerFlags;
         LinkingSec->SegmentInfos.push_back(SegmentInfo);
       }
       if (Segment.Data.Comdat != UINT32_MAX) {
@@ -136,7 +132,7 @@ WasmDumper::dumpCustomSection(const WasmSection &WasmSec) {
       case wasm::WASM_SYMBOL_TYPE_FUNCTION:
       case wasm::WASM_SYMBOL_TYPE_GLOBAL:
       case wasm::WASM_SYMBOL_TYPE_TABLE:
-      case wasm::WASM_SYMBOL_TYPE_TAG:
+      case wasm::WASM_SYMBOL_TYPE_EVENT:
         Info.ElementIndex = Symbol.ElementIndex;
         break;
       case wasm::WASM_SYMBOL_TYPE_SECTION:
@@ -242,8 +238,9 @@ ErrorOr<WasmYAML::Object *> WasmDumper::dump() {
           Im.GlobalImport.Type = Import.Global.Type;
           Im.GlobalImport.Mutable = Import.Global.Mutable;
           break;
-        case wasm::WASM_EXTERNAL_TAG:
-          Im.SigIndex = Import.SigIndex;
+        case wasm::WASM_EXTERNAL_EVENT:
+          Im.EventImport.Attribute = Import.Event.Attribute;
+          Im.EventImport.SigIndex = Import.Event.SigIndex;
           break;
         case wasm::WASM_EXTERNAL_TABLE:
           // FIXME: Currently we always output an index of 0 for any imported
@@ -261,8 +258,8 @@ ErrorOr<WasmYAML::Object *> WasmDumper::dump() {
     }
     case wasm::WASM_SEC_FUNCTION: {
       auto FuncSec = std::make_unique<WasmYAML::FunctionSection>();
-      for (const auto &Func : Obj.functions()) {
-        FuncSec->FunctionTypes.push_back(Func.SigIndex);
+      for (const auto &Func : Obj.functionTypes()) {
+        FuncSec->FunctionTypes.push_back(Func);
       }
       S = std::move(FuncSec);
       break;
@@ -283,12 +280,16 @@ ErrorOr<WasmYAML::Object *> WasmDumper::dump() {
       S = std::move(MemorySec);
       break;
     }
-    case wasm::WASM_SEC_TAG: {
-      auto TagSec = std::make_unique<WasmYAML::TagSection>();
-      for (auto &Tag : Obj.tags()) {
-        TagSec->TagTypes.push_back(Tag.SigIndex);
+    case wasm::WASM_SEC_EVENT: {
+      auto EventSec = std::make_unique<WasmYAML::EventSection>();
+      for (auto &Event : Obj.events()) {
+        WasmYAML::Event E;
+        E.Index = Event.Index;
+        E.Attribute = Event.Type.Attribute;
+        E.SigIndex = Event.Type.SigIndex;
+        EventSec->Events.push_back(E);
       }
-      S = std::move(TagSec);
+      S = std::move(EventSec);
       break;
     }
     case wasm::WASM_SEC_GLOBAL: {

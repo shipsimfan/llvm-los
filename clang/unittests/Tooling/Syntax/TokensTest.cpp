@@ -40,6 +40,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Testing/Support/Annotations.h"
 #include "llvm/Testing/Support/SupportHelpers.h"
+#include "gmock/gmock.h"
 #include <cassert>
 #include <cstdlib>
 #include <gmock/gmock.h>
@@ -632,7 +633,7 @@ TEST_F(TokenBufferTest, SpelledByExpanded) {
     a1 a2 a3 b1 b2
   )cpp");
 
-  // Expanded and spelled tokens are stored separately.
+  // Sanity check: expanded and spelled tokens are stored separately.
   EXPECT_THAT(findExpanded("a1 a2"), Not(SameRange(findSpelled("a1 a2"))));
   // Searching for subranges of expanded tokens should give the corresponding
   // spelled ones.
@@ -750,7 +751,7 @@ TEST_F(TokenBufferTest, ExpandedTokensForRange) {
 
   SourceRange R(findExpanded("C").front().location(),
                 findExpanded("F_washere").front().location());
-  // Expanded and spelled tokens are stored separately.
+  // Sanity check: expanded and spelled tokens are stored separately.
   EXPECT_THAT(Buffer.expandedTokens(R),
               SameRange(findExpanded("C D_washere E F_washere")));
   EXPECT_THAT(Buffer.expandedTokens(SourceRange()), testing::IsEmpty());
@@ -934,7 +935,7 @@ TEST_F(TokenBufferTest, ExpandedBySpelled) {
   recordTokens(R"cpp(
     a1 a2 a3 b1 b2
   )cpp");
-  // Expanded and spelled tokens are stored separately.
+  // Sanity check: expanded and spelled tokens are stored separately.
   EXPECT_THAT(findExpanded("a1 a2"), Not(SameRange(findSpelled("a1 a2"))));
   // Searching for subranges of expanded tokens should give the corresponding
   // spelled ones.

@@ -35,28 +35,22 @@ namespace format {
   TYPE(BinaryOperator)                                                         \
   TYPE(BitFieldColon)                                                          \
   TYPE(BlockComment)                                                           \
-  TYPE(BracedListLBrace)                                                       \
   TYPE(CastRParen)                                                             \
-  TYPE(ClassLBrace)                                                            \
-  TYPE(CompoundRequirementLBrace)                                              \
   TYPE(ConditionalExpr)                                                        \
   TYPE(ConflictAlternative)                                                    \
   TYPE(ConflictEnd)                                                            \
   TYPE(ConflictStart)                                                          \
+  TYPE(ConstraintJunctions)                                                    \
   TYPE(CtorInitializerColon)                                                   \
   TYPE(CtorInitializerComma)                                                   \
   TYPE(DesignatedInitializerLSquare)                                           \
   TYPE(DesignatedInitializerPeriod)                                            \
   TYPE(DictLiteral)                                                            \
-  TYPE(EnumLBrace)                                                             \
-  TYPE(FatArrow)                                                               \
   TYPE(ForEachMacro)                                                           \
   TYPE(FunctionAnnotationRParen)                                               \
   TYPE(FunctionDeclarationName)                                                \
   TYPE(FunctionLBrace)                                                         \
-  TYPE(FunctionLikeOrFreestandingMacro)                                        \
   TYPE(FunctionTypeLParen)                                                     \
-  TYPE(IfMacro)                                                                \
   TYPE(ImplicitStringLiteral)                                                  \
   TYPE(InheritanceColon)                                                       \
   TYPE(InheritanceComma)                                                       \
@@ -67,12 +61,17 @@ namespace format {
   TYPE(JsComputedPropertyName)                                                 \
   TYPE(JsExponentiation)                                                       \
   TYPE(JsExponentiationEqual)                                                  \
-  TYPE(JsPipePipeEqual)                                                        \
+  TYPE(JsFatArrow)                                                             \
+  TYPE(JsNonNullAssertion)                                                     \
+  TYPE(JsNullishCoalescingOperator)                                            \
+  TYPE(JsNullPropagatingOperator)                                              \
   TYPE(JsPrivateIdentifier)                                                    \
   TYPE(JsTypeColon)                                                            \
   TYPE(JsTypeOperator)                                                         \
   TYPE(JsTypeOptionalQuestion)                                                 \
   TYPE(JsAndAndEqual)                                                          \
+  TYPE(JsPipePipeEqual)                                                        \
+  TYPE(JsNullishCoalescingEqual)                                               \
   TYPE(LambdaArrow)                                                            \
   TYPE(LambdaLBrace)                                                           \
   TYPE(LambdaLSquare)                                                          \
@@ -80,12 +79,7 @@ namespace format {
   TYPE(LineComment)                                                            \
   TYPE(MacroBlockBegin)                                                        \
   TYPE(MacroBlockEnd)                                                          \
-  TYPE(ModulePartitionColon)                                                   \
   TYPE(NamespaceMacro)                                                         \
-  TYPE(NonNullAssertion)                                                       \
-  TYPE(NullCoalescingEqual)                                                    \
-  TYPE(NullCoalescingOperator)                                                 \
-  TYPE(NullPropagatingOperator)                                                \
   TYPE(ObjCBlockLBrace)                                                        \
   TYPE(ObjCBlockLParen)                                                        \
   TYPE(ObjCDecl)                                                               \
@@ -99,18 +93,11 @@ namespace format {
   TYPE(PointerOrReference)                                                     \
   TYPE(PureVirtualSpecifier)                                                   \
   TYPE(RangeBasedForLoopColon)                                                 \
-  TYPE(RecordLBrace)                                                           \
   TYPE(RegexLiteral)                                                           \
-  TYPE(RequiresClause)                                                         \
-  TYPE(RequiresClauseInARequiresExpression)                                    \
-  TYPE(RequiresExpression)                                                     \
-  TYPE(RequiresExpressionLBrace)                                               \
-  TYPE(RequiresExpressionLParen)                                               \
   TYPE(SelectorName)                                                           \
   TYPE(StartOfName)                                                            \
   TYPE(StatementAttributeLikeMacro)                                            \
   TYPE(StatementMacro)                                                         \
-  TYPE(StructLBrace)                                                           \
   TYPE(StructuredBindingLSquare)                                               \
   TYPE(TemplateCloser)                                                         \
   TYPE(TemplateOpener)                                                         \
@@ -122,44 +109,17 @@ namespace format {
   TYPE(TypeDeclarationParen)                                                   \
   TYPE(TypenameMacro)                                                          \
   TYPE(UnaryOperator)                                                          \
-  TYPE(UnionLBrace)                                                            \
   TYPE(UntouchableMacroFunc)                                                   \
   TYPE(CSharpStringLiteral)                                                    \
   TYPE(CSharpNamedArgumentColon)                                               \
   TYPE(CSharpNullable)                                                         \
+  TYPE(CSharpNullCoalescing)                                                   \
+  TYPE(CSharpNullConditional)                                                  \
   TYPE(CSharpNullConditionalLSquare)                                           \
   TYPE(CSharpGenericTypeConstraint)                                            \
   TYPE(CSharpGenericTypeConstraintColon)                                       \
   TYPE(CSharpGenericTypeConstraintComma)                                       \
   TYPE(Unknown)
-
-/// Sorted operators that can follow a C variable.
-static const std::vector<clang::tok::TokenKind> COperatorsFollowingVar = [] {
-  std::vector<clang::tok::TokenKind> ReturnVal = {
-      tok::l_square,     tok::r_square,
-      tok::l_paren,      tok::r_paren,
-      tok::r_brace,      tok::period,
-      tok::ellipsis,     tok::ampamp,
-      tok::ampequal,     tok::star,
-      tok::starequal,    tok::plus,
-      tok::plusplus,     tok::plusequal,
-      tok::minus,        tok::arrow,
-      tok::minusminus,   tok::minusequal,
-      tok::exclaim,      tok::exclaimequal,
-      tok::slash,        tok::slashequal,
-      tok::percent,      tok::percentequal,
-      tok::less,         tok::lessless,
-      tok::lessequal,    tok::lesslessequal,
-      tok::greater,      tok::greatergreater,
-      tok::greaterequal, tok::greatergreaterequal,
-      tok::caret,        tok::caretequal,
-      tok::pipe,         tok::pipepipe,
-      tok::pipeequal,    tok::question,
-      tok::semi,         tok::equal,
-      tok::equalequal,   tok::comma};
-  assert(std::is_sorted(ReturnVal.begin(), ReturnVal.end()));
-  return ReturnVal;
-}();
 
 /// Determines the semantic type of a syntactic token, e.g. whether "<" is a
 /// template opener or binary operator.
@@ -255,9 +215,8 @@ struct FormatToken {
         CanBreakBefore(false), ClosesTemplateDeclaration(false),
         StartsBinaryExpression(false), EndsBinaryExpression(false),
         PartOfMultiVariableDeclStmt(false), ContinuesLineCommentSection(false),
-        Finalized(false), ClosesRequiresClause(false), BlockKind(BK_Unknown),
-        Decision(FD_Unformatted), PackingKind(PPK_Inconclusive),
-        Type(TT_Unknown) {}
+        Finalized(false), BlockKind(BK_Unknown), Decision(FD_Unformatted),
+        PackingKind(PPK_Inconclusive), Type(TT_Unknown) {}
 
   /// The \c Token.
   Token Tok;
@@ -322,9 +281,6 @@ struct FormatToken {
   /// potentially re-formatted inside), and we do not allow further formatting
   /// changes.
   unsigned Finalized : 1;
-
-  /// \c true if this is the last token within requires clause.
-  unsigned ClosesRequiresClause : 1;
 
 private:
   /// Contains the kind of block if this token is a brace.
@@ -477,24 +433,6 @@ public:
   /// The next token in the unwrapped line.
   FormatToken *Next = nullptr;
 
-  /// The first token in set of column elements.
-  bool StartsColumn = false;
-
-  /// This notes the start of the line of an array initializer.
-  bool ArrayInitializerLineStart = false;
-
-  /// This starts an array initializer.
-  bool IsArrayInitializer = false;
-
-  /// Is optional and can be removed.
-  bool Optional = false;
-
-  /// Number of optional braces to be inserted after this token:
-  ///   -1: a single left brace
-  ///    0: no braces
-  ///   >0: number of right braces
-  int8_t BraceCount = 0;
-
   /// If this token starts a block, this contains all the unwrapped lines
   /// in it.
   SmallVector<AnnotatedLine *, 1> Children;
@@ -574,9 +512,7 @@ public:
   }
 
   /// Determine whether the token is a simple-type-specifier.
-  LLVM_NODISCARD bool isSimpleTypeSpecifier() const;
-
-  LLVM_NODISCARD bool isTypeOrIdentifier() const;
+  bool isSimpleTypeSpecifier() const;
 
   bool isObjCAccessSpecifier() const {
     return is(tok::at) && Next &&
@@ -687,19 +623,13 @@ public:
     return WhitespaceRange.getEnd();
   }
 
-  /// Returns \c true if the range of whitespace immediately preceding the \c
-  /// Token is not empty.
-  bool hasWhitespaceBefore() const {
-    return WhitespaceRange.getBegin() != WhitespaceRange.getEnd();
-  }
-
   prec::Level getPrecedence() const {
     return getBinOpPrecedence(Tok.getKind(), /*GreaterThanIsOperator=*/true,
                               /*CPlusPlus11=*/true);
   }
 
   /// Returns the previous token ignoring comments.
-  LLVM_NODISCARD FormatToken *getPreviousNonComment() const {
+  FormatToken *getPreviousNonComment() const {
     FormatToken *Tok = Previous;
     while (Tok && Tok->is(tok::comment))
       Tok = Tok->Previous;
@@ -707,7 +637,7 @@ public:
   }
 
   /// Returns the next token ignoring comments.
-  LLVM_NODISCARD const FormatToken *getNextNonComment() const {
+  const FormatToken *getNextNonComment() const {
     const FormatToken *Tok = Next;
     while (Tok && Tok->is(tok::comment))
       Tok = Tok->Next;
@@ -716,7 +646,19 @@ public:
 
   /// Returns \c true if this tokens starts a block-type list, i.e. a
   /// list that should be indented with a block indent.
-  LLVM_NODISCARD bool opensBlockOrBlockTypeList(const FormatStyle &Style) const;
+  bool opensBlockOrBlockTypeList(const FormatStyle &Style) const {
+    // C# Does not indent object initialisers as continuations.
+    if (is(tok::l_brace) && getBlockKind() == BK_BracedInit && Style.isCSharp())
+      return true;
+    if (is(TT_TemplateString) && opensScope())
+      return true;
+    return is(TT_ArrayInitializerLSquare) || is(TT_ProtoExtensionLSquare) ||
+           (is(tok::l_brace) &&
+            (getBlockKind() == BK_Block || is(TT_DictLiteral) ||
+             (!Style.Cpp11BracedListStyle && NestingLevel == 0))) ||
+           (is(tok::less) && (Style.Language == FormatStyle::LK_Proto ||
+                              Style.Language == FormatStyle::LK_TextProto));
+  }
 
   /// Returns whether the token is the left square bracket of a C++
   /// structured binding declaration.
@@ -949,10 +891,6 @@ struct AdditionalKeywords {
     kw_slots = &IdentTable.get("slots");
     kw_qslots = &IdentTable.get("Q_SLOTS");
 
-    // For internal clang-format use.
-    kw_internal_ident_after_define =
-        &IdentTable.get("__CLANG_FORMAT_INTERNAL_IDENT_AFTER_DEFINE__");
-
     // C# keywords
     kw_dollar = &IdentTable.get("dollar");
     kw_base = &IdentTable.get("base");
@@ -988,8 +926,8 @@ struct AdditionalKeywords {
     // already initialized.
     JsExtraKeywords = std::unordered_set<IdentifierInfo *>(
         {kw_as, kw_async, kw_await, kw_declare, kw_finally, kw_from,
-         kw_function, kw_get, kw_import, kw_is, kw_let, kw_module, kw_override,
-         kw_readonly, kw_set, kw_type, kw_typeof, kw_var, kw_yield,
+         kw_function, kw_get, kw_import, kw_is, kw_let, kw_module, kw_readonly,
+         kw_set, kw_type, kw_typeof, kw_var, kw_yield,
          // Keywords from the Java section.
          kw_abstract, kw_extends, kw_implements, kw_instanceof, kw_interface});
 
@@ -1073,9 +1011,6 @@ struct AdditionalKeywords {
   IdentifierInfo *kw_slots;
   IdentifierInfo *kw_qslots;
 
-  // For internal use by clang-format.
-  IdentifierInfo *kw_internal_ident_after_define;
-
   // C# keywords
   IdentifierInfo *kw_dollar;
   IdentifierInfo *kw_base;
@@ -1117,7 +1052,7 @@ struct AdditionalKeywords {
   bool IsJavaScriptIdentifier(const FormatToken &Tok,
                               bool AcceptIdentifierName = true) const {
     // Based on the list of JavaScript & TypeScript keywords here:
-    // https://github.com/microsoft/TypeScript/blob/main/src/compiler/scanner.ts#L74
+    // https://github.com/microsoft/TypeScript/blob/master/src/compiler/scanner.ts#L74
     switch (Tok.Tok.getKind()) {
     case tok::kw_break:
     case tok::kw_case:

@@ -40,10 +40,12 @@ public:
 
   static lldb_private::Language *CreateInstance(lldb::LanguageType language);
 
-  static llvm::StringRef GetPluginNameStatic() { return "objcplusplus"; }
+  static lldb_private::ConstString GetPluginNameStatic();
 
   // PluginInterface protocol
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  ConstString GetPluginName() override;
+
+  uint32_t GetPluginVersion() override;
 };
 
 } // namespace lldb_private

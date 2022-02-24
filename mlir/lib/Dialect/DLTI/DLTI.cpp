@@ -16,8 +16,6 @@
 
 using namespace mlir;
 
-#include "mlir/Dialect/DLTI/DLTIDialect.cpp.inc"
-
 //===----------------------------------------------------------------------===//
 // DataLayoutEntryAttr
 //===----------------------------------------------------------------------===//
@@ -49,7 +47,7 @@ public:
 } // namespace impl
 } // namespace mlir
 
-DataLayoutEntryAttr DataLayoutEntryAttr::get(StringAttr key, Attribute value) {
+DataLayoutEntryAttr DataLayoutEntryAttr::get(Identifier key, Attribute value) {
   return Base::get(key.getContext(), key, value);
 }
 
@@ -65,13 +63,13 @@ Attribute DataLayoutEntryAttr::getValue() const { return getImpl()->value; }
 
 /// Parses an attribute with syntax:
 ///   attr ::= `#target.` `dl_entry` `<` (type | quoted-string) `,` attr `>`
-DataLayoutEntryAttr DataLayoutEntryAttr::parse(AsmParser &parser) {
+DataLayoutEntryAttr DataLayoutEntryAttr::parse(DialectAsmParser &parser) {
   if (failed(parser.parseLess()))
     return {};
 
   Type type = nullptr;
-  std::string identifier;
-  SMLoc idLoc = parser.getCurrentLocation();
+  StringRef identifier;
+  llvm::SMLoc idLoc = parser.getCurrentLocation();
   OptionalParseResult parsedType = parser.parseOptionalType(type);
   if (parsedType.hasValue() && failed(parsedType.getValue()))
     return {};
@@ -89,15 +87,15 @@ DataLayoutEntryAttr DataLayoutEntryAttr::parse(AsmParser &parser) {
     return {};
 
   return type ? get(type, value)
-              : get(parser.getBuilder().getStringAttr(identifier), value);
+              : get(parser.getBuilder().getIdentifier(identifier), value);
 }
 
-void DataLayoutEntryAttr::print(AsmPrinter &os) const {
+void DataLayoutEntryAttr::print(DialectAsmPrinter &os) const {
   os << DataLayoutEntryAttr::kAttrKeyword << "<";
   if (auto type = getKey().dyn_cast<Type>())
     os << type;
   else
-    os << "\"" << getKey().get<StringAttr>().strref() << "\"";
+    os << "\"" << getKey().get<Identifier>().strref() << "\"";
   os << ", " << getValue() << ">";
 }
 
@@ -146,15 +144,15 @@ LogicalResult
 DataLayoutSpecAttr::verify(function_ref<InFlightDiagnostic()> emitError,
                            ArrayRef<DataLayoutEntryInterface> entries) {
   DenseSet<Type> types;
-  DenseSet<StringAttr> ids;
+  DenseSet<Identifier> ids;
   for (DataLayoutEntryInterface entry : entries) {
     if (auto type = entry.getKey().dyn_cast<Type>()) {
       if (!types.insert(type).second)
         return emitError() << "repeated layout entry key: " << type;
     } else {
-      auto id = entry.getKey().get<StringAttr>();
+      auto id = entry.getKey().get<Identifier>();
       if (!ids.insert(id).second)
-        return emitError() << "repeated layout entry key: " << id.getValue();
+        return emitError() << "repeated layout entry key: " << id;
     }
   }
   return success();
@@ -191,17 +189,17 @@ overwriteDuplicateEntries(SmallVectorImpl<DataLayoutEntryInterface> &oldEntries,
 static LogicalResult
 combineOneSpec(DataLayoutSpecInterface spec,
                DenseMap<TypeID, DataLayoutEntryList> &entriesForType,
-               DenseMap<StringAttr, DataLayoutEntryInterface> &entriesForID) {
+               DenseMap<Identifier, DataLayoutEntryInterface> &entriesForID) {
   // A missing spec should be fine.
   if (!spec)
     return success();
 
   DenseMap<TypeID, DataLayoutEntryList> newEntriesForType;
-  DenseMap<StringAttr, DataLayoutEntryInterface> newEntriesForID;
+  DenseMap<Identifier, DataLayoutEntryInterface> newEntriesForID;
   spec.bucketEntriesByType(newEntriesForType, newEntriesForID);
 
   // Try overwriting the old entries with the new ones.
-  for (auto &kvp : newEntriesForType) {
+  for (const auto &kvp : newEntriesForType) {
     if (!entriesForType.count(kvp.first)) {
       entriesForType[kvp.first] = std::move(kvp.second);
       continue;
@@ -220,8 +218,8 @@ combineOneSpec(DataLayoutSpecInterface spec,
   }
 
   for (const auto &kvp : newEntriesForID) {
-    StringAttr id = kvp.second.getKey().get<StringAttr>();
-    Dialect *dialect = id.getReferencedDialect();
+    Identifier id = kvp.second.getKey().get<Identifier>();
+    Dialect *dialect = id.getDialect();
     if (!entriesForID.count(id)) {
       entriesForID[id] = kvp.second;
       continue;
@@ -231,8 +229,8 @@ combineOneSpec(DataLayoutSpecInterface spec,
     // dialect is not loaded for some reason, use the default combinator
     // that conservatively accepts identical entries only.
     entriesForID[id] =
-        dialect ? cast<DataLayoutDialectInterface>(dialect)->combine(
-                      entriesForID[id], kvp.second)
+        dialect ? dialect->getRegisteredInterface<DataLayoutDialectInterface>()
+                      ->combine(entriesForID[id], kvp.second)
                 : DataLayoutDialectInterface::defaultCombine(entriesForID[id],
                                                              kvp.second);
     if (!entriesForID[id])
@@ -253,7 +251,7 @@ DataLayoutSpecAttr::combineWith(ArrayRef<DataLayoutSpecInterface> specs) const {
 
   // Combine all specs in order, with `this` being the last one.
   DenseMap<TypeID, DataLayoutEntryList> entriesForType;
-  DenseMap<StringAttr, DataLayoutEntryInterface> entriesForID;
+  DenseMap<Identifier, DataLayoutEntryInterface> entriesForID;
   for (DataLayoutSpecInterface spec : specs)
     if (failed(combineOneSpec(spec, entriesForType, entriesForID)))
       return nullptr;
@@ -277,13 +275,13 @@ DataLayoutEntryListRef DataLayoutSpecAttr::getEntries() const {
 ///   attr ::= `#target.` `dl_spec` `<` attr-list? `>`
 ///   attr-list ::= attr
 ///               | attr `,` attr-list
-DataLayoutSpecAttr DataLayoutSpecAttr::parse(AsmParser &parser) {
+DataLayoutSpecAttr DataLayoutSpecAttr::parse(DialectAsmParser &parser) {
   if (failed(parser.parseLess()))
     return {};
 
   // Empty spec.
   if (succeeded(parser.parseOptionalGreater()))
-    return get(parser.getContext(), {});
+    return get(parser.getBuilder().getContext(), {});
 
   SmallVector<DataLayoutEntryInterface> entries;
   do {
@@ -295,10 +293,10 @@ DataLayoutSpecAttr DataLayoutSpecAttr::parse(AsmParser &parser) {
   if (failed(parser.parseGreater()))
     return {};
   return getChecked([&] { return parser.emitError(parser.getNameLoc()); },
-                    parser.getContext(), entries);
+                    parser.getBuilder().getContext(), entries);
 }
 
-void DataLayoutSpecAttr::print(AsmPrinter &os) const {
+void DataLayoutSpecAttr::print(DialectAsmPrinter &os) const {
   os << DataLayoutSpecAttr::kAttrKeyword << "<";
   llvm::interleaveComma(getEntries(), os);
   os << ">";
@@ -320,7 +318,7 @@ public:
 
   LogicalResult verifyEntry(DataLayoutEntryInterface entry,
                             Location loc) const final {
-    StringRef entryName = entry.getKey().get<StringAttr>().strref();
+    StringRef entryName = entry.getKey().get<Identifier>().strref();
     if (entryName == DLTIDialect::kDataLayoutEndiannessKey) {
       auto value = entry.getValue().dyn_cast<StringAttr>();
       if (value &&
@@ -367,8 +365,8 @@ void DLTIDialect::printAttribute(Attribute attr, DialectAsmPrinter &os) const {
 
 LogicalResult DLTIDialect::verifyOperationAttribute(Operation *op,
                                                     NamedAttribute attr) {
-  if (attr.getName() == DLTIDialect::kDataLayoutAttrName) {
-    if (!attr.getValue().isa<DataLayoutSpecAttr>()) {
+  if (attr.first == DLTIDialect::kDataLayoutAttrName) {
+    if (!attr.second.isa<DataLayoutSpecAttr>()) {
       return op->emitError() << "'" << DLTIDialect::kDataLayoutAttrName
                              << "' is expected to be a #dlti.dl_spec attribute";
     }
@@ -377,6 +375,6 @@ LogicalResult DLTIDialect::verifyOperationAttribute(Operation *op,
     return success();
   }
 
-  return op->emitError() << "attribute '" << attr.getName().getValue()
+  return op->emitError() << "attribute '" << attr.first
                          << "' not supported by dialect";
 }

@@ -21,15 +21,15 @@ class TestStepOverWatchpoint(TestBase):
         bugnumber="llvm.org/pr26031")
     # Read-write watchpoints not supported on SystemZ
     @expectedFailureAll(archs=['s390x'])
-    @expectedFailureAll(
-        oslist=["ios", "watchos", "tvos", "bridgeos", "macosx"],
-        archs=['aarch64', 'arm'],
-        bugnumber="<rdar://problem/34027183>")
+    @expectedFailureAll(oslist=["ios", "watchos", "tvos", "bridgeos"], bugnumber="<rdar://problem/34027183>")  # watchpoint tests aren't working on arm64
     @add_test_categories(["basic_process"])
     def test(self):
         """Test stepping over watchpoints."""
         self.build()
-        target = self.createTestTarget()
+        exe = self.getBuildArtifact("a.out")
+
+        target = self.dbg.CreateTarget(exe)
+        self.assertTrue(self.target, VALID_TARGET)
 
         lldbutil.run_break_set_by_symbol(self, 'main')
 
@@ -54,7 +54,9 @@ class TestStepOverWatchpoint(TestBase):
 
         # resolve_location=True, read=True, write=False
         read_watchpoint = read_value.Watch(True, True, False, error)
-        self.assertSuccess(error, "Error while setting watchpoint")
+        self.assertTrue(error.Success(),
+                        "Error while setting watchpoint: %s" %
+                        error.GetCString())
         self.assertTrue(read_watchpoint, "Failed to set read watchpoint.")
 
         thread.StepOver()
@@ -82,7 +84,9 @@ class TestStepOverWatchpoint(TestBase):
         # resolve_location=True, read=False, write=True
         write_watchpoint = write_value.Watch(True, False, True, error)
         self.assertTrue(write_watchpoint, "Failed to set write watchpoint.")
-        self.assertSuccess(error, "Error while setting watchpoint")
+        self.assertTrue(error.Success(),
+                        "Error while setting watchpoint: %s" %
+                        error.GetCString())
 
         thread.StepOver()
         self.assertEquals(thread.GetStopReason(), lldb.eStopReasonWatchpoint,

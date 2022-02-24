@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: libcpp-has-no-incomplete-ranges
-
 // <ranges>
 
 #include <ranges>

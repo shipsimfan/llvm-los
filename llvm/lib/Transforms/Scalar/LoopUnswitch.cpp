@@ -232,8 +232,10 @@ namespace {
       AU.addPreserved<LazyBranchProbabilityInfoPass>();
       AU.addRequired<AssumptionCacheTracker>();
       AU.addRequired<TargetTransformInfoWrapperPass>();
-      AU.addRequired<MemorySSAWrapperPass>();
-      AU.addPreserved<MemorySSAWrapperPass>();
+      if (EnableMSSALoopDependency) {
+        AU.addRequired<MemorySSAWrapperPass>();
+        AU.addPreserved<MemorySSAWrapperPass>();
+      }
       if (HasBranchDivergence)
         AU.addRequired<LegacyDivergenceAnalysis>();
       getLoopAnalysisUsage(AU);
@@ -537,8 +539,11 @@ bool LoopUnswitch::runOnLoop(Loop *L, LPPassManager &LPMRef) {
   LPM = &LPMRef;
   DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
   AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
-  MSSA = &getAnalysis<MemorySSAWrapperPass>().getMSSA();
-  MSSAU = std::make_unique<MemorySSAUpdater>(MSSA);
+  if (EnableMSSALoopDependency) {
+    MSSA = &getAnalysis<MemorySSAWrapperPass>().getMSSA();
+    MSSAU = std::make_unique<MemorySSAUpdater>(MSSA);
+    assert(DT && "Cannot update MemorySSA without a valid DomTree.");
+  }
   CurrentLoop = L;
   Function *F = CurrentLoop->getHeader()->getParent();
 
@@ -546,19 +551,19 @@ bool LoopUnswitch::runOnLoop(Loop *L, LPPassManager &LPMRef) {
   if (SanitizeMemory)
     SafetyInfo.computeLoopSafetyInfo(L);
 
-  if (VerifyMemorySSA)
+  if (MSSA && VerifyMemorySSA)
     MSSA->verifyMemorySSA();
 
   bool Changed = false;
   do {
     assert(CurrentLoop->isLCSSAForm(*DT));
-    if (VerifyMemorySSA)
+    if (MSSA && VerifyMemorySSA)
       MSSA->verifyMemorySSA();
     RedoLoop = false;
     Changed |= processCurrentLoop();
   } while (RedoLoop);
 
-  if (VerifyMemorySSA)
+  if (MSSA && VerifyMemorySSA)
     MSSA->verifyMemorySSA();
 
   return Changed;
@@ -1307,7 +1312,8 @@ void LoopUnswitch::splitExitEdges(
 
   for (unsigned I = 0, E = ExitBlocks.size(); I != E; ++I) {
     BasicBlock *ExitBlock = ExitBlocks[I];
-    SmallVector<BasicBlock *, 4> Preds(predecessors(ExitBlock));
+    SmallVector<BasicBlock *, 4> Preds(pred_begin(ExitBlock),
+                                       pred_end(ExitBlock));
 
     // Although SplitBlockPredecessors doesn't preserve loop-simplify in
     // general, if we call it on all predecessors of all exits then it does.

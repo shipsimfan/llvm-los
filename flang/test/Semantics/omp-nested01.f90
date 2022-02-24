@@ -1,4 +1,4 @@
-! RUN: %python %S/test_errors.py %s %flang -fopenmp
+! RUN: %S/test_errors.sh %s %t %flang -fopenmp
 
 ! Check OpenMP 2.17 Nesting of Regions
 

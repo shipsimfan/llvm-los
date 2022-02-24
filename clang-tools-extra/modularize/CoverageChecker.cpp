@@ -381,7 +381,8 @@ bool CoverageChecker::collectFileSystemHeaders(StringRef IncludePath) {
       continue;
     // Assume directories or files starting with '.' are private and not to
     // be considered.
-    if (file.contains("\\.") || file.contains("/."))
+    if ((file.find("\\.") != StringRef::npos) ||
+        (file.find("/.") != StringRef::npos))
       continue;
     // If the file does not have a common header extension, ignore it.
     if (!ModularizeUtilities::isHeader(file))

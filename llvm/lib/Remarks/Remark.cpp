@@ -111,7 +111,7 @@ LLVMRemarkEntryGetFirstArg(LLVMRemarkEntryRef Remark) {
   ArrayRef<Argument> Args = unwrap(Remark)->Args;
   // No arguments to iterate on.
   if (Args.empty())
-    return nullptr;
+    return NULL;
   return reinterpret_cast<LLVMRemarkArgRef>(
       const_cast<Argument *>(Args.begin()));
 }
@@ -119,13 +119,13 @@ LLVMRemarkEntryGetFirstArg(LLVMRemarkEntryRef Remark) {
 extern "C" LLVMRemarkArgRef
 LLVMRemarkEntryGetNextArg(LLVMRemarkArgRef ArgIt, LLVMRemarkEntryRef Remark) {
   // No more arguments to iterate on.
-  if (ArgIt == nullptr)
-    return nullptr;
+  if (ArgIt == NULL)
+    return NULL;
 
   auto It = (ArrayRef<Argument>::const_iterator)ArgIt;
   auto Next = std::next(It);
   if (Next == unwrap(Remark)->Args.end())
-    return nullptr;
+    return NULL;
 
   return reinterpret_cast<LLVMRemarkArgRef>(const_cast<Argument *>(Next));
 }

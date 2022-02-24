@@ -34,15 +34,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
-#include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
-#include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
+#include "mlir/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Transforms/LoopUtils.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/CommandLine.h"
 
@@ -59,9 +58,9 @@ struct LoopUnrollAndJam : public AffineLoopUnrollAndJamBase<LoopUnrollAndJam> {
       this->unrollJamFactor = *unrollJamFactor;
   }
 
-  void runOnOperation() override;
+  void runOnFunction() override;
 };
-} // namespace
+} // end anonymous namespace
 
 std::unique_ptr<OperationPass<FuncOp>>
 mlir::createLoopUnrollAndJamPass(int unrollJamFactor) {
@@ -69,14 +68,11 @@ mlir::createLoopUnrollAndJamPass(int unrollJamFactor) {
       unrollJamFactor == -1 ? None : Optional<unsigned>(unrollJamFactor));
 }
 
-void LoopUnrollAndJam::runOnOperation() {
-  if (getOperation().isExternal())
-    return;
-
+void LoopUnrollAndJam::runOnFunction() {
   // Currently, just the outermost loop from the first loop nest is
   // unroll-and-jammed by this pass. However, runOnAffineForOp can be called on
   // any for operation.
-  auto &entryBlock = getOperation().front();
+  auto &entryBlock = getFunction().front();
   if (auto forOp = dyn_cast<AffineForOp>(entryBlock.front()))
     (void)loopUnrollJamByFactor(forOp, unrollJamFactor);
 }

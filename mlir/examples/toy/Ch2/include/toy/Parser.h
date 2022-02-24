@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef TOY_PARSER_H
-#define TOY_PARSER_H
+#ifndef MLIR_TUTORIAL_TOY_PARSER_H
+#define MLIR_TUTORIAL_TOY_PARSER_H
 
 #include "toy/AST.h"
 #include "toy/Lexer.h"
@@ -486,4 +486,4 @@ private:
 
 } // namespace toy
 
-#endif // TOY_PARSER_H
+#endif // MLIR_TUTORIAL_TOY_PARSER_H

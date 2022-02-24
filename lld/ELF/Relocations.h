@@ -11,7 +11,7 @@
 
 #include "lld/Common/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/STLExtras.h"
+#include <map>
 #include <vector>
 
 namespace lld {
@@ -45,7 +45,6 @@ enum RelExpr {
   R_PC,
   R_PLT,
   R_PLT_PC,
-  R_PLT_GOTPLT,
   R_RELAX_GOT_PC,
   R_RELAX_GOT_PC_NOPIC,
   R_RELAX_TLS_GD_TO_IE,
@@ -63,7 +62,6 @@ enum RelExpr {
   R_TLSDESC,
   R_TLSDESC_CALL,
   R_TLSDESC_PC,
-  R_TLSDESC_GOTPLT,
   R_TLSGD_GOT,
   R_TLSGD_GOTPLT,
   R_TLSGD_PC,
@@ -117,8 +115,8 @@ struct Relocation {
 // jump instruction opcodes at basic block boundaries and are particularly
 // useful when basic block sections are enabled.
 struct JumpInstrMod {
-  uint64_t offset;
   JumpModType original;
+  uint64_t offset;
   unsigned size;
 };
 
@@ -126,8 +124,8 @@ struct JumpInstrMod {
 // Call reportUndefinedSymbols() after calling scanRelocations() to emit
 // the diagnostics.
 template <class ELFT> void scanRelocations(InputSectionBase &);
-void reportUndefinedSymbols();
-void postScanRelocations();
+
+template <class ELFT> void reportUndefinedSymbols();
 
 void hexagonTLSSymbolUpdate(ArrayRef<OutputSection *> outputSections);
 bool hexagonNeedsTLSSymbol(ArrayRef<OutputSection *> outputSections);

@@ -112,8 +112,15 @@ wrapInStructAndGetPointer(Type elementType, spirv::StorageClass storageClass) {
 // Type Conversion
 //===----------------------------------------------------------------------===//
 
-Type SPIRVTypeConverter::getIndexType() const {
-  return IntegerType::get(getContext(), options.use64bitIndex ? 64 : 32);
+Type SPIRVTypeConverter::getIndexType(MLIRContext *context) {
+  // Convert to 32-bit integers for now. Might need a way to control this in
+  // future.
+  // TODO: It is probably better to make it 64-bit integers. To
+  // this some support is needed in SPIR-V dialect for Conversion
+  // instructions. The Vulkan spec requires the builtins like
+  // GlobalInvocationID, etc. to be 32-bit (unsigned) integers which should be
+  // SExtended to 64-bit for index computations.
+  return IntegerType::get(context, 32);
 }
 
 /// Mapping between SPIR-V storage classes to memref memory spaces.
@@ -139,16 +146,13 @@ Type SPIRVTypeConverter::getIndexType() const {
   MAP_FN(spirv::StorageClass::CrossWorkgroup, 11)                              \
   MAP_FN(spirv::StorageClass::AtomicCounter, 12)                               \
   MAP_FN(spirv::StorageClass::Image, 13)                                       \
-  MAP_FN(spirv::StorageClass::CallableDataKHR, 14)                             \
-  MAP_FN(spirv::StorageClass::IncomingCallableDataKHR, 15)                     \
-  MAP_FN(spirv::StorageClass::RayPayloadKHR, 16)                               \
-  MAP_FN(spirv::StorageClass::HitAttributeKHR, 17)                             \
-  MAP_FN(spirv::StorageClass::IncomingRayPayloadKHR, 18)                       \
-  MAP_FN(spirv::StorageClass::ShaderRecordBufferKHR, 19)                       \
-  MAP_FN(spirv::StorageClass::PhysicalStorageBuffer, 20)                       \
-  MAP_FN(spirv::StorageClass::CodeSectionINTEL, 21)                            \
-  MAP_FN(spirv::StorageClass::DeviceOnlyINTEL, 22)                             \
-  MAP_FN(spirv::StorageClass::HostOnlyINTEL, 23)
+  MAP_FN(spirv::StorageClass::CallableDataNV, 14)                              \
+  MAP_FN(spirv::StorageClass::IncomingCallableDataNV, 15)                      \
+  MAP_FN(spirv::StorageClass::RayPayloadNV, 16)                                \
+  MAP_FN(spirv::StorageClass::HitAttributeNV, 17)                              \
+  MAP_FN(spirv::StorageClass::IncomingRayPayloadNV, 18)                        \
+  MAP_FN(spirv::StorageClass::ShaderRecordBufferNV, 19)                        \
+  MAP_FN(spirv::StorageClass::PhysicalStorageBuffer, 20)
 
 unsigned
 SPIRVTypeConverter::getMemorySpaceForStorageClass(spirv::StorageClass storage) {
@@ -177,10 +181,6 @@ SPIRVTypeConverter::getStorageClassForMemorySpace(unsigned space) {
 
 const SPIRVTypeConverter::Options &SPIRVTypeConverter::getOptions() const {
   return options;
-}
-
-MLIRContext *SPIRVTypeConverter::getContext() const {
-  return targetEnv.getAttr().getContext();
 }
 
 #undef STORAGE_SPACE_MAP_LIST
@@ -235,7 +235,7 @@ getTypeNumBytes(const SPIRVTypeConverter::Options &options, Type type) {
       return llvm::None;
 
     int64_t memrefSize = -1;
-    for (const auto &shape : enumerate(dims))
+    for (auto shape : enumerate(dims))
       memrefSize = std::max(memrefSize, shape.value() * strides[shape.index()]);
 
     return (offset + memrefSize) * elementSize.getValue();
@@ -505,7 +505,9 @@ SPIRVTypeConverter::SPIRVTypeConverter(spirv::TargetEnvAttr targetAttr,
   // want to validate and convert to be safe.
   addConversion([](spirv::SPIRVType type) { return type; });
 
-  addConversion([this](IndexType /*indexType*/) { return getIndexType(); });
+  addConversion([](IndexType indexType) {
+    return SPIRVTypeConverter::getIndexType(indexType.getContext());
+  });
 
   addConversion([this](IntegerType intType) -> Optional<Type> {
     if (auto scalarType = intType.dyn_cast<spirv::ScalarType>())
@@ -544,20 +546,20 @@ public:
   using OpConversionPattern<FuncOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(FuncOp funcOp, OpAdaptor adaptor,
+  matchAndRewrite(FuncOp funcOp, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override;
 };
 } // namespace
 
 LogicalResult
-FuncOpConversion::matchAndRewrite(FuncOp funcOp, OpAdaptor adaptor,
+FuncOpConversion::matchAndRewrite(FuncOp funcOp, ArrayRef<Value> operands,
                                   ConversionPatternRewriter &rewriter) const {
   auto fnType = funcOp.getType();
   if (fnType.getNumResults() > 1)
     return failure();
 
   TypeConverter::SignatureConversion signatureConverter(fnType.getNumInputs());
-  for (const auto &argType : enumerate(fnType.getInputs())) {
+  for (auto argType : enumerate(fnType.getInputs())) {
     auto convertedType = getTypeConverter()->convertType(argType.value());
     if (!convertedType)
       return failure();
@@ -580,9 +582,9 @@ FuncOpConversion::matchAndRewrite(FuncOp funcOp, OpAdaptor adaptor,
 
   // Copy over all attributes other than the function name and type.
   for (const auto &namedAttr : funcOp->getAttrs()) {
-    if (namedAttr.getName() != FunctionOpInterface::getTypeAttrName() &&
-        namedAttr.getName() != SymbolTable::getSymbolAttrName())
-      newFuncOp->setAttr(namedAttr.getName(), namedAttr.getValue());
+    if (namedAttr.first != impl::getTypeAttrName() &&
+        namedAttr.first != SymbolTable::getSymbolAttrName())
+      newFuncOp->setAttr(namedAttr.first, namedAttr.second);
   }
 
   rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
@@ -628,7 +630,7 @@ static std::string getBuiltinVarName(spirv::BuiltIn builtin) {
 /// Gets or inserts a global variable for a builtin within `body` block.
 static spirv::GlobalVariableOp
 getOrInsertBuiltinVariable(Block &body, Location loc, spirv::BuiltIn builtin,
-                           Type integerType, OpBuilder &builder) {
+                           OpBuilder &builder) {
   if (auto varOp = getBuiltinVariable(body, builtin))
     return varOp;
 
@@ -642,8 +644,9 @@ getOrInsertBuiltinVariable(Block &body, Location loc, spirv::BuiltIn builtin,
   case spirv::BuiltIn::WorkgroupId:
   case spirv::BuiltIn::LocalInvocationId:
   case spirv::BuiltIn::GlobalInvocationId: {
-    auto ptrType = spirv::PointerType::get(VectorType::get({3}, integerType),
-                                           spirv::StorageClass::Input);
+    auto ptrType = spirv::PointerType::get(
+        VectorType::get({3}, builder.getIntegerType(32)),
+        spirv::StorageClass::Input);
     std::string name = getBuiltinVarName(builtin);
     newVarOp =
         builder.create<spirv::GlobalVariableOp>(loc, ptrType, name, builtin);
@@ -652,8 +655,8 @@ getOrInsertBuiltinVariable(Block &body, Location loc, spirv::BuiltIn builtin,
   case spirv::BuiltIn::SubgroupId:
   case spirv::BuiltIn::NumSubgroups:
   case spirv::BuiltIn::SubgroupSize: {
-    auto ptrType =
-        spirv::PointerType::get(integerType, spirv::StorageClass::Input);
+    auto ptrType = spirv::PointerType::get(builder.getIntegerType(32),
+                                           spirv::StorageClass::Input);
     std::string name = getBuiltinVarName(builtin);
     newVarOp =
         builder.create<spirv::GlobalVariableOp>(loc, ptrType, name, builtin);
@@ -668,7 +671,6 @@ getOrInsertBuiltinVariable(Block &body, Location loc, spirv::BuiltIn builtin,
 
 Value mlir::spirv::getBuiltinVariableValue(Operation *op,
                                            spirv::BuiltIn builtin,
-                                           Type integerType,
                                            OpBuilder &builder) {
   Operation *parent = SymbolTable::getNearestSymbolTable(op->getParentOp());
   if (!parent) {
@@ -676,9 +678,8 @@ Value mlir::spirv::getBuiltinVariableValue(Operation *op,
     return nullptr;
   }
 
-  spirv::GlobalVariableOp varOp =
-      getOrInsertBuiltinVariable(*parent->getRegion(0).begin(), op->getLoc(),
-                                 builtin, integerType, builder);
+  spirv::GlobalVariableOp varOp = getOrInsertBuiltinVariable(
+      *parent->getRegion(0).begin(), op->getLoc(), builtin, builder);
   Value ptr = builder.create<spirv::AddressOfOp>(op->getLoc(), varOp);
   return builder.create<spirv::LoadOp>(op->getLoc(), ptr);
 }
@@ -690,10 +691,10 @@ Value mlir::spirv::getBuiltinVariableValue(Operation *op,
 /// Returns the pointer type for the push constant storage containing
 /// `elementCount` 32-bit integer values.
 static spirv::PointerType getPushConstantStorageType(unsigned elementCount,
-                                                     Builder &builder,
-                                                     Type indexType) {
-  auto arrayType = spirv::ArrayType::get(indexType, elementCount,
-                                         /*stride=*/4);
+                                                     Builder &builder) {
+  auto arrayType = spirv::ArrayType::get(
+      SPIRVTypeConverter::getIndexType(builder.getContext()), elementCount,
+      /*stride=*/4);
   auto structType = spirv::StructType::get({arrayType}, /*offsetInfo=*/0);
   return spirv::PointerType::get(structType, spirv::StorageClass::PushConstant);
 }
@@ -703,10 +704,7 @@ static spirv::PointerType getPushConstantStorageType(unsigned elementCount,
 static spirv::GlobalVariableOp getPushConstantVariable(Block &body,
                                                        unsigned elementCount) {
   for (auto varOp : body.getOps<spirv::GlobalVariableOp>()) {
-    auto ptrType = varOp.type().dyn_cast<spirv::PointerType>();
-    if (!ptrType)
-      continue;
-
+    auto ptrType = varOp.type().cast<spirv::PointerType>();
     // Note that Vulkan requires "There must be no more than one push constant
     // block statically used per shader entry point." So we should always reuse
     // the existing one.
@@ -727,21 +725,19 @@ static spirv::GlobalVariableOp getPushConstantVariable(Block &body,
 /// `elementCount` 32-bit integer values in `block`.
 static spirv::GlobalVariableOp
 getOrInsertPushConstantVariable(Location loc, Block &block,
-                                unsigned elementCount, OpBuilder &b,
-                                Type indexType) {
+                                unsigned elementCount, OpBuilder &b) {
   if (auto varOp = getPushConstantVariable(block, elementCount))
     return varOp;
 
   auto builder = OpBuilder::atBlockBegin(&block, b.getListener());
-  auto type = getPushConstantStorageType(elementCount, builder, indexType);
+  auto type = getPushConstantStorageType(elementCount, builder);
   const char *name = "__push_constant_var__";
   return builder.create<spirv::GlobalVariableOp>(loc, type, name,
                                                  /*initializer=*/nullptr);
 }
 
 Value spirv::getPushConstantValue(Operation *op, unsigned elementCount,
-                                  unsigned offset, Type integerType,
-                                  OpBuilder &builder) {
+                                  unsigned offset, OpBuilder &builder) {
   Location loc = op->getLoc();
   Operation *parent = SymbolTable::getNearestSymbolTable(op->getParentOp());
   if (!parent) {
@@ -750,11 +746,12 @@ Value spirv::getPushConstantValue(Operation *op, unsigned elementCount,
   }
 
   spirv::GlobalVariableOp varOp = getOrInsertPushConstantVariable(
-      loc, parent->getRegion(0).front(), elementCount, builder, integerType);
+      loc, parent->getRegion(0).front(), elementCount, builder);
 
-  Value zeroOp = spirv::ConstantOp::getZero(integerType, loc, builder);
+  auto i32Type = SPIRVTypeConverter::getIndexType(builder.getContext());
+  Value zeroOp = spirv::ConstantOp::getZero(i32Type, loc, builder);
   Value offsetOp = builder.create<spirv::ConstantOp>(
-      loc, integerType, builder.getI32IntegerAttr(offset));
+      loc, i32Type, builder.getI32IntegerAttr(offset));
   auto addrOp = builder.create<spirv::AddressOfOp>(loc, varOp);
   auto acOp = builder.create<spirv::AccessChainOp>(
       loc, addrOp, llvm::makeArrayRef({zeroOp, offsetOp}));
@@ -766,10 +763,12 @@ Value spirv::getPushConstantValue(Operation *op, unsigned elementCount,
 //===----------------------------------------------------------------------===//
 
 Value mlir::spirv::linearizeIndex(ValueRange indices, ArrayRef<int64_t> strides,
-                                  int64_t offset, Type integerType,
-                                  Location loc, OpBuilder &builder) {
+                                  int64_t offset, Location loc,
+                                  OpBuilder &builder) {
   assert(indices.size() == strides.size() &&
          "must provide indices for all dimensions");
+
+  auto indexType = SPIRVTypeConverter::getIndexType(builder.getContext());
 
   // TODO: Consider moving to use affine.apply and patterns converting
   // affine.apply to standard ops. This needs converting to SPIR-V passes to be
@@ -777,11 +776,10 @@ Value mlir::spirv::linearizeIndex(ValueRange indices, ArrayRef<int64_t> strides,
   // using other dialects. At the moment SPIR-V is the final sink.
 
   Value linearizedIndex = builder.create<spirv::ConstantOp>(
-      loc, integerType, IntegerAttr::get(integerType, offset));
-  for (const auto &index : llvm::enumerate(indices)) {
+      loc, indexType, IntegerAttr::get(indexType, offset));
+  for (auto index : llvm::enumerate(indices)) {
     Value strideVal = builder.create<spirv::ConstantOp>(
-        loc, integerType,
-        IntegerAttr::get(integerType, strides[index.index()]));
+        loc, indexType, IntegerAttr::get(indexType, strides[index.index()]));
     Value update = builder.create<spirv::IMulOp>(loc, strideVal, index.value());
     linearizedIndex =
         builder.create<spirv::IAddOp>(loc, linearizedIndex, update);
@@ -802,7 +800,7 @@ spirv::AccessChainOp mlir::spirv::getElementPtr(
     return nullptr;
   }
 
-  auto indexType = typeConverter.getIndexType();
+  auto indexType = typeConverter.getIndexType(builder.getContext());
 
   SmallVector<Value, 2> linearizedIndices;
   auto zero = spirv::ConstantOp::getZero(indexType, loc, builder);
@@ -814,7 +812,7 @@ spirv::AccessChainOp mlir::spirv::getElementPtr(
     linearizedIndices.push_back(zero);
   } else {
     linearizedIndices.push_back(
-        linearizeIndex(indices, strides, offset, indexType, loc, builder));
+        linearizeIndex(indices, strides, offset, loc, builder));
   }
   return builder.create<spirv::AccessChainOp>(loc, basePtr, linearizedIndices);
 }
@@ -843,24 +841,22 @@ bool SPIRVConversionTarget::isLegalOp(Operation *op) {
   // Make sure this op is available at the given version. Ops not implementing
   // QueryMinVersionInterface/QueryMaxVersionInterface are available to all
   // SPIR-V versions.
-  if (auto minVersionIfx = dyn_cast<spirv::QueryMinVersionInterface>(op)) {
-    Optional<spirv::Version> minVersion = minVersionIfx.getMinVersion();
-    if (minVersion && *minVersion > this->targetEnv.getVersion()) {
+  if (auto minVersion = dyn_cast<spirv::QueryMinVersionInterface>(op))
+    if (minVersion.getMinVersion() > this->targetEnv.getVersion()) {
       LLVM_DEBUG(llvm::dbgs()
                  << op->getName() << " illegal: requiring min version "
-                 << spirv::stringifyVersion(*minVersion) << "\n");
+                 << spirv::stringifyVersion(minVersion.getMinVersion())
+                 << "\n");
       return false;
     }
-  }
-  if (auto maxVersionIfx = dyn_cast<spirv::QueryMaxVersionInterface>(op)) {
-    Optional<spirv::Version> maxVersion = maxVersionIfx.getMaxVersion();
-    if (maxVersion && *maxVersion < this->targetEnv.getVersion()) {
+  if (auto maxVersion = dyn_cast<spirv::QueryMaxVersionInterface>(op))
+    if (maxVersion.getMaxVersion() < this->targetEnv.getVersion()) {
       LLVM_DEBUG(llvm::dbgs()
                  << op->getName() << " illegal: requiring max version "
-                 << spirv::stringifyVersion(*maxVersion) << "\n");
+                 << spirv::stringifyVersion(maxVersion.getMaxVersion())
+                 << "\n");
       return false;
     }
-  }
 
   // Make sure this op's required extensions are allowed to use. Ops not
   // implementing QueryExtensionInterface do not require extensions to be
@@ -881,11 +877,6 @@ bool SPIRVConversionTarget::isLegalOp(Operation *op) {
   SmallVector<Type, 4> valueTypes;
   valueTypes.append(op->operand_type_begin(), op->operand_type_end());
   valueTypes.append(op->result_type_begin(), op->result_type_end());
-
-  // Ensure that all types have been converted to SPIRV types.
-  if (llvm::any_of(valueTypes,
-                   [](Type t) { return !t.isa<spirv::SPIRVType>(); }))
-    return false;
 
   // Special treatment for global variables, whose type requirements are
   // conveyed by type attributes.

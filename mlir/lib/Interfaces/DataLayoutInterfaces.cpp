@@ -23,13 +23,13 @@ using namespace mlir;
 
 /// Reports that the given type is missing the data layout information and
 /// exits.
-[[noreturn]] static void reportMissingDataLayout(Type type) {
+static LLVM_ATTRIBUTE_NORETURN void reportMissingDataLayout(Type type) {
   std::string message;
   llvm::raw_string_ostream os(message);
   os << "neither the scoping op nor the type class provide data layout "
         "information for "
      << type;
-  llvm::report_fatal_error(Twine(os.str()));
+  llvm::report_fatal_error(os.str());
 }
 
 /// Returns the bitwidth of the index type if specified in the param list.
@@ -147,11 +147,11 @@ mlir::detail::filterEntriesForType(DataLayoutEntryListRef entries,
 
 DataLayoutEntryInterface
 mlir::detail::filterEntryForIdentifier(DataLayoutEntryListRef entries,
-                                       StringAttr id) {
+                                       Identifier id) {
   const auto *it = llvm::find_if(entries, [id](DataLayoutEntryInterface entry) {
-    if (!entry.getKey().is<StringAttr>())
+    if (!entry.getKey().is<Identifier>())
       return false;
-    return entry.getKey().get<StringAttr>() == id;
+    return entry.getKey().get<Identifier>() == id;
   });
   return it == entries.end() ? DataLayoutEntryInterface() : *it;
 }
@@ -269,7 +269,7 @@ mlir::DataLayout::DataLayout() : DataLayout(ModuleOp()) {}
 
 mlir::DataLayout::DataLayout(DataLayoutOpInterface op)
     : originalLayout(getCombinedDataLayout(op)), scope(op) {
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+#ifndef NDEBUG
   checkMissingLayout(originalLayout, op);
   collectParentLayouts(op, layoutStack);
 #endif
@@ -277,7 +277,7 @@ mlir::DataLayout::DataLayout(DataLayoutOpInterface op)
 
 mlir::DataLayout::DataLayout(ModuleOp op)
     : originalLayout(getCombinedDataLayout(op)), scope(op) {
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+#ifndef NDEBUG
   checkMissingLayout(originalLayout, op);
   collectParentLayouts(op, layoutStack);
 #endif
@@ -297,7 +297,7 @@ mlir::DataLayout mlir::DataLayout::closest(Operation *op) {
 }
 
 void mlir::DataLayout::checkValid() const {
-#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+#ifndef NDEBUG
   SmallVector<DataLayoutSpecInterface> specs;
   collectParentLayouts(scope, specs);
   assert(specs.size() == layoutStack.size() &&
@@ -384,12 +384,12 @@ unsigned mlir::DataLayout::getTypePreferredAlignment(Type t) const {
 
 void DataLayoutSpecInterface::bucketEntriesByType(
     DenseMap<TypeID, DataLayoutEntryList> &types,
-    DenseMap<StringAttr, DataLayoutEntryInterface> &ids) {
+    DenseMap<Identifier, DataLayoutEntryInterface> &ids) {
   for (DataLayoutEntryInterface entry : getEntries()) {
     if (auto type = entry.getKey().dyn_cast<Type>())
       types[type.getTypeID()].push_back(entry);
     else
-      ids[entry.getKey().get<StringAttr>()] = entry;
+      ids[entry.getKey().get<Identifier>()] = entry;
   }
 }
 
@@ -403,7 +403,7 @@ LogicalResult mlir::detail::verifyDataLayoutSpec(DataLayoutSpecInterface spec,
   // Second, dispatch verifications of entry groups to types or dialects they
   // are are associated with.
   DenseMap<TypeID, DataLayoutEntryList> types;
-  DenseMap<StringAttr, DataLayoutEntryInterface> ids;
+  DenseMap<Identifier, DataLayoutEntryInterface> ids;
   spec.bucketEntriesByType(types, ids);
 
   for (const auto &kvp : types) {
@@ -430,20 +430,16 @@ LogicalResult mlir::detail::verifyDataLayoutSpec(DataLayoutSpecInterface spec,
   }
 
   for (const auto &kvp : ids) {
-    StringAttr identifier = kvp.second.getKey().get<StringAttr>();
-    Dialect *dialect = identifier.getReferencedDialect();
+    Identifier identifier = kvp.second.getKey().get<Identifier>();
+    Dialect *dialect = identifier.getDialect();
 
     // Ignore attributes that belong to an unknown dialect, the dialect may
     // actually implement the relevant interface but we don't know about that.
     if (!dialect)
       continue;
 
-    const auto *iface = dyn_cast<DataLayoutDialectInterface>(dialect);
-    if (!iface) {
-      return emitError(loc)
-             << "the '" << dialect->getNamespace()
-             << "' dialect does not support identifier data layout entries";
-    }
+    const auto *iface =
+        dialect->getRegisteredInterface<DataLayoutDialectInterface>();
     if (failed(iface->verifyEntry(kvp.second, loc)))
       return failure();
   }

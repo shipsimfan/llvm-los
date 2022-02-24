@@ -19,6 +19,8 @@
 
 namespace llvm {
 
+class BasicBlock;
+
 class UnifyFunctionExitNodesLegacyPass : public FunctionPass {
 public:
   static char ID; // Pass identification, replacement for typeid

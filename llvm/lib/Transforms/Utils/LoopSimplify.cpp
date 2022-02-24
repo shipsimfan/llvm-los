@@ -293,8 +293,9 @@ static Loop *separateNestedLoop(Loop *L, BasicBlock *Preheader,
   // L is now a subloop of our outer loop.
   NewOuter->addChildLoop(L);
 
-  for (BasicBlock *BB : L->blocks())
-    NewOuter->addBlockEntry(BB);
+  for (Loop::block_iterator I = L->block_begin(), E = L->block_end();
+       I != E; ++I)
+    NewOuter->addBlockEntry(*I);
 
   // Now reset the header in L, which had been moved by
   // SplitBlockPredecessors for the outer loop.
@@ -495,12 +496,12 @@ ReprocessLoop:
   // predecessors that are not in the loop.  This is not valid for natural
   // loops, but can occur if the blocks are unreachable.  Since they are
   // unreachable we can just shamelessly delete those CFG edges!
-  for (BasicBlock *BB : L->blocks()) {
-    if (BB == L->getHeader())
-      continue;
+  for (Loop::block_iterator BB = L->block_begin(), E = L->block_end();
+       BB != E; ++BB) {
+    if (*BB == L->getHeader()) continue;
 
     SmallPtrSet<BasicBlock*, 4> BadPreds;
-    for (BasicBlock *P : predecessors(BB))
+    for (BasicBlock *P : predecessors(*BB))
       if (!L->contains(P))
         BadPreds.insert(P);
 
@@ -512,7 +513,7 @@ ReprocessLoop:
 
       // Zap the dead pred's terminator and replace it with unreachable.
       Instruction *TI = P->getTerminator();
-      changeToUnreachable(TI, PreserveLCSSA,
+      changeToUnreachable(TI, /*UseLLVMTrap=*/false, PreserveLCSSA,
                           /*DTU=*/nullptr, MSSAU);
       Changed = true;
     }
@@ -778,7 +779,8 @@ namespace {
       AU.addPreserved<DependenceAnalysisWrapperPass>();
       AU.addPreservedID(BreakCriticalEdgesID);  // No critical edges added.
       AU.addPreserved<BranchProbabilityInfoWrapperPass>();
-      AU.addPreserved<MemorySSAWrapperPass>();
+      if (EnableMSSALoopDependency)
+        AU.addPreserved<MemorySSAWrapperPass>();
     }
 
     /// verifyAnalysis() - Verify LoopSimplifyForm's guarantees.
@@ -812,10 +814,12 @@ bool LoopSimplify::runOnFunction(Function &F) {
       &getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F);
   MemorySSA *MSSA = nullptr;
   std::unique_ptr<MemorySSAUpdater> MSSAU;
-  auto *MSSAAnalysis = getAnalysisIfAvailable<MemorySSAWrapperPass>();
-  if (MSSAAnalysis) {
-    MSSA = &MSSAAnalysis->getMSSA();
-    MSSAU = std::make_unique<MemorySSAUpdater>(MSSA);
+  if (EnableMSSALoopDependency) {
+    auto *MSSAAnalysis = getAnalysisIfAvailable<MemorySSAWrapperPass>();
+    if (MSSAAnalysis) {
+      MSSA = &MSSAAnalysis->getMSSA();
+      MSSAU = std::make_unique<MemorySSAUpdater>(MSSA);
+    }
   }
 
   bool PreserveLCSSA = mustPreserveAnalysisID(LCSSAID);
@@ -861,6 +865,9 @@ PreservedAnalyses LoopSimplifyPass::run(Function &F,
   PreservedAnalyses PA;
   PA.preserve<DominatorTreeAnalysis>();
   PA.preserve<LoopAnalysis>();
+  PA.preserve<BasicAA>();
+  PA.preserve<GlobalsAA>();
+  PA.preserve<SCEVAA>();
   PA.preserve<ScalarEvolutionAnalysis>();
   PA.preserve<DependenceAnalysis>();
   if (MSSAAnalysis)

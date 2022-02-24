@@ -34,9 +34,8 @@ appendSpeculatableOperands(const Value *V,
 
   for (const Value *Operand : U->operands())
     if (Visited.insert(Operand).second)
-      if (const auto *I = dyn_cast<Instruction>(Operand))
-        if (!I->mayHaveSideEffects() && !I->isTerminator())
-          Worklist.push_back(I);
+      if (isSafeToSpeculativelyExecute(Operand))
+        Worklist.push_back(Operand);
 }
 
 static void completeEphemeralValues(SmallPtrSetImpl<const Value *> &Visited,

@@ -11,17 +11,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
-#include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
-#include "mlir/Dialect/Affine/Analysis/AffineStructures.h"
-#include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
-#include "mlir/Dialect/Affine/Analysis/Utils.h"
+#include "mlir/Analysis/AffineAnalysis.h"
+#include "mlir/Analysis/AffineStructures.h"
+#include "mlir/Analysis/LoopAnalysis.h"
+#include "mlir/Analysis/Utils.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
-#include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Affine/Passes.h"
-#include "mlir/Dialect/Affine/Utils.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Transforms/LoopUtils.h"
+#include "mlir/Transforms/Utils.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 using namespace mlir;
@@ -38,7 +38,7 @@ struct LoopTiling : public AffineLoopTilingBase<LoopTiling> {
     this->cacheSizeInKiB = cacheSizeBytes / 1024;
   }
 
-  void runOnOperation() override;
+  void runOnFunction() override;
   void getTileSizes(ArrayRef<AffineForOp> band,
                     SmallVectorImpl<unsigned> *tileSizes);
 
@@ -49,7 +49,7 @@ struct LoopTiling : public AffineLoopTilingBase<LoopTiling> {
   bool avoidMaxMinBounds = true;
 };
 
-} // namespace
+} // end anonymous namespace
 
 /// Creates a pass to perform loop tiling on all suitable loop nests of a
 /// Function.
@@ -160,10 +160,10 @@ void LoopTiling::getTileSizes(ArrayRef<AffineForOp> band,
     adjustToDivisorsOfTripCounts(band, tileSizes);
 }
 
-void LoopTiling::runOnOperation() {
+void LoopTiling::runOnFunction() {
   // Bands of loops to tile.
   std::vector<SmallVector<AffineForOp, 6>> bands;
-  getTileableBands(getOperation(), &bands);
+  getTileableBands(getFunction(), &bands);
 
   // Tile each band.
   for (auto &band : bands) {
@@ -178,23 +178,14 @@ void LoopTiling::runOnOperation() {
       diag << "]\n";
     }
     SmallVector<AffineForOp, 6> tiledNest;
-    if (failed(tilePerfectlyNested(band, tileSizes, &tiledNest))) {
-      // An empty band always succeeds.
-      assert(!band.empty() && "guaranteed to succeed on empty bands");
-      LLVM_DEBUG(band.front()->emitRemark("loop tiling failed!\n"));
-      continue;
-    }
+    if (failed(tilePerfectlyNested(band, tileSizes, &tiledNest)))
+      return signalPassFailure();
 
     // Separate full and partial tiles.
     if (separate) {
       auto intraTileLoops =
           MutableArrayRef<AffineForOp>(tiledNest).drop_front(band.size());
-      if (failed(separateFullTiles(intraTileLoops))) {
-        assert(!intraTileLoops.empty() &&
-               "guaranteed to succeed on empty bands");
-        LLVM_DEBUG(intraTileLoops.front()->emitRemark(
-            "separation post tiling failed!\n"));
-      }
+      (void)separateFullTiles(intraTileLoops);
     }
   }
 }

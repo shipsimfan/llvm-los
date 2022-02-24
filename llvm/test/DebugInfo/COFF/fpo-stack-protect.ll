@@ -1,4 +1,4 @@
-; RUN: llc < %s -experimental-debug-variable-locations=true | FileCheck %s
+; RUN: llc < %s | FileCheck %s
 
 ; C source:
 ; void escape(int *);
@@ -30,7 +30,7 @@
 ; CHECK:         addl    $20, %esp
 ; CHECK:         popl    %esi
 ; CHECK:         retl
-; CHECK: Ltmp4:
+; CHECK: Ltmp3:
 ; CHECK:         .cv_fpo_endproc
 
 ; ModuleID = 't.c'

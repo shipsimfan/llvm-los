@@ -2,10 +2,6 @@ set(LLVM_TARGET_DEFINITIONS Options.td)
 tablegen(LLVM Options.inc -gen-opt-parser-defs)
 add_public_tablegen_target(ELFOptionsTableGen)
 
-if(LLVM_ENABLE_ZLIB)
-  set(imported_libs ZLIB::ZLIB)
-endif()
-
 add_lld_library(lldELF
   AArch64ErrataFix.cpp
   Arch/AArch64.cpp
@@ -62,7 +58,6 @@ add_lld_library(lldELF
 
   LINK_LIBS
   lldCommon
-  ${imported_libs}
   ${LLVM_PTHREAD_LIB}
 
   DEPENDS

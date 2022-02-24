@@ -18,7 +18,6 @@
 #include "llvm-c/Transforms/AggressiveInstCombine.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
@@ -200,13 +199,14 @@ static bool foldGuardedFunnelShift(Instruction &I, const DominatorTree &DT) {
 /// of 'and' ops, then we also need to capture the fact that we saw an
 /// "and X, 1", so that's an extra return value for that case.
 struct MaskOps {
-  Value *Root = nullptr;
+  Value *Root;
   APInt Mask;
   bool MatchAndChain;
-  bool FoundAnd1 = false;
+  bool FoundAnd1;
 
   MaskOps(unsigned BitWidth, bool MatchAnds)
-      : Mask(APInt::getZero(BitWidth)), MatchAndChain(MatchAnds) {}
+      : Root(nullptr), Mask(APInt::getNullValue(BitWidth)),
+        MatchAndChain(MatchAnds), FoundAnd1(false) {}
 };
 
 /// This is a recursive helper for foldAnyOrAllBitsSet() that walks through a
@@ -377,10 +377,10 @@ static bool foldUnusualPatterns(Function &F, DominatorTree &DT) {
     // Also, we want to avoid matching partial patterns.
     // TODO: It would be more efficient if we removed dead instructions
     // iteratively in this loop rather than waiting until the end.
-    for (Instruction &I : llvm::reverse(BB)) {
+    for (Instruction &I : make_range(BB.rbegin(), BB.rend())) {
       MadeChange |= foldAnyOrAllBitsSet(I);
       MadeChange |= foldGuardedFunnelShift(I, DT);
-      MadeChange |= tryToRecognizePopCount(I);
+      MadeChange |= tryToRecognizePopCount(I); 
     }
   }
 
@@ -394,11 +394,10 @@ static bool foldUnusualPatterns(Function &F, DominatorTree &DT) {
 
 /// This is the entry point for all transforms. Pass manager differences are
 /// handled in the callers of this function.
-static bool runImpl(Function &F, AssumptionCache &AC, TargetLibraryInfo &TLI,
-                    DominatorTree &DT) {
+static bool runImpl(Function &F, TargetLibraryInfo &TLI, DominatorTree &DT) {
   bool MadeChange = false;
   const DataLayout &DL = F.getParent()->getDataLayout();
-  TruncInstCombine TIC(AC, TLI, DL, DT);
+  TruncInstCombine TIC(TLI, DL, DT);
   MadeChange |= TIC.run(F);
   MadeChange |= foldUnusualPatterns(F, DT);
   return MadeChange;
@@ -407,7 +406,6 @@ static bool runImpl(Function &F, AssumptionCache &AC, TargetLibraryInfo &TLI,
 void AggressiveInstCombinerLegacyPass::getAnalysisUsage(
     AnalysisUsage &AU) const {
   AU.setPreservesCFG();
-  AU.addRequired<AssumptionCacheTracker>();
   AU.addRequired<DominatorTreeWrapperPass>();
   AU.addRequired<TargetLibraryInfoWrapperPass>();
   AU.addPreserved<AAResultsWrapperPass>();
@@ -417,24 +415,24 @@ void AggressiveInstCombinerLegacyPass::getAnalysisUsage(
 }
 
 bool AggressiveInstCombinerLegacyPass::runOnFunction(Function &F) {
-  auto &AC = getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F);
   auto &TLI = getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
   auto &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-  return runImpl(F, AC, TLI, DT);
+  return runImpl(F, TLI, DT);
 }
 
 PreservedAnalyses AggressiveInstCombinePass::run(Function &F,
                                                  FunctionAnalysisManager &AM) {
-  auto &AC = AM.getResult<AssumptionAnalysis>(F);
   auto &TLI = AM.getResult<TargetLibraryAnalysis>(F);
   auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
-  if (!runImpl(F, AC, TLI, DT)) {
+  if (!runImpl(F, TLI, DT)) {
     // No changes, all analyses are preserved.
     return PreservedAnalyses::all();
   }
   // Mark all the analyses that instcombine updates as preserved.
   PreservedAnalyses PA;
   PA.preserveSet<CFGAnalyses>();
+  PA.preserve<AAManager>();
+  PA.preserve<GlobalsAA>();
   return PA;
 }
 
@@ -442,7 +440,6 @@ char AggressiveInstCombinerLegacyPass::ID = 0;
 INITIALIZE_PASS_BEGIN(AggressiveInstCombinerLegacyPass,
                       "aggressive-instcombine",
                       "Combine pattern based expressions", false, false)
-INITIALIZE_PASS_DEPENDENCY(AssumptionCacheTracker)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
 INITIALIZE_PASS_END(AggressiveInstCombinerLegacyPass, "aggressive-instcombine",

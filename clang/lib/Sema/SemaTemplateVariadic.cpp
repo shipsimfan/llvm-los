@@ -308,7 +308,8 @@ Sema::DiagnoseUnexpandedParameterPacks(SourceLocation Loc,
         }
         return declaresSameEntity(Pack.first.get<NamedDecl *>(), LocalPack);
       };
-      if (llvm::any_of(LSI->LocalPacks, DeclaresThisPack))
+      if (std::find_if(LSI->LocalPacks.begin(), LSI->LocalPacks.end(),
+                       DeclaresThisPack) != LSI->LocalPacks.end())
         LambdaParamPackReferences.push_back(Pack);
     }
 
@@ -327,8 +328,8 @@ Sema::DiagnoseUnexpandedParameterPacks(SourceLocation Loc,
       bool EnclosingStmtExpr = false;
       for (unsigned N = FunctionScopes.size(); N; --N) {
         sema::FunctionScopeInfo *Func = FunctionScopes[N-1];
-        if (llvm::any_of(
-                Func->CompoundScopes,
+        if (std::any_of(
+                Func->CompoundScopes.begin(), Func->CompoundScopes.end(),
                 [](sema::CompoundScopeInfo &CSI) { return CSI.IsStmtExpr; })) {
           EnclosingStmtExpr = true;
           break;
@@ -870,7 +871,7 @@ bool Sema::containsUnexpandedParameterPacks(Declarator &D) {
 
   case TST_typeofExpr:
   case TST_decltype:
-  case TST_bitint:
+  case TST_extint:
     if (DS.getRepAsExpr() &&
         DS.getRepAsExpr()->containsUnexpandedParameterPack())
       return true;
@@ -892,7 +893,6 @@ bool Sema::containsUnexpandedParameterPacks(Declarator &D) {
   case TST_Fract:
   case TST_Float16:
   case TST_float128:
-  case TST_ibm128:
   case TST_bool:
   case TST_decimal32:
   case TST_decimal64:

@@ -9,7 +9,6 @@
 #include "StaticAccessedThroughInstanceCheck.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
-#include "llvm/ADT/StringRef.h"
 
 using namespace clang::ast_matchers;
 
@@ -55,7 +54,7 @@ void StaticAccessedThroughInstanceCheck::check(
 
   const Expr *BaseExpr = MemberExpression->getBase();
 
-  // Do not warn for overloaded -> operators.
+  // Do not warn for overlaoded -> operators.
   if (isa<CXXOperatorCallExpr>(BaseExpr))
     return;
 
@@ -70,10 +69,6 @@ void StaticAccessedThroughInstanceCheck::check(
   PrintingPolicyWithSupressedTag.SuppressUnwrittenScope = true;
   std::string BaseTypeName =
       BaseType.getAsString(PrintingPolicyWithSupressedTag);
-
-  // Do not warn for CUDA built-in variables.
-  if (StringRef(BaseTypeName).startswith("__cuda_builtin_"))
-    return;
 
   SourceLocation MemberExprStartLoc = MemberExpression->getBeginLoc();
   auto Diag =

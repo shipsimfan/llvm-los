@@ -65,23 +65,13 @@ class MemoryMappedSegment {
   MemoryMappedSegmentData *data_;
 };
 
-class MemoryMappingLayoutBase {
- public:
-  virtual bool Next(MemoryMappedSegment *segment) { UNIMPLEMENTED(); }
-  virtual bool Error() const { UNIMPLEMENTED(); };
-  virtual void Reset() { UNIMPLEMENTED(); }
-
- protected:
-  ~MemoryMappingLayoutBase() {}
-};
-
-class MemoryMappingLayout final : public MemoryMappingLayoutBase {
+class MemoryMappingLayout {
  public:
   explicit MemoryMappingLayout(bool cache_enabled);
   ~MemoryMappingLayout();
-  virtual bool Next(MemoryMappedSegment *segment) override;
-  virtual bool Error() const override;
-  virtual void Reset() override;
+  bool Next(MemoryMappedSegment *segment);
+  bool Error() const;
+  void Reset();
   // In some cases, e.g. when running under a sandbox on Linux, ASan is unable
   // to obtain the memory mappings. It should fall back to pre-cached data
   // instead of aborting.

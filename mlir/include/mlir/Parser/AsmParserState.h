@@ -20,8 +20,6 @@ class Block;
 class BlockArgument;
 class FileLineColLoc;
 class Operation;
-class OperationName;
-class SymbolRefAttr;
 class Value;
 
 /// This class represents state from a parsed MLIR textual format string. It is
@@ -35,52 +33,40 @@ public:
   /// values, Blocks, and Symbols.
   struct SMDefinition {
     SMDefinition() = default;
-    SMDefinition(SMRange loc) : loc(loc) {}
+    SMDefinition(llvm::SMRange loc) : loc(loc) {}
 
     /// The source location of the definition.
-    SMRange loc;
+    llvm::SMRange loc;
     /// The source location of all uses of the definition.
-    SmallVector<SMRange> uses;
+    SmallVector<llvm::SMRange> uses;
   };
 
   /// This class represents the information for an operation definition within
   /// an input file.
   struct OperationDefinition {
     struct ResultGroupDefinition {
-      ResultGroupDefinition(unsigned index, SMRange loc)
-          : startIndex(index), definition(loc) {}
-
       /// The result number that starts this group.
       unsigned startIndex;
       /// The source definition of the result group.
       SMDefinition definition;
     };
 
-    OperationDefinition(Operation *op, SMRange loc, SMLoc endLoc)
-        : op(op), loc(loc), scopeLoc(loc.Start, endLoc) {}
+    OperationDefinition(Operation *op, llvm::SMRange loc) : op(op), loc(loc) {}
 
     /// The operation representing this definition.
     Operation *op;
 
     /// The source location for the operation, i.e. the location of its name.
-    SMRange loc;
-
-    /// The full source range of the operation definition, i.e. a range
-    /// encompassing the start and end of the full operation definition.
-    SMRange scopeLoc;
+    llvm::SMRange loc;
 
     /// Source definitions for any result groups of this operation.
-    SmallVector<ResultGroupDefinition> resultGroups;
-
-    /// If this operation is a symbol operation, this vector contains symbol
-    /// uses of this operation.
-    SmallVector<SMRange> symbolUses;
+    SmallVector<std::pair<unsigned, SMDefinition>> resultGroups;
   };
 
   /// This class represents the information for a block definition within the
   /// input file.
   struct BlockDefinition {
-    BlockDefinition(Block *block, SMRange loc = {})
+    BlockDefinition(Block *block, llvm::SMRange loc = {})
         : block(block), definition(loc) {}
 
     /// The block representing this definition.
@@ -96,7 +82,6 @@ public:
 
   AsmParserState();
   ~AsmParserState();
-  AsmParserState &operator=(AsmParserState &&other);
 
   //===--------------------------------------------------------------------===//
   // Access State
@@ -110,60 +95,24 @@ public:
   /// Return a range of the BlockDefinitions held by the current parser state.
   iterator_range<BlockDefIterator> getBlockDefs() const;
 
-  /// Return the definition for the given block, or nullptr if the given
-  /// block does not have a definition.
-  const BlockDefinition *getBlockDef(Block *block) const;
-
   /// Return a range of the OperationDefinitions held by the current parser
   /// state.
   iterator_range<OperationDefIterator> getOpDefs() const;
-
-  /// Return the definition for the given operation, or nullptr if the given
-  /// operation does not have a definition.
-  const OperationDefinition *getOpDef(Operation *op) const;
-
-  /// Returns (heuristically) the range of an identifier given a SMLoc
-  /// corresponding to the start of an identifier location.
-  static SMRange convertIdLocToRange(SMLoc loc);
 
   //===--------------------------------------------------------------------===//
   // Populate State
   //===--------------------------------------------------------------------===//
 
-  /// Initialize the state in preparation for populating more parser state under
-  /// the given top-level operation.
-  void initialize(Operation *topLevelOp);
-
-  /// Finalize any in-progress parser state under the given top-level operation.
-  void finalize(Operation *topLevelOp);
-
-  /// Start a definition for an operation with the given name.
-  void startOperationDefinition(const OperationName &opName);
-
-  /// Finalize the most recently started operation definition.
-  void finalizeOperationDefinition(
-      Operation *op, SMRange nameLoc, SMLoc endLoc,
-      ArrayRef<std::pair<unsigned, SMLoc>> resultGroups = llvm::None);
-
-  /// Start a definition for a region nested under the current operation.
-  void startRegionDefinition();
-
-  /// Finalize the most recently started region definition.
-  void finalizeRegionDefinition();
-
-  /// Add a definition of the given entity.
-  void addDefinition(Block *block, SMLoc location);
-  void addDefinition(BlockArgument blockArg, SMLoc location);
+  /// Add a definition of the given operation.
+  void addDefinition(
+      Operation *op, llvm::SMRange location,
+      ArrayRef<std::pair<unsigned, llvm::SMLoc>> resultGroups = llvm::None);
+  void addDefinition(Block *block, llvm::SMLoc location);
+  void addDefinition(BlockArgument blockArg, llvm::SMLoc location);
 
   /// Add a source uses of the given value.
-  void addUses(Value value, ArrayRef<SMLoc> locations);
-  void addUses(Block *block, ArrayRef<SMLoc> locations);
-
-  /// Add source uses for all the references nested under `refAttr`. The
-  /// provided `locations` should match 1-1 with the number of references in
-  /// `refAttr`, i.e.:
-  ///   nestedReferences.size() + /*leafReference=*/1 == refLocations.size()
-  void addUses(SymbolRefAttr refAttr, ArrayRef<SMRange> refLocations);
+  void addUses(Value value, ArrayRef<llvm::SMLoc> locations);
+  void addUses(Block *block, ArrayRef<llvm::SMLoc> locations);
 
   /// Refine the `oldValue` to the `newValue`. This is used to indicate that
   /// `oldValue` was a placeholder, and the uses of it should really refer to
@@ -177,6 +126,6 @@ private:
   std::unique_ptr<Impl> impl;
 };
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // MLIR_PARSER_ASMPARSERSTATE_H

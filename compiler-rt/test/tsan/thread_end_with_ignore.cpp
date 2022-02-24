@@ -1,8 +1,8 @@
 // RUN: %clangxx_tsan -O1 %s -o %t && %deflake %run %t | FileCheck %s
+#include <pthread.h>
+#include <stdio.h>
 
-// ReportIgnoresEnabled is disabled on Darwin, see comment in tsan_rtl_thread.cpp.
-// UNSUPPORTED: darwin
-#include "test.h"
+extern "C" void AnnotateIgnoreReadsBegin(const char *f, int l);
 
 void *Thread(void *x) {
   AnnotateIgnoreReadsBegin("", 0);

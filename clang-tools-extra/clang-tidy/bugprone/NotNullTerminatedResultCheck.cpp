@@ -144,7 +144,7 @@ static StringRef exprToStr(const Expr *E,
 
   return Lexer::getSourceText(
       CharSourceRange::getTokenRange(E->getSourceRange()),
-      *Result.SourceManager, Result.Context->getLangOpts(), nullptr);
+      *Result.SourceManager, Result.Context->getLangOpts(), 0);
 }
 
 // Returns the proper token based end location of \p E.
@@ -477,7 +477,7 @@ static void insertNullTerminatorExpr(StringRef Name,
       FunctionExpr->getBeginLoc());
   StringRef SpaceBeforeStmtStr = Lexer::getSourceText(
       CharSourceRange::getCharRange(SpaceRange), *Result.SourceManager,
-      Result.Context->getLangOpts(), nullptr);
+      Result.Context->getLangOpts(), 0);
 
   SmallString<128> NewAddNullTermExprStr;
   NewAddNullTermExprStr =

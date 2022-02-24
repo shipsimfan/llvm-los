@@ -10,7 +10,7 @@ enum AnEnum: uint64_t {
     AnEnumA
 };
 
-typedef void (^BlockType)(void);
+typedef void (^BlockType)();
 @interface MyClass
 @end
 @implementation MyClass

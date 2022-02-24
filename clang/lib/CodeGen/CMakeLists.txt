@@ -5,7 +5,6 @@ set(LLVM_LINK_COMPONENTS
   Core
   Coroutines
   Coverage
-  Demangle
   Extensions
   FrontendOpenMP
   IPO
@@ -59,7 +58,9 @@ add_clang_library(clangCodeGen
   CGObjCRuntime.cpp
   CGOpenCLRuntime.cpp
   CGOpenMPRuntime.cpp
+  CGOpenMPRuntimeAMDGCN.cpp
   CGOpenMPRuntimeGPU.cpp
+  CGOpenMPRuntimeNVPTX.cpp
   CGRecordLayoutBuilder.cpp
   CGStmt.cpp
   CGStmtOpenMP.cpp

@@ -43,9 +43,7 @@ class ARMFunctionInfo : public MachineFunctionInfo {
   /// "attach" GPR-part to the part that was passed via stack.
   unsigned StByValParamsPadding = 0;
 
-  /// ArgsRegSaveSize - Size of the register save area for vararg functions or
-  /// those making guaranteed tail calls that need more stack argument space
-  /// than is provided by this functions incoming parameters.
+  /// VarArgsRegSaveSize - Size of the register save area for vararg functions.
   ///
   unsigned ArgRegsSaveSize = 0;
 
@@ -120,10 +118,6 @@ class ARMFunctionInfo : public MachineFunctionInfo {
   /// being passed on the stack
   unsigned ArgumentStackSize = 0;
 
-  /// ArgumentStackToRestore - amount of bytes on stack consumed that we must
-  /// restore on return.
-  unsigned ArgumentStackToRestore = 0;
-
   /// CoalescedWeights - mapping of basic blocks to the rolling counter of
   /// coalesced weights.
   DenseMap<const MachineBasicBlock*, unsigned> CoalescedWeights;
@@ -141,17 +135,6 @@ class ARMFunctionInfo : public MachineFunctionInfo {
   /// True if r0 will be preserved by a call to this function (e.g. C++
   /// con/destructors).
   bool PreservesR0 = false;
-
-  /// True if the function should sign its return address.
-  bool SignReturnAddress = false;
-
-  /// True if the fucntion should sign its return address, even if LR is not
-  /// saved.
-  bool SignReturnAddressAll = false;
-
-  /// True if BTI instructions should be placed at potential indirect jump
-  /// destinations.
-  bool BranchTargetEnforcement = false;
 
 public:
   ARMFunctionInfo() = default;
@@ -211,9 +194,6 @@ public:
 
   unsigned getArgumentStackSize() const { return ArgumentStackSize; }
   void setArgumentStackSize(unsigned size) { ArgumentStackSize = size; }
-
-  unsigned getArgumentStackToRestore() const { return ArgumentStackToRestore; }
-  void setArgumentStackToRestore(unsigned v) { ArgumentStackToRestore = v; }
 
   void initPICLabelUId(unsigned UId) {
     PICLabelUId = UId;
@@ -279,20 +259,6 @@ public:
 
   void setPreservesR0() { PreservesR0 = true; }
   bool getPreservesR0() const { return PreservesR0; }
-
-  bool shouldSignReturnAddress() const {
-    return shouldSignReturnAddress(LRSpilled);
-  }
-
-  bool shouldSignReturnAddress(bool SpillsLR) const {
-    if (!SignReturnAddress)
-      return false;
-    if (SignReturnAddressAll)
-      return true;
-    return SpillsLR;
-  }
-
-  bool branchTargetEnforcement() const { return BranchTargetEnforcement; }
 };
 
 } // end namespace llvm

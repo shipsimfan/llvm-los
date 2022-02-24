@@ -343,18 +343,19 @@ void SparcFrameLowering::remapRegsForLeafProc(MachineFunction &MF) const {
   }
 
   // Rewrite MBB's Live-ins.
-  for (MachineBasicBlock &MBB : MF) {
+  for (MachineFunction::iterator MBB = MF.begin(), E = MF.end();
+       MBB != E; ++MBB) {
     for (unsigned reg = SP::I0_I1; reg <= SP::I6_I7; ++reg) {
-      if (!MBB.isLiveIn(reg))
+      if (!MBB->isLiveIn(reg))
         continue;
-      MBB.removeLiveIn(reg);
-      MBB.addLiveIn(reg - SP::I0_I1 + SP::O0_O1);
+      MBB->removeLiveIn(reg);
+      MBB->addLiveIn(reg - SP::I0_I1 + SP::O0_O1);
     }
     for (unsigned reg = SP::I0; reg <= SP::I7; ++reg) {
-      if (!MBB.isLiveIn(reg))
+      if (!MBB->isLiveIn(reg))
         continue;
-      MBB.removeLiveIn(reg);
-      MBB.addLiveIn(reg - SP::I0 + SP::O0);
+      MBB->removeLiveIn(reg);
+      MBB->addLiveIn(reg - SP::I0 + SP::O0);
     }
   }
 

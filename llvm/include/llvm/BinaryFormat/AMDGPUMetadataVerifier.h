@@ -16,21 +16,9 @@
 #ifndef LLVM_BINARYFORMAT_AMDGPUMETADATAVERIFIER_H
 #define LLVM_BINARYFORMAT_AMDGPUMETADATAVERIFIER_H
 
-#include "llvm/ADT/None.h"
-#include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLFunctionalExtras.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/BinaryFormat/MsgPackReader.h"
-
-#include <cstddef>
+#include "llvm/BinaryFormat/MsgPackDocument.h"
 
 namespace llvm {
-
-namespace msgpack {
-  class DocNode;
-  class MapDocNode;
-}
-
 namespace AMDGPU {
 namespace HSAMD {
 namespace V3 {

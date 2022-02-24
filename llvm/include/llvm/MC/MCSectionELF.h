@@ -21,6 +21,8 @@
 
 namespace llvm {
 
+class MCSymbol;
+
 /// This represents a section on linux, lots of unix variants and some bare
 /// metal systems.
 class MCSectionELF final : public MCSection {

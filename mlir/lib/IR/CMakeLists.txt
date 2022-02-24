@@ -5,16 +5,14 @@ add_mlir_library(MLIRIR
   Attributes.cpp
   Block.cpp
   Builders.cpp
-  BuiltinAttributeInterfaces.cpp
   BuiltinAttributes.cpp
   BuiltinDialect.cpp
   BuiltinTypes.cpp
-  BuiltinTypeInterfaces.cpp
   Diagnostics.cpp
   Dialect.cpp
   Dominance.cpp
   FunctionImplementation.cpp
-  FunctionInterfaces.cpp
+  FunctionSupport.cpp
   IntegerSet.cpp
   Location.cpp
   MLIRContext.cpp
@@ -23,7 +21,6 @@ add_mlir_library(MLIRIR
   PatternMatch.cpp
   Region.cpp
   RegionKindInterface.cpp
-  SubElementInterfaces.cpp
   SymbolTable.cpp
   TensorEncoding.cpp
   Types.cpp
@@ -38,19 +35,16 @@ add_mlir_library(MLIRIR
 
   DEPENDS
   MLIRBuiltinAttributesIncGen
-  MLIRBuiltinAttributeInterfacesIncGen
   MLIRBuiltinDialectIncGen
   MLIRBuiltinLocationAttributesIncGen
   MLIRBuiltinOpsIncGen
   MLIRBuiltinTypesIncGen
-  MLIRBuiltinTypeInterfacesIncGen
   MLIRCallInterfacesIncGen
   MLIRCastInterfacesIncGen
   MLIRDataLayoutInterfacesIncGen
   MLIROpAsmInterfaceIncGen
   MLIRRegionKindInterfaceIncGen
   MLIRSideEffectInterfacesIncGen
-  MLIRSubElementInterfacesIncGen
   MLIRSymbolInterfacesIncGen
   MLIRTensorEncodingIncGen
 

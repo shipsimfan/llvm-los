@@ -6,13 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MLIR_IR_PATTERNMATCH_H
-#define MLIR_IR_PATTERNMATCH_H
+#ifndef MLIR_PATTERNMATCHER_H
+#define MLIR_PATTERNMATCHER_H
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/FunctionExtras.h"
-#include "llvm/Support/TypeName.h"
 
 namespace mlir {
 
@@ -33,7 +32,7 @@ class PatternBenefit {
   enum { ImpossibleToMatchSentinel = 65535 };
 
 public:
-  PatternBenefit() = default;
+  PatternBenefit() : representation(ImpossibleToMatchSentinel) {}
   PatternBenefit(unsigned benefit);
   PatternBenefit(const PatternBenefit &) = default;
   PatternBenefit &operator=(const PatternBenefit &) = default;
@@ -57,7 +56,7 @@ public:
   bool operator>=(const PatternBenefit &rhs) const { return !(*this < rhs); }
 
 private:
-  unsigned short representation{ImpossibleToMatchSentinel};
+  unsigned short representation;
 };
 
 //===----------------------------------------------------------------------===//
@@ -133,23 +132,6 @@ public:
     return contextAndHasBoundedRecursion.getPointer();
   }
 
-  /// Return a readable name for this pattern. This name should only be used for
-  /// debugging purposes, and may be empty.
-  StringRef getDebugName() const { return debugName; }
-
-  /// Set the human readable debug name used for this pattern. This name will
-  /// only be used for debugging purposes.
-  void setDebugName(StringRef name) { debugName = name; }
-
-  /// Return the set of debug labels attached to this pattern.
-  ArrayRef<StringRef> getDebugLabels() const { return debugLabels; }
-
-  /// Add the provided debug labels to this pattern.
-  void addDebugLabels(ArrayRef<StringRef> labels) {
-    debugLabels.append(labels.begin(), labels.end());
-  }
-  void addDebugLabels(StringRef label) { debugLabels.push_back(label); }
-
 protected:
   /// This class acts as a special tag that makes the desire to match "any"
   /// operation type explicit. This helps to avoid unnecessary usages of this
@@ -220,12 +202,6 @@ private:
   /// A list of the potential operations that may be generated when rewriting
   /// an op with this pattern.
   SmallVector<OperationName, 2> generatedOps;
-
-  /// A readable name for this pattern. May be empty.
-  StringRef debugName;
-
-  /// The set of debug labels attached to this pattern.
-  SmallVector<StringRef, 0> debugLabels;
 };
 
 //===----------------------------------------------------------------------===//
@@ -243,7 +219,7 @@ private:
 ///
 class RewritePattern : public Pattern {
 public:
-  virtual ~RewritePattern() = default;
+  virtual ~RewritePattern() {}
 
   /// Rewrite the IR rooted at the specified operation with the result of
   /// this pattern, generating any new operations with the specified
@@ -268,42 +244,9 @@ public:
     return failure();
   }
 
-  /// This method provides a convenient interface for creating and initializing
-  /// derived rewrite patterns of the given type `T`.
-  template <typename T, typename... Args>
-  static std::unique_ptr<T> create(Args &&... args) {
-    std::unique_ptr<T> pattern =
-        std::make_unique<T>(std::forward<Args>(args)...);
-    initializePattern<T>(*pattern);
-
-    // Set a default debug name if one wasn't provided.
-    if (pattern->getDebugName().empty())
-      pattern->setDebugName(llvm::getTypeName<T>());
-    return pattern;
-  }
-
 protected:
   /// Inherit the base constructors from `Pattern`.
   using Pattern::Pattern;
-
-private:
-  /// Trait to check if T provides a `getOperationName` method.
-  template <typename T, typename... Args>
-  using has_initialize = decltype(std::declval<T>().initialize());
-  template <typename T>
-  using detect_has_initialize = llvm::is_detected<has_initialize, T>;
-
-  /// Initialize the derived pattern by calling its `initialize` method.
-  template <typename T>
-  static std::enable_if_t<detect_has_initialize<T>::value>
-  initializePattern(T &pattern) {
-    pattern.initialize();
-  }
-  /// Empty derived pattern initializer for patterns that do not have an
-  /// initialize method.
-  template <typename T>
-  static std::enable_if_t<!detect_has_initialize<T>::value>
-  initializePattern(T &) {}
 
   /// An anchor for the virtual table.
   virtual void anchor();
@@ -355,12 +298,10 @@ template <typename SourceOp>
 struct OpRewritePattern
     : public detail::OpOrInterfaceRewritePatternBase<SourceOp> {
   /// Patterns must specify the root operation name they match against, and can
-  /// also specify the benefit of the pattern matching and a list of generated
-  /// ops.
-  OpRewritePattern(MLIRContext *context, PatternBenefit benefit = 1,
-                   ArrayRef<StringRef> generatedNames = {})
+  /// also specify the benefit of the pattern matching.
+  OpRewritePattern(MLIRContext *context, PatternBenefit benefit = 1)
       : detail::OpOrInterfaceRewritePatternBase<SourceOp>(
-            SourceOp::getOperationName(), benefit, context, generatedNames) {}
+            SourceOp::getOperationName(), benefit, context) {}
 };
 
 /// OpInterfaceRewritePattern is a wrapper around RewritePattern that allows for
@@ -402,7 +343,7 @@ public:
 
   /// Construct a new PDL value.
   PDLValue(const PDLValue &other) = default;
-  PDLValue(std::nullptr_t = nullptr) {}
+  PDLValue(std::nullptr_t = nullptr) : value(nullptr), kind(Kind::Attribute) {}
   PDLValue(Attribute value)
       : value(value.getAsOpaquePointer()), kind(Kind::Attribute) {}
   PDLValue(Operation *value) : value(value), kind(Kind::Operation) {}
@@ -448,9 +389,6 @@ public:
   /// Print this value to the provided output stream.
   void print(raw_ostream &os) const;
 
-  /// Print the specified value kind to an output stream.
-  static void print(raw_ostream &os, Kind kind);
-
 private:
   /// Find the index of a given type in a range of other types.
   template <typename...>
@@ -486,18 +424,13 @@ private:
   }
 
   /// The internal opaque representation of a PDLValue.
-  const void *value{nullptr};
+  const void *value;
   /// The kind of the opaque value.
-  Kind kind{Kind::Attribute};
+  Kind kind;
 };
 
 inline raw_ostream &operator<<(raw_ostream &os, PDLValue value) {
   value.print(os);
-  return os;
-}
-
-inline raw_ostream &operator<<(raw_ostream &os, PDLValue::Kind kind) {
-  PDLValue::print(os, kind);
   return os;
 }
 
@@ -612,7 +545,7 @@ public:
   PDLPatternModule() = default;
 
   /// Construct a PDL pattern with the given module.
-  PDLPatternModule(OwningOpRef<ModuleOp> pdlModule)
+  PDLPatternModule(OwningModuleRef pdlModule)
       : pdlModule(std::move(pdlModule)) {}
 
   /// Merge the state in `other` into this pattern module.
@@ -669,7 +602,7 @@ public:
 
 private:
   /// The module containing the `pdl.pattern` operations.
-  OwningOpRef<ModuleOp> pdlModule;
+  OwningModuleRef pdlModule;
 
   /// The external functions referenced from within the PDL module.
   llvm::StringMap<PDLConstraintFunction> constraintFunctions;
@@ -846,9 +779,6 @@ protected:
   }
 
 private:
-  void operator=(const RewriterBase &) = delete;
-  RewriterBase(const RewriterBase &) = delete;
-
   /// 'op' and 'newOp' are known to have the same number of results, replace the
   /// uses of op with uses of newOp.
   void replaceOpWithResultsOfAnotherOp(Operation *op, Operation *newOp);
@@ -932,26 +862,7 @@ public:
     // types 'Ts'. This magic is necessary due to a limitation in the places
     // that a parameter pack can be expanded in c++11.
     // FIXME: In c++17 this can be simplified by using 'fold expressions'.
-    (void)std::initializer_list<int>{
-        0, (addImpl<Ts>(/*debugLabels=*/llvm::None, arg, args...), 0)...};
-    return *this;
-  }
-  /// An overload of the above `add` method that allows for attaching a set
-  /// of debug labels to the attached patterns. This is useful for labeling
-  /// groups of patterns that may be shared between multiple different
-  /// passes/users.
-  template <typename... Ts, typename ConstructorArg,
-            typename... ConstructorArgs,
-            typename = std::enable_if_t<sizeof...(Ts) != 0>>
-  RewritePatternSet &addWithLabel(ArrayRef<StringRef> debugLabels,
-                                  ConstructorArg &&arg,
-                                  ConstructorArgs &&... args) {
-    // The following expands a call to emplace_back for each of the pattern
-    // types 'Ts'. This magic is necessary due to a limitation in the places
-    // that a parameter pack can be expanded in c++11.
-    // FIXME: In c++17 this can be simplified by using 'fold expressions'.
-    (void)std::initializer_list<int>{
-        0, (addImpl<Ts>(debugLabels, arg, args...), 0)...};
+    (void)std::initializer_list<int>{0, (addImpl<Ts>(arg, args...), 0)...};
     return *this;
   }
 
@@ -1015,8 +926,7 @@ public:
     // types 'Ts'. This magic is necessary due to a limitation in the places
     // that a parameter pack can be expanded in c++11.
     // FIXME: In c++17 this can be simplified by using 'fold expressions'.
-    (void)std::initializer_list<int>{
-        0, (addImpl<Ts>(/*debugLabels=*/llvm::None, arg, args...), 0)...};
+    (void)std::initializer_list<int>{0, (addImpl<Ts>(arg, args...), 0)...};
     return *this;
   }
 
@@ -1049,9 +959,7 @@ public:
     struct FnPattern final : public OpRewritePattern<OpType> {
       FnPattern(LogicalResult (*implFn)(OpType, PatternRewriter &rewriter),
                 MLIRContext *context)
-          : OpRewritePattern<OpType>(context), implFn(implFn) {
-        this->setDebugName(llvm::getTypeName<FnPattern>());
-      }
+          : OpRewritePattern<OpType>(context), implFn(implFn) {}
 
       LogicalResult matchAndRewrite(OpType op,
                                     PatternRewriter &rewriter) const override {
@@ -1061,7 +969,7 @@ public:
     private:
       LogicalResult (*implFn)(OpType, PatternRewriter &rewriter);
     };
-    add(std::make_unique<FnPattern>(std::move(implFn), getContext()));
+    insert(std::make_unique<FnPattern>(std::move(implFn), getContext()));
     return *this;
   }
 
@@ -1070,17 +978,13 @@ private:
   /// chaining insertions.
   template <typename T, typename... Args>
   std::enable_if_t<std::is_base_of<RewritePattern, T>::value>
-  addImpl(ArrayRef<StringRef> debugLabels, Args &&... args) {
-    std::unique_ptr<T> pattern =
-        RewritePattern::create<T>(std::forward<Args>(args)...);
-    pattern->addDebugLabels(debugLabels);
-    nativePatterns.emplace_back(std::move(pattern));
+  addImpl(Args &&... args) {
+    nativePatterns.emplace_back(
+        std::make_unique<T>(std::forward<Args>(args)...));
   }
   template <typename T, typename... Args>
   std::enable_if_t<std::is_base_of<PDLPatternModule, T>::value>
-  addImpl(ArrayRef<StringRef> debugLabels, Args &&... args) {
-    // TODO: Add the provided labels to the PDL pattern when PDL supports
-    // labels.
+  addImpl(Args &&... args) {
     pdlPatterns.mergeIn(T(std::forward<Args>(args)...));
   }
 
@@ -1089,6 +993,6 @@ private:
   PDLPatternModule pdlPatterns;
 };
 
-} // namespace mlir
+} // end namespace mlir
 
-#endif // MLIR_IR_PATTERNMATCH_H
+#endif // MLIR_PATTERN_MATCH_H

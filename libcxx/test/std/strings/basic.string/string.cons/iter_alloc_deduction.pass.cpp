@@ -8,6 +8,7 @@
 
 // <string>
 // UNSUPPORTED: c++03, c++11, c++14
+// XFAIL: libcpp-no-deduction-guides
 
 // template<class InputIterator>
 //   basic_string(InputIterator begin, InputIterator end,
@@ -24,6 +25,7 @@
 //  is a type that does not qualify as an input iterator, or if Allocator is a type
 //  that does not qualify as an allocator.
 
+
 #include <string>
 #include <iterator>
 #include <cassert>
@@ -31,10 +33,12 @@
 
 #include "test_macros.h"
 #include "test_allocator.h"
+#include "../input_iterator.h"
 #include "min_allocator.h"
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     const char* s = "12345678901234";
     std::basic_string s1(s, s+10);  // Can't use {} here
     using S = decltype(s1); // what type did we get?
@@ -43,8 +47,9 @@ bool test() {
     static_assert(std::is_same_v<S::allocator_type,   std::allocator<char>>, "");
     assert(s1.size() == 10);
     assert(s1.compare(0, s1.size(), s, s1.size()) == 0);
-  }
-  {
+    }
+
+    {
     const char* s = "12345678901234";
     std::basic_string s1{s, s+10, std::allocator<char>{}};
     using S = decltype(s1); // what type did we get?
@@ -53,8 +58,8 @@ bool test() {
     static_assert(std::is_same_v<S::allocator_type,   std::allocator<char>>, "");
     assert(s1.size() == 10);
     assert(s1.compare(0, s1.size(), s, s1.size()) == 0);
-  }
-  {
+    }
+    {
     const wchar_t* s = L"12345678901234";
     std::basic_string s1{s, s+10, test_allocator<wchar_t>{}};
     using S = decltype(s1); // what type did we get?
@@ -63,8 +68,8 @@ bool test() {
     static_assert(std::is_same_v<S::allocator_type,   test_allocator<wchar_t>>, "");
     assert(s1.size() == 10);
     assert(s1.compare(0, s1.size(), s, s1.size()) == 0);
-  }
-  {
+    }
+    {
     const char16_t* s = u"12345678901234";
     std::basic_string s1{s, s+10, min_allocator<char16_t>{}};
     using S = decltype(s1); // what type did we get?
@@ -73,8 +78,8 @@ bool test() {
     static_assert(std::is_same_v<S::allocator_type,    min_allocator<char16_t>>, "");
     assert(s1.size() == 10);
     assert(s1.compare(0, s1.size(), s, s1.size()) == 0);
-  }
-  {
+    }
+    {
     const char32_t* s = U"12345678901234";
     std::basic_string s1{s, s+10, explicit_allocator<char32_t>{}};
     using S = decltype(s1); // what type did we get?
@@ -83,13 +88,7 @@ bool test() {
     static_assert(std::is_same_v<S::allocator_type, explicit_allocator<char32_t>>, "");
     assert(s1.size() == 10);
     assert(s1.compare(0, s1.size(), s, s1.size()) == 0);
-  }
-
-  return true;
-}
-
-int main(int, char**)
-{
+    }
 
   return 0;
 }

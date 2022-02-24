@@ -2,7 +2,7 @@ set(LLVM_LINK_COMPONENTS
   Linker
 )
 
-if (MLIR_ENABLE_SPIRV_CPU_RUNNER)
+if (MLIR_SPIRV_CPU_RUNNER_ENABLED)
   message(STATUS "Building SPIR-V CPU runner")
 
   add_llvm_tool(mlir-spirv-cpu-runner
@@ -16,9 +16,9 @@ if (MLIR_ENABLE_SPIRV_CPU_RUNNER)
   target_link_libraries(mlir-spirv-cpu-runner PRIVATE
     ${conversion_libs}
     MLIRAnalysis
-    MLIRArithmetic
+    MLIREDSC
     MLIRExecutionEngine
-    MLIRGPUOps
+    MLIRGPU
     MLIRIR
     MLIRJitRunner
     MLIRLLVMIR

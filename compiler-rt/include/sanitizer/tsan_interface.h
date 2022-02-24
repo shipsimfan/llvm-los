@@ -169,9 +169,6 @@ void __tsan_on_initialize();
 // if TSan should exit as if issues were detected.
 int __tsan_on_finalize(int failed);
 
-// Release TSan internal memory in a best-effort manner.
-void __tsan_flush_memory();
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif

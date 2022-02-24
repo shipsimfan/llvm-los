@@ -20,16 +20,9 @@ def FastmathFlagsAttr : LLVM_Attr<"FMF"> {
   let mnemonic = "fastmath";
 
   // List of type parameters.
-  let parameters = (ins
+  let parameters = (
+    ins
     "FastmathFlags":$flags
-  );
-}
-
-// Attribute definition for the LLVM Linkage enum.
-def LinkageAttr : LLVM_Attr<"Linkage"> {
-  let mnemonic = "linkage";
-  let parameters = (ins
-    "linkage::Linkage":$linkage
   );
 }
 
@@ -46,7 +39,8 @@ def LoopOptionsAttr : LLVM_Attr<"LoopOptions"> {
   }];
 
   // List of type parameters.
-  let parameters = (ins
+  let parameters = (
+    ins
     ArrayRefParameter<"std::pair<LoopOptionCase, int64_t>", "">:$options
   );
 

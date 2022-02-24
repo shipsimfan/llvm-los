@@ -20,6 +20,8 @@
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/IR/LLVMRemarkStreamer.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Remarks/RemarkStreamer.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -81,11 +83,6 @@ LLVMContext::LLVMContext() : pImpl(new LLVMContextImpl(*this)) {
   assert(ClangAttachedCall->second == LLVMContext::OB_clang_arc_attachedcall &&
          "clang.arc.attachedcall operand bundle id drifted!");
   (void)ClangAttachedCall;
-
-  auto *PtrauthEntry = pImpl->getOrInsertBundleTag("ptrauth");
-  assert(PtrauthEntry->second == LLVMContext::OB_ptrauth &&
-         "ptrauth operand bundle id drifted!");
-  (void)PtrauthEntry;
 
   SyncScope::ID SingleThreadSSID =
       pImpl->getOrInsertSyncScopeID("singlethread");
@@ -251,7 +248,7 @@ void LLVMContext::diagnose(const DiagnosticInfo &DI) {
     exit(1);
 }
 
-void LLVMContext::emitError(uint64_t LocCookie, const Twine &ErrorStr) {
+void LLVMContext::emitError(unsigned LocCookie, const Twine &ErrorStr) {
   diagnose(DiagnosticInfoInlineAsm(LocCookie, ErrorStr));
 }
 
@@ -349,14 +346,4 @@ const DiagnosticHandler *LLVMContext::getDiagHandlerPtr() const {
 
 std::unique_ptr<DiagnosticHandler> LLVMContext::getDiagnosticHandler() {
   return std::move(pImpl->DiagHandler);
-}
-
-void LLVMContext::enableOpaquePointers() const {
-  assert(pImpl->PointerTypes.empty() && pImpl->ASPointerTypes.empty() &&
-         "Must be called before creating any pointer types");
-  pImpl->setOpaquePointers(true);
-}
-
-bool LLVMContext::supportsTypedPointers() const {
-  return !pImpl->getOpaquePointers();
 }

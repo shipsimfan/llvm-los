@@ -74,15 +74,9 @@ void ForwardingReferenceOverloadCheck::registerMatchers(MatchFinder *Finder) {
           unless(hasAnyParameter(
               // No warning: enable_if as constructor parameter.
               parmVarDecl(hasType(isEnableIf())))),
-          unless(hasParent(functionTemplateDecl(anyOf(
+          unless(hasParent(functionTemplateDecl(has(templateTypeParmDecl(
               // No warning: enable_if as type parameter.
-              has(templateTypeParmDecl(hasDefaultArgument(isEnableIf()))),
-              // No warning: enable_if as non-type template parameter.
-              has(nonTypeTemplateParmDecl(
-                  hasType(isEnableIf()),
-                  anyOf(hasDescendant(cxxBoolLiteral()),
-                        hasDescendant(cxxNullPtrLiteralExpr()),
-                        hasDescendant(integerLiteral())))))))))
+              hasDefaultArgument(isEnableIf())))))))
           .bind("ctor");
   Finder->addMatcher(FindOverload, this);
 }
@@ -112,8 +106,7 @@ void ForwardingReferenceOverloadCheck::check(
 
   // Every parameter after the first must have a default value.
   const auto *Ctor = Result.Nodes.getNodeAs<CXXConstructorDecl>("ctor");
-  for (auto *Iter = Ctor->param_begin() + 1; Iter != Ctor->param_end();
-       ++Iter) {
+  for (auto Iter = Ctor->param_begin() + 1; Iter != Ctor->param_end(); ++Iter) {
     if (!(*Iter)->hasDefaultArg())
       return;
   }

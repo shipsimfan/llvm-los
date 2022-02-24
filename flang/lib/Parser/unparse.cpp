@@ -265,25 +265,18 @@ public:
   void Unparse(const DataComponentDefStmt &x) { // R737
     const auto &dts{std::get<DeclarationTypeSpec>(x.t)};
     const auto &attrs{std::get<std::list<ComponentAttrSpec>>(x.t)};
-    const auto &decls{std::get<std::list<ComponentOrFill>>(x.t)};
+    const auto &decls{std::get<std::list<ComponentDecl>>(x.t)};
     Walk(dts), Walk(", ", attrs, ", ");
     if (!attrs.empty() ||
         (!std::holds_alternative<DeclarationTypeSpec::Record>(dts.u) &&
             std::none_of(
-                decls.begin(), decls.end(), [](const ComponentOrFill &c) {
-                  return std::visit(
-                      common::visitors{
-                          [](const ComponentDecl &d) {
-                            const auto &init{
-                                std::get<std::optional<Initialization>>(d.t)};
-                            return init &&
-                                std::holds_alternative<std::list<
-                                    common::Indirection<DataStmtValue>>>(
-                                    init->u);
-                          },
-                          [](const FillDecl &) { return false; },
-                      },
-                      c.u);
+                decls.begin(), decls.end(), [](const ComponentDecl &d) {
+                  const auto &init{
+                      std::get<std::optional<Initialization>>(d.t)};
+                  return init &&
+                      std::holds_alternative<
+                          std::list<common::Indirection<DataStmtValue>>>(
+                          init->u);
                 }))) {
       Put(" ::");
     }
@@ -316,11 +309,6 @@ public:
     Walk("[", std::get<std::optional<CoarraySpec>>(x.t), "]");
     Walk("*", std::get<std::optional<CharLength>>(x.t));
     Walk(std::get<std::optional<Initialization>>(x.t));
-  }
-  void Unparse(const FillDecl &x) { // DEC extension
-    Put("%FILL");
-    Walk("(", std::get<std::optional<ComponentArraySpec>>(x.t), ")");
-    Walk("*", std::get<std::optional<CharLength>>(x.t));
   }
   void Unparse(const ComponentArraySpec &x) { // R740
     std::visit(common::visitors{
@@ -2299,7 +2287,7 @@ public:
     BeginOpenMP();
     Word("!$OMP CRITICAL");
     Walk(" (", std::get<std::optional<Name>>(x.t), ")");
-    Walk(std::get<OmpClauseList>(x.t));
+    Walk(std::get<std::optional<OmpClause>>(x.t));
     Put("\n");
     EndOpenMP();
   }
@@ -2498,19 +2486,21 @@ public:
   void Unparse(const BasedPointerStmt &x) { Walk("POINTER ", x.v, ","); }
   void Post(const StructureField &x) {
     if (const auto *def{std::get_if<Statement<DataComponentDefStmt>>(&x.u)}) {
-      for (const auto &item :
-          std::get<std::list<ComponentOrFill>>(def->statement.t)) {
-        if (const auto *comp{std::get_if<ComponentDecl>(&item.u)}) {
-          structureComponents_.insert(std::get<Name>(comp->t).source);
-        }
+      for (const auto &decl :
+          std::get<std::list<ComponentDecl>>(def->statement.t)) {
+        structureComponents_.insert(std::get<Name>(decl.t).source);
       }
     }
   }
   void Unparse(const StructureStmt &x) {
     Word("STRUCTURE ");
-    // The name, if present, includes the /slashes/
-    Walk(std::get<std::optional<Name>>(x.t));
-    Walk(" ", std::get<std::list<EntityDecl>>(x.t), ", ");
+    if (std::get<bool>(x.t)) { // slashes around name
+      Put('/'), Walk(std::get<Name>(x.t)), Put('/');
+      Walk(" ", std::get<std::list<EntityDecl>>(x.t), ", ");
+    } else {
+      CHECK(std::get<std::list<EntityDecl>>(x.t).empty());
+      Walk(std::get<Name>(x.t));
+    }
     Indent();
   }
   void Post(const Union::UnionStmt &) { Word("UNION"), Indent(); }

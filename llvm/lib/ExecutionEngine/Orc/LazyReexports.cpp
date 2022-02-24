@@ -144,7 +144,7 @@ createLocalLazyCallThroughManager(const Triple &T, ExecutionSession &ES,
 LazyReexportsMaterializationUnit::LazyReexportsMaterializationUnit(
     LazyCallThroughManager &LCTManager, IndirectStubsManager &ISManager,
     JITDylib &SourceJD, SymbolAliasMap CallableAliases, ImplSymbolMap *SrcJDLoc)
-    : MaterializationUnit(extractFlags(CallableAliases)),
+    : MaterializationUnit(extractFlags(CallableAliases), nullptr),
       LCTManager(LCTManager), ISManager(ISManager), SourceJD(SourceJD),
       CallableAliases(std::move(CallableAliases)), AliaseeTable(SrcJDLoc) {}
 
@@ -219,7 +219,7 @@ void LazyReexportsMaterializationUnit::discard(const JITDylib &JD,
   CallableAliases.erase(Name);
 }
 
-MaterializationUnit::Interface
+SymbolFlagsMap
 LazyReexportsMaterializationUnit::extractFlags(const SymbolAliasMap &Aliases) {
   SymbolFlagsMap SymbolFlags;
   for (auto &KV : Aliases) {
@@ -227,7 +227,7 @@ LazyReexportsMaterializationUnit::extractFlags(const SymbolAliasMap &Aliases) {
            "Lazy re-exports must be callable symbols");
     SymbolFlags[KV.first] = KV.second.AliasFlags;
   }
-  return MaterializationUnit::Interface(std::move(SymbolFlags), nullptr);
+  return SymbolFlags;
 }
 
 } // End namespace orc.

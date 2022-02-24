@@ -18,20 +18,16 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/InliningUtils.h"
+#include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/StringSet.h"
 
 using namespace mlir;
-using namespace test;
+using namespace mlir::test;
 
 namespace {
-struct Inliner : public PassWrapper<Inliner, OperationPass<FuncOp>> {
-  StringRef getArgument() const final { return "test-inline"; }
-  StringRef getDescription() const final {
-    return "Test inlining region calls";
-  }
-
-  void runOnOperation() override {
-    auto function = getOperation();
+struct Inliner : public PassWrapper<Inliner, FunctionPass> {
+  void runOnFunction() override {
+    auto function = getFunction();
 
     // Collect each of the direct function calls within the module.
     SmallVector<CallIndirectOp, 16> callers;
@@ -50,7 +46,7 @@ struct Inliner : public PassWrapper<Inliner, OperationPass<FuncOp>> {
       // Inline the functional region operation, but only clone the internal
       // region if there is more than one use.
       if (failed(inlineRegion(
-              interface, &callee.getBody(), caller, caller.getArgOperands(),
+              interface, &callee.body(), caller, caller.getArgOperands(),
               caller.getResults(), caller.getLoc(),
               /*shouldCloneInlinedRegion=*/!callee.getResult().hasOneUse())))
         continue;
@@ -63,10 +59,12 @@ struct Inliner : public PassWrapper<Inliner, OperationPass<FuncOp>> {
     }
   }
 };
-} // namespace
+} // end anonymous namespace
 
 namespace mlir {
 namespace test {
-void registerInliner() { PassRegistration<Inliner>(); }
+void registerInliner() {
+  PassRegistration<Inliner>("test-inline", "Test inlining region calls");
+}
 } // namespace test
 } // namespace mlir

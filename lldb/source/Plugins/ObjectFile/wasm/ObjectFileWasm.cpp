@@ -15,7 +15,6 @@
 #include "lldb/Target/SectionLoadList.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
@@ -87,11 +86,16 @@ void ObjectFileWasm::Terminate() {
   PluginManager::UnregisterPlugin(CreateInstance);
 }
 
+ConstString ObjectFileWasm::GetPluginNameStatic() {
+  static ConstString g_name("wasm");
+  return g_name;
+}
+
 ObjectFile *
 ObjectFileWasm::CreateInstance(const ModuleSP &module_sp, DataBufferSP &data_sp,
                                offset_t data_offset, const FileSpec *file,
                                offset_t file_offset, offset_t length) {
-  Log *log = GetLog(LLDBLog::Object);
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_OBJECT));
 
   if (!data_sp) {
     data_sp = MapFileData(*file, length, file_offset);
@@ -192,7 +196,7 @@ bool ObjectFileWasm::DecodeNextSection(lldb::offset_t *offset_ptr) {
     m_sect_infos.push_back(section_info{*offset_ptr + c.tell(), section_length,
                                         section_id, *sect_name});
     *offset_ptr += (c.tell() + section_length);
-  } else if (section_id <= llvm::wasm::WASM_SEC_TAG) {
+  } else if (section_id <= llvm::wasm::WASM_SEC_EVENT) {
     m_sect_infos.push_back(section_info{*offset_ptr + c.tell(),
                                         static_cast<uint32_t>(payload_len),
                                         section_id, ConstString()});
@@ -247,7 +251,7 @@ bool ObjectFileWasm::ParseHeader() {
   return true;
 }
 
-void ObjectFileWasm::ParseSymtab(Symtab &symtab) {}
+Symtab *ObjectFileWasm::GetSymtab() { return nullptr; }
 
 static SectionType GetSectionTypeFromName(llvm::StringRef Name) {
   if (Name.consume_front(".debug_") || Name.consume_front(".zdebug_")) {

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MLIR_DIALECT_QUANT_QUANTTYPES_H
-#define MLIR_DIALECT_QUANT_QUANTTYPES_H
+#ifndef MLIR_DIALECT_QUANT_QUANT_TYPES_H_
+#define MLIR_DIALECT_QUANT_QUANT_TYPES_H_
 
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
@@ -408,4 +408,4 @@ public:
 } // namespace quant
 } // namespace mlir
 
-#endif // MLIR_DIALECT_QUANT_QUANTTYPES_H
+#endif // MLIR_DIALECT_QUANT_QUANT_TYPES_H_

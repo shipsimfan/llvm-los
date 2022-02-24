@@ -8,9 +8,8 @@
 
 // UNSUPPORTED: c++03, c++11, c++14, c++17
 // UNSUPPORTED: libcpp-no-concepts
-
-// This test uses iterator types from std::filesystem, which were introduced in macOS 10.15.
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11|12|13|14}}
+// UNSUPPORTED: gcc-10
+// XFAIL: msvc && clang
 
 // template<class I>
 // concept __iterator_traits_detail::__cpp17_forward_iterator;
@@ -70,10 +69,11 @@ static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::forwa
 static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::forward_list<int>::const_iterator>);
 
 // <iterator>
-static_assert(!std::__iterator_traits_detail::__cpp17_forward_iterator<std::back_insert_iterator<std::vector<int>>>);
-static_assert(!std::__iterator_traits_detail::__cpp17_forward_iterator<std::front_insert_iterator<std::vector<int>>>);
-static_assert(!std::__iterator_traits_detail::__cpp17_forward_iterator<std::insert_iterator<std::vector<int>>>);
-static_assert(!std::__iterator_traits_detail::__cpp17_forward_iterator<std::move_iterator<int*>>);
+static_assert(!std::__iterator_traits_detail::__cpp17_forward_iterator<std::back_insert_iterator<std::vector<int> > >);
+static_assert(!std::__iterator_traits_detail::__cpp17_forward_iterator<std::front_insert_iterator<std::vector<int> > >);
+static_assert(!std::__iterator_traits_detail::__cpp17_forward_iterator<std::insert_iterator<std::vector<int> > >);
+static_assert(
+    !std::__iterator_traits_detail::__cpp17_forward_iterator<std::move_iterator<std::vector<int>::iterator> >);
 
 // <list>
 static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::list<int>::iterator>);
@@ -119,12 +119,16 @@ static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::strin
 static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_map<int, int>::iterator>);
 static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_map<int, int>::const_iterator>);
 static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_map<int, int>::local_iterator>);
-static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_map<int, int>::const_local_iterator>);
+static_assert(
+    std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_map<int, int>::const_local_iterator>);
 
 static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multimap<int, int>::iterator>);
-static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multimap<int, int>::const_iterator>);
-static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multimap<int, int>::local_iterator>);
-static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multimap<int, int>::const_local_iterator>);
+static_assert(
+    std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multimap<int, int>::const_iterator>);
+static_assert(
+    std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multimap<int, int>::local_iterator>);
+static_assert(
+    std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multimap<int, int>::const_local_iterator>);
 
 // <unordered_set>
 static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_set<int>::iterator>);
@@ -135,7 +139,8 @@ static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unord
 static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multiset<int>::iterator>);
 static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multiset<int>::const_iterator>);
 static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multiset<int>::local_iterator>);
-static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multiset<int>::const_local_iterator>);
+static_assert(
+    std::__iterator_traits_detail::__cpp17_forward_iterator<std::unordered_multiset<int>::const_local_iterator>);
 
 // <vector>
 static_assert(std::__iterator_traits_detail::__cpp17_forward_iterator<std::vector<int>::iterator>);

@@ -85,7 +85,12 @@ void PlatformMacOSX::Terminate() {
   PlatformDarwin::Terminate();
 }
 
-llvm::StringRef PlatformMacOSX::GetDescriptionStatic() {
+lldb_private::ConstString PlatformMacOSX::GetPluginNameStatic() {
+  static ConstString g_host_name(Platform::GetHostPlatformName());
+  return g_host_name;
+}
+
+const char *PlatformMacOSX::GetDescriptionStatic() {
   return "Local Mac OS X user platform plug-in.";
 }
 
@@ -133,24 +138,39 @@ ConstString PlatformMacOSX::GetSDKDirectory(lldb_private::Target &target) {
   return {};
 }
 
-std::vector<ArchSpec> PlatformMacOSX::GetSupportedArchitectures() {
-  std::vector<ArchSpec> result;
+bool PlatformMacOSX::GetSupportedArchitectureAtIndex(uint32_t idx,
+                                                     ArchSpec &arch) {
 #if defined(__arm__) || defined(__arm64__) || defined(__aarch64__)
   // macOS for ARM64 support both native and translated x86_64 processes
-  ARMGetSupportedArchitectures(result, llvm::Triple::MacOSX);
+  if (!m_num_arm_arches || idx < m_num_arm_arches) {
+    bool res = ARMGetSupportedArchitectureAtIndex(idx, arch);
+    if (res)
+      return true;
+    if (!m_num_arm_arches)
+      m_num_arm_arches = idx;
+  }
 
-  // We can't use x86GetSupportedArchitectures() because it uses
+  // We can't use x86GetSupportedArchitectureAtIndex() because it uses
   // the system architecture for some of its return values and also
   // has a 32bits variant.
-  result.push_back(ArchSpec("x86_64-apple-macosx"));
-  result.push_back(ArchSpec("x86_64-apple-ios-macabi"));
-  result.push_back(ArchSpec("arm64-apple-ios-macabi"));
-  result.push_back(ArchSpec("arm64e-apple-ios-macabi"));
+  if (idx == m_num_arm_arches) {
+    arch.SetTriple("x86_64-apple-macosx");
+    return true;
+  } else if (idx == m_num_arm_arches + 1) {
+    arch.SetTriple("x86_64-apple-ios-macabi");
+    return true;
+  } else if (idx == m_num_arm_arches + 2) {
+    arch.SetTriple("arm64-apple-ios");
+    return true;
+  } else if (idx == m_num_arm_arches + 3) {
+    arch.SetTriple("arm64e-apple-ios");
+    return true;
+  }
+
+  return false;
 #else
-  x86GetSupportedArchitectures(result);
-  result.push_back(ArchSpec("x86_64-apple-ios-macabi"));
+  return x86GetSupportedArchitectureAtIndex(idx, arch);
 #endif
-  return result;
 }
 
 lldb_private::Status PlatformMacOSX::GetSharedModule(

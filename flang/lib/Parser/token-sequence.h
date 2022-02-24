@@ -92,6 +92,8 @@ public:
     start_.pop_back();
   }
 
+  void RemoveLastToken();
+
   void Put(const TokenSequence &);
   void Put(const TokenSequence &, ProvenanceRange);
   void Put(const TokenSequence &, std::size_t at, std::size_t tokens = 1);
@@ -100,7 +102,6 @@ public:
   void Put(const std::string &, Provenance);
   void Put(llvm::raw_string_ostream &, Provenance);
 
-  Provenance GetCharProvenance(std::size_t) const;
   Provenance GetTokenProvenance(
       std::size_t token, std::size_t offset = 0) const;
   ProvenanceRange GetTokenProvenanceRange(
@@ -117,9 +118,8 @@ public:
   TokenSequence &RemoveRedundantBlanks(std::size_t firstChar = 0);
   TokenSequence &ClipComment(bool skipFirst = false);
   const TokenSequence &CheckBadFortranCharacters(Messages &) const;
-  const TokenSequence &CheckBadParentheses(Messages &) const;
   void Emit(CookedSource &) const;
-  llvm::raw_ostream &Dump(llvm::raw_ostream &) const;
+  void Dump(llvm::raw_ostream &) const;
 
 private:
   std::size_t TokenBytes(std::size_t token) const {

@@ -123,7 +123,7 @@ class MiniDumpTestCase(TestBase):
             self.assertEqual(process.GetState(), lldb.eStateStopped)
             self.assertTrue(process.SaveCore(core))
             self.assertTrue(os.path.isfile(core))
-            self.assertSuccess(process.Kill())
+            self.assertTrue(process.Kill().Success())
 
             # Launch with the mini dump, and inspect the stack.
             target = self.dbg.CreateTarget(None)
@@ -159,7 +159,7 @@ class MiniDumpTestCase(TestBase):
             self.assertEqual(process.GetState(), lldb.eStateStopped)
             self.assertTrue(process.SaveCore(core))
             self.assertTrue(os.path.isfile(core))
-            self.assertSuccess(process.Kill())
+            self.assertTrue(process.Kill().Success())
 
             # Launch with the mini dump, and inspect a local variable.
             target = self.dbg.CreateTarget(None)

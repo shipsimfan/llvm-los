@@ -63,7 +63,6 @@ def stack_frames(debugger, command, result, dict):
     print(frame_info)
 
 
-def __lldb_init_module(debugger, internal_dict):
-    debugger.HandleCommand(
-        "command script add -f stacks.stack_frames stack_frames")
-    print("A new command called 'stack_frames' was added, type 'stack_frames --help' for more information.")
+lldb.debugger.HandleCommand(
+    "command script add -f stacks.stack_frames stack_frames")
+print("A new command called 'stack_frames' was added, type 'stack_frames --help' for more information.")

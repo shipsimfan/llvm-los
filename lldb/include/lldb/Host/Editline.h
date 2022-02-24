@@ -40,7 +40,9 @@
 
 #include "lldb/lldb-private.h"
 
-#if !defined(_WIN32) && !defined(__ANDROID__)
+#if defined(_WIN32)
+#include "lldb/Host/windows/editlinewin.h"
+#elif !defined(__ANDROID__)
 #include <histedit.h>
 #endif
 

@@ -11,11 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef MLIR_DIALECT_SHAPE_IR_SHAPE_H
-#define MLIR_DIALECT_SHAPE_IR_SHAPE_H
+#ifndef MLIR_SHAPE_IR_SHAPE_H
+#define MLIR_SHAPE_IR_SHAPE_H
 
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
@@ -31,8 +29,7 @@ class PatternRewriter;
 namespace shape {
 
 /// Alias type for extent tensors.
-RankedTensorType getExtentTensorType(MLIRContext *ctx,
-                                     int64_t rank = ShapedType::kDynamicSize);
+RankedTensorType getExtentTensorType(MLIRContext *ctx);
 
 // Check if a type is an extent tensor, e.g., tensor<?xindex>.
 bool isExtentTensorType(Type);
@@ -74,4 +71,4 @@ public:
 
 #include "mlir/Dialect/Shape/IR/ShapeOpsDialect.h.inc"
 
-#endif // MLIR_DIALECT_SHAPE_IR_SHAPE_H
+#endif // MLIR_SHAPE_IR_SHAPE_H

@@ -6,15 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cerrno>
+#include <errno.h>
 #if defined(__APPLE__)
 #include <netinet/in.h>
 #endif
-#include <csignal>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
+#include <signal.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #if !defined(_WIN32)
 #include <sys/wait.h>
 #endif
@@ -364,17 +364,23 @@ int main_platform(int argc, char *argv[]) {
           fprintf(stderr, "failed to start gdbserver: %s\n", error.AsCString());
       }
 
-      bool interrupt = false;
-      bool done = false;
-      while (!interrupt && !done) {
-        if (platform.GetPacketAndSendResponse(llvm::None, error, interrupt,
-                                              done) !=
-            GDBRemoteCommunication::PacketResult::Success)
-          break;
-      }
+      // After we connected, we need to get an initial ack from...
+      if (platform.HandshakeWithClient()) {
+        bool interrupt = false;
+        bool done = false;
+        while (!interrupt && !done) {
+          if (platform.GetPacketAndSendResponse(llvm::None, error, interrupt,
+                                                done) !=
+              GDBRemoteCommunication::PacketResult::Success)
+            break;
+        }
 
-      if (error.Fail())
-        WithColor::error() << error.AsCString() << '\n';
+        if (error.Fail()) {
+          WithColor::error() << error.AsCString() << '\n';
+        }
+      } else {
+        WithColor::error() << "handshake with client failed\n";
+      }
     }
   } while (g_server);
 

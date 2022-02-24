@@ -29,38 +29,31 @@ public:
   /// Simple RAII struct to use to indentation around entering/exiting region.
   struct DelimitedScope {
     explicit DelimitedScope(raw_indented_ostream &os, StringRef open = "",
-                            StringRef close = "", bool indent = true)
-        : os(os), open(open), close(close), indent(indent) {
+                            StringRef close = "")
+        : os(os), open(open), close(close) {
       os << open;
-      if (indent)
-        os.indent();
+      os.indent();
     }
     ~DelimitedScope() {
-      if (indent)
-        os.unindent();
+      os.unindent();
       os << close;
     }
 
     raw_indented_ostream &os;
 
   private:
-    StringRef open, close;
-    bool indent;
+    llvm::StringRef open, close;
   };
 
-  /// Returns the underlying (unindented) raw_ostream.
-  raw_ostream &getOStream() const { return os; }
-
   /// Returns DelimitedScope.
-  DelimitedScope scope(StringRef open = "", StringRef close = "",
-                       bool indent = true) {
-    return DelimitedScope(*this, open, close, indent);
+  DelimitedScope scope(StringRef open = "", StringRef close = "") {
+    return DelimitedScope(*this, open, close);
   }
 
-  /// Prints a string re-indented to the current indent. Re-indents by removing
-  /// the leading whitespace from the first non-empty line from every line of
-  /// the string, skipping over empty lines at the start.
-  raw_indented_ostream &printReindented(StringRef str);
+  /// Re-indents by removing the leading whitespace from the first non-empty
+  /// line from every line of the string, skipping over empty lines at the
+  /// start.
+  raw_indented_ostream &reindent(StringRef str);
 
   /// Increases the indent and returning this raw_indented_ostream.
   raw_indented_ostream &indent() {

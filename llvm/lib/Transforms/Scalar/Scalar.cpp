@@ -54,13 +54,12 @@ void llvm::initializeScalarOpts(PassRegistry &Registry) {
   initializeMakeGuardsExplicitLegacyPassPass(Registry);
   initializeGVNHoistLegacyPassPass(Registry);
   initializeGVNSinkLegacyPassPass(Registry);
-  initializeFlattenCFGLegacyPassPass(Registry);
+  initializeFlattenCFGPassPass(Registry);
   initializeIRCELegacyPassPass(Registry);
   initializeIndVarSimplifyLegacyPassPass(Registry);
   initializeInferAddressSpacesPass(Registry);
   initializeInstSimplifyLegacyPassPass(Registry);
   initializeJumpThreadingPass(Registry);
-  initializeDFAJumpThreadingLegacyPassPass(Registry);
   initializeLegacyLICMPassPass(Registry);
   initializeLegacyLoopSinkPassPass(Registry);
   initializeLoopFuseLegacyPass(Registry);

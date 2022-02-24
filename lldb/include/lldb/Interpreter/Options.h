@@ -169,7 +169,7 @@ public:
   /// user wants returned.
   ///
   /// \return
-  ///     \b true if we were in an option, \b false otherwise.
+  ///     \btrue if we were in an option, \bfalse otherwise.
   bool HandleOptionCompletion(lldb_private::CompletionRequest &request,
                               OptionElementVector &option_map,
                               CommandInterpreter &interpreter);
@@ -254,7 +254,7 @@ public:
 
 class OptionGroupOptions : public Options {
 public:
-  OptionGroupOptions() = default;
+  OptionGroupOptions() : m_did_finalize(false) {}
 
   ~OptionGroupOptions() override = default;
 
@@ -317,7 +317,7 @@ public:
 
   std::vector<OptionDefinition> m_option_defs;
   OptionInfos m_option_infos;
-  bool m_did_finalize = false;
+  bool m_did_finalize;
 };
 
 } // namespace lldb_private

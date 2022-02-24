@@ -9,14 +9,11 @@ add_mlir_conversion_library(MLIRSCFToSPIRV
   MLIRConversionPassIncGen
 
   LINK_LIBS PUBLIC
-  MLIRArithmeticToSPIRV
-  MLIRMemRefToSPIRV
   MLIRSPIRV
   MLIRSPIRVConversion
   MLIRStandardToSPIRV
   MLIRIR
   MLIRPass
-  MLIRSCF
   MLIRStandard
   MLIRSupport
   MLIRTransforms

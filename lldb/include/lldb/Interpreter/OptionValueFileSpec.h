@@ -9,7 +9,6 @@
 #ifndef LLDB_INTERPRETER_OPTIONVALUEFILESPEC_H
 #define LLDB_INTERPRETER_OPTIONVALUEFILESPEC_H
 
-#include "lldb/Interpreter/CommandCompletions.h"
 #include "lldb/Interpreter/OptionValue.h"
 
 #include "lldb/Utility/FileSpec.h"
@@ -75,7 +74,7 @@ protected:
   FileSpec m_default_value;
   lldb::DataBufferSP m_data_sp;
   llvm::sys::TimePoint<> m_data_mod_time;
-  uint32_t m_completion_mask = CommandCompletions::eDiskFileCompletion;
+  uint32_t m_completion_mask;
   bool m_resolve;
 };
 

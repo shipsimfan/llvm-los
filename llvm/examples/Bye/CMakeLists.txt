@@ -14,6 +14,6 @@ if (NOT WIN32)
     BUILDTREE_ONLY
    )
 
-  install(TARGETS ${name} RUNTIME DESTINATION "${LLVM_EXAMPLES_INSTALL_DIR}")
+  install(TARGETS ${name} RUNTIME DESTINATION examples)
   set_target_properties(${name} PROPERTIES FOLDER "Examples")
 endif()

@@ -1,3 +1,4 @@
+; RUN: opt < %s -add-discriminators -S | FileCheck %s
 ; RUN: opt < %s -passes=add-discriminators -S | FileCheck %s
 
 ; We should not generate discriminators for DWARF versions prior to 4.

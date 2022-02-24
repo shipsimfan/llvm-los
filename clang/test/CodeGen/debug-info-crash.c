@@ -26,6 +26,6 @@ typedef struct P {
   int x;
 } PS;
 # 1 ""
-void foo(void) {
+void foo() {
   PS p2;
 }

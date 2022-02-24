@@ -27,12 +27,14 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/Index/IndexingAction.h"
 #include "clang/Index/IndexingOptions.h"
+#include "clang/Lex/MacroInfo.h"
 #include "clang/Lex/Preprocessor.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Error.h"
 #include <algorithm>
 #include <memory>
 #include <tuple>
@@ -43,7 +45,7 @@ namespace clang {
 namespace clangd {
 namespace {
 
-SlabTuple indexSymbols(ASTContext &AST, Preprocessor &PP,
+SlabTuple indexSymbols(ASTContext &AST, std::shared_ptr<Preprocessor> PP,
                        llvm::ArrayRef<Decl *> DeclsToIndex,
                        const MainFileMacros *MacroRefsToIndex,
                        const CanonicalIncludes &Includes, bool IsIndexMainAST,
@@ -52,12 +54,8 @@ SlabTuple indexSymbols(ASTContext &AST, Preprocessor &PP,
   CollectorOpts.CollectIncludePath = true;
   CollectorOpts.Includes = &Includes;
   CollectorOpts.CountReferences = false;
-  CollectorOpts.Origin =
-      IsIndexMainAST ? SymbolOrigin::Open : SymbolOrigin::Preamble;
+  CollectorOpts.Origin = SymbolOrigin::Dynamic;
   CollectorOpts.CollectMainFileRefs = CollectMainFileRefs;
-  // We want stdlib implementation details in the index only if we've opened the
-  // file in question. This does means xrefs won't work, though.
-  CollectorOpts.CollectReserved = IsIndexMainAST;
 
   index::IndexingOptions IndexOpts;
   // We only need declarations, because we don't count references.
@@ -79,7 +77,7 @@ SlabTuple indexSymbols(ASTContext &AST, Preprocessor &PP,
 
   SymbolCollector Collector(std::move(CollectorOpts));
   Collector.setPreprocessor(PP);
-  index::indexTopLevelDecls(AST, PP, DeclsToIndex, Collector, IndexOpts);
+  index::indexTopLevelDecls(AST, *PP, DeclsToIndex, Collector, IndexOpts);
   if (MacroRefsToIndex)
     Collector.handleMacros(*MacroRefsToIndex);
 
@@ -221,18 +219,18 @@ FileShardedIndex::getShard(llvm::StringRef Uri) const {
 
 SlabTuple indexMainDecls(ParsedAST &AST) {
   return indexSymbols(
-      AST.getASTContext(), AST.getPreprocessor(), AST.getLocalTopLevelDecls(),
-      &AST.getMacros(), AST.getCanonicalIncludes(),
+      AST.getASTContext(), AST.getPreprocessorPtr(),
+      AST.getLocalTopLevelDecls(), &AST.getMacros(), AST.getCanonicalIncludes(),
       /*IsIndexMainAST=*/true, AST.version(), /*CollectMainFileRefs=*/true);
 }
 
 SlabTuple indexHeaderSymbols(llvm::StringRef Version, ASTContext &AST,
-                             Preprocessor &PP,
+                             std::shared_ptr<Preprocessor> PP,
                              const CanonicalIncludes &Includes) {
   std::vector<Decl *> DeclsToIndex(
       AST.getTranslationUnitDecl()->decls().begin(),
       AST.getTranslationUnitDecl()->decls().end());
-  return indexSymbols(AST, PP, DeclsToIndex,
+  return indexSymbols(AST, std::move(PP), DeclsToIndex,
                       /*MainFileMacros=*/nullptr, Includes,
                       /*IsIndexMainAST=*/false, Version,
                       /*CollectMainFileRefs=*/false);
@@ -426,11 +424,12 @@ FileIndex::FileIndex()
       MainFileIndex(std::make_unique<MemIndex>()) {}
 
 void FileIndex::updatePreamble(PathRef Path, llvm::StringRef Version,
-                               ASTContext &AST, Preprocessor &PP,
+                               ASTContext &AST,
+                               std::shared_ptr<Preprocessor> PP,
                                const CanonicalIncludes &Includes) {
   IndexFileIn IF;
   std::tie(IF.Symbols, std::ignore, IF.Relations) =
-      indexHeaderSymbols(Version, AST, PP, Includes);
+      indexHeaderSymbols(Version, AST, std::move(PP), Includes);
   FileShardedIndex ShardedIndex(std::move(IF));
   for (auto Uri : ShardedIndex.getAllSources()) {
     auto IF = ShardedIndex.getShard(Uri);

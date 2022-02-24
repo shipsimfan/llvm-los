@@ -62,7 +62,8 @@ public:
                             "using \"!<INDEX>\".   \"!-<OFFSET>\" will re-run "
                             "the command that is <OFFSET> commands from the end"
                             " of the list (counting the current command).",
-                            nullptr) {}
+                            nullptr),
+        m_options() {}
 
   ~CommandObjectSessionHistory() override = default;
 
@@ -72,7 +73,8 @@ protected:
   class CommandOptions : public Options {
   public:
     CommandOptions()
-        : m_start_idx(0), m_stop_idx(0), m_count(0), m_clear(false) {}
+        : Options(), m_start_idx(0), m_stop_idx(0), m_count(0), m_clear(false) {
+    }
 
     ~CommandOptions() override = default;
 

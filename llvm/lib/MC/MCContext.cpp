@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCContext.h"
-#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -16,38 +15,33 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/COFF.h"
 #include "llvm/BinaryFormat/ELF.h"
-#include "llvm/BinaryFormat/Wasm.h"
 #include "llvm/BinaryFormat/XCOFF.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeView.h"
 #include "llvm/MC/MCDwarf.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCFragment.h"
-#include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCLabel.h"
+#include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCSectionCOFF.h"
 #include "llvm/MC/MCSectionELF.h"
-#include "llvm/MC/MCSectionGOFF.h"
 #include "llvm/MC/MCSectionMachO.h"
 #include "llvm/MC/MCSectionWasm.h"
 #include "llvm/MC/MCSectionXCOFF.h"
 #include "llvm/MC/MCStreamer.h"
-#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCSymbolCOFF.h"
 #include "llvm/MC/MCSymbolELF.h"
-#include "llvm/MC/MCSymbolGOFF.h"
 #include "llvm/MC/MCSymbolMachO.h"
 #include "llvm/MC/MCSymbolWasm.h"
 #include "llvm/MC/MCSymbolXCOFF.h"
-#include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/SectionKind.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/SMLoc.h"
+#include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
@@ -68,13 +62,11 @@ static void defaultDiagHandler(const SMDiagnostic &SMD, bool, const SourceMgr &,
   SMD.print(nullptr, errs());
 }
 
-MCContext::MCContext(const Triple &TheTriple, const MCAsmInfo *mai,
-                     const MCRegisterInfo *mri, const MCSubtargetInfo *msti,
-                     const SourceMgr *mgr, MCTargetOptions const *TargetOpts,
-                     bool DoAutoReset, StringRef Swift5ReflSegmentName)
-    : Swift5ReflectionSegmentName(Swift5ReflSegmentName), TT(TheTriple),
-      SrcMgr(mgr), InlineSrcMgr(nullptr), DiagHandler(defaultDiagHandler),
-      MAI(mai), MRI(mri), MSTI(msti), Symbols(Allocator), UsedNames(Allocator),
+MCContext::MCContext(const MCAsmInfo *mai, const MCRegisterInfo *mri,
+                     const MCObjectFileInfo *mofi, const SourceMgr *mgr,
+                     MCTargetOptions const *TargetOpts, bool DoAutoReset)
+    : SrcMgr(mgr), InlineSrcMgr(nullptr), DiagHandler(defaultDiagHandler),
+      MAI(mai), MRI(mri), MOFI(mofi), Symbols(Allocator), UsedNames(Allocator),
       InlineAsmUsedLabelNames(Allocator),
       CurrentDwarfLoc(0, 0, 0, DWARF2_FLAG_IS_STMT, 0, 0),
       AutoReset(DoAutoReset), TargetOptions(TargetOpts) {
@@ -83,34 +75,6 @@ MCContext::MCContext(const Triple &TheTriple, const MCAsmInfo *mai,
   if (SrcMgr && SrcMgr->getNumBuffers())
     MainFileName = std::string(SrcMgr->getMemoryBuffer(SrcMgr->getMainFileID())
                                    ->getBufferIdentifier());
-
-  switch (TheTriple.getObjectFormat()) {
-  case Triple::MachO:
-    Env = IsMachO;
-    break;
-  case Triple::COFF:
-    if (!TheTriple.isOSWindows())
-      report_fatal_error(
-          "Cannot initialize MC for non-Windows COFF object files.");
-
-    Env = IsCOFF;
-    break;
-  case Triple::ELF:
-    Env = IsELF;
-    break;
-  case Triple::Wasm:
-    Env = IsWasm;
-    break;
-  case Triple::XCOFF:
-    Env = IsXCOFF;
-    break;
-  case Triple::GOFF:
-    Env = IsGOFF;
-    break;
-  case Triple::UnknownObjectFormat:
-    report_fatal_error("Cannot initialize MC for unknown object file format.");
-    break;
-  }
 }
 
 MCContext::~MCContext() {
@@ -139,7 +103,6 @@ void MCContext::reset() {
   // Call the destructors so the fragments are freed
   COFFAllocator.DestroyAll();
   ELFAllocator.DestroyAll();
-  GOFFAllocator.DestroyAll();
   MachOAllocator.DestroyAll();
   XCOFFAllocator.DestroyAll();
   MCInstAllocator.DestroyAll();
@@ -163,7 +126,6 @@ void MCContext::reset() {
 
   MachOUniquingMap.clear();
   ELFUniquingMap.clear();
-  GOFFUniquingMap.clear();
   COFFUniquingMap.clear();
   WasmUniquingMap.clear();
   XCOFFUniquingMap.clear();
@@ -233,20 +195,19 @@ MCSymbol *MCContext::createSymbolImpl(const StringMapEntry<bool> *Name,
                 "MCSymbol classes must be trivially destructible");
   static_assert(std::is_trivially_destructible<MCSymbolXCOFF>(),
                 "MCSymbol classes must be trivially destructible");
-
-  switch (getObjectFileType()) {
-  case MCContext::IsCOFF:
-    return new (Name, *this) MCSymbolCOFF(Name, IsTemporary);
-  case MCContext::IsELF:
-    return new (Name, *this) MCSymbolELF(Name, IsTemporary);
-  case MCContext::IsGOFF:
-    return new (Name, *this) MCSymbolGOFF(Name, IsTemporary);
-  case MCContext::IsMachO:
-    return new (Name, *this) MCSymbolMachO(Name, IsTemporary);
-  case MCContext::IsWasm:
-    return new (Name, *this) MCSymbolWasm(Name, IsTemporary);
-  case MCContext::IsXCOFF:
-    return createXCOFFSymbolImpl(Name, IsTemporary);
+  if (MOFI) {
+    switch (MOFI->getObjectFileType()) {
+    case MCObjectFileInfo::IsCOFF:
+      return new (Name, *this) MCSymbolCOFF(Name, IsTemporary);
+    case MCObjectFileInfo::IsELF:
+      return new (Name, *this) MCSymbolELF(Name, IsTemporary);
+    case MCObjectFileInfo::IsMachO:
+      return new (Name, *this) MCSymbolMachO(Name, IsTemporary);
+    case MCObjectFileInfo::IsWasm:
+      return new (Name, *this) MCSymbolWasm(Name, IsTemporary);
+    case MCObjectFileInfo::IsXCOFF:
+      return createXCOFFSymbolImpl(Name, IsTemporary);
+    }
   }
   return new (Name, *this) MCSymbol(MCSymbol::SymbolKindUnset, Name,
                                     IsTemporary);
@@ -271,7 +232,7 @@ MCSymbol *MCContext::createSymbol(StringRef Name, bool AlwaysAddSuffix,
       NewName.resize(Name.size());
       raw_svector_ostream(NewName) << NextUniqueID++;
     }
-    auto NameEntry = UsedNames.insert(std::make_pair(NewName.str(), true));
+    auto NameEntry = UsedNames.insert(std::make_pair(NewName, true));
     if (NameEntry.second || !NameEntry.first->second) {
       // Ok, we found a name.
       // Mark it as used for a non-section symbol.
@@ -404,7 +365,7 @@ MCContext::createXCOFFSymbolImpl(const StringMapEntry<bool> *Name,
   else
     ValidName.append(InvalidName);
 
-  auto NameEntry = UsedNames.insert(std::make_pair(ValidName.str(), true));
+  auto NameEntry = UsedNames.insert(std::make_pair(ValidName, true));
   assert((NameEntry.second || !NameEntry.first->second) &&
          "This name is used somewhere else.");
   // Mark the name as used for a non-section symbol.
@@ -590,7 +551,7 @@ void MCContext::recordELFMergeableSectionInfo(StringRef SectionName,
                                               unsigned Flags, unsigned UniqueID,
                                               unsigned EntrySize) {
   bool IsMergeable = Flags & ELF::SHF_MERGE;
-  if (UniqueID == GenericSectionID)
+  if (IsMergeable && (UniqueID == GenericSectionID))
     ELFSeenGenericMergeableSections.insert(SectionName);
 
   // For mergeable sections or non-mergeable sections with a generic mergeable
@@ -618,15 +579,6 @@ Optional<unsigned> MCContext::getELFUniqueIDForEntsize(StringRef SectionName,
   auto I = ELFEntrySizeMap.find(
       MCContext::ELFEntrySizeKey{SectionName, Flags, EntrySize});
   return (I != ELFEntrySizeMap.end()) ? Optional<unsigned>(I->second) : None;
-}
-
-MCSectionGOFF *MCContext::getGOFFSection(StringRef Section, SectionKind Kind) {
-  // Do the lookup. If we don't have a hit, return a new section.
-  auto &GOFFSection = GOFFUniquingMap[Section.str()];
-  if (!GOFFSection)
-    GOFFSection = new (GOFFAllocator.Allocate()) MCSectionGOFF(Section, Kind);
-
-  return GOFFSection;
 }
 
 MCSectionCOFF *MCContext::getCOFFSection(StringRef Section,
@@ -691,8 +643,7 @@ MCSectionCOFF *MCContext::getAssociativeCOFFSection(MCSectionCOFF *Sec,
 }
 
 MCSectionWasm *MCContext::getWasmSection(const Twine &Section, SectionKind K,
-                                         unsigned Flags, const Twine &Group,
-                                         unsigned UniqueID,
+                                         const Twine &Group, unsigned UniqueID,
                                          const char *BeginSymName) {
   MCSymbolWasm *GroupSym = nullptr;
   if (!Group.isTriviallyEmpty() && !Group.str().empty()) {
@@ -700,11 +651,10 @@ MCSectionWasm *MCContext::getWasmSection(const Twine &Section, SectionKind K,
     GroupSym->setComdat(true);
   }
 
-  return getWasmSection(Section, K, Flags, GroupSym, UniqueID, BeginSymName);
+  return getWasmSection(Section, K, GroupSym, UniqueID, BeginSymName);
 }
 
 MCSectionWasm *MCContext::getWasmSection(const Twine &Section, SectionKind Kind,
-                                         unsigned Flags,
                                          const MCSymbolWasm *GroupSym,
                                          unsigned UniqueID,
                                          const char *BeginSymName) {
@@ -725,7 +675,7 @@ MCSectionWasm *MCContext::getWasmSection(const Twine &Section, SectionKind Kind,
   cast<MCSymbolWasm>(Begin)->setType(wasm::WASM_SYMBOL_TYPE_SECTION);
 
   MCSectionWasm *Result = new (WasmAllocator.Allocate())
-      MCSectionWasm(CachedName, Kind, Flags, GroupSym, UniqueID, Begin);
+      MCSectionWasm(CachedName, Kind, GroupSym, UniqueID, Begin);
   Entry.second = Result;
 
   auto *F = new MCDataFragment();
@@ -734,12 +684,6 @@ MCSectionWasm *MCContext::getWasmSection(const Twine &Section, SectionKind Kind,
   Begin->setFragment(F);
 
   return Result;
-}
-
-bool MCContext::hasXCOFFSection(StringRef Section,
-                                XCOFF::CsectProperties CsectProp) const {
-  return XCOFFUniquingMap.count(
-             XCOFFSectionKey(Section.str(), CsectProp.MappingClass)) != 0;
 }
 
 MCSectionXCOFF *MCContext::getXCOFFSection(
@@ -987,4 +931,14 @@ void MCContext::reportWarning(SMLoc Loc, const Twine &Msg) {
       D = SMP->GetMessage(Loc, SourceMgr::DK_Warning, Msg);
     });
   }
+}
+
+void MCContext::reportFatalError(SMLoc Loc, const Twine &Msg) {
+  reportError(Loc, Msg);
+
+  // If we reached here, we are failing ungracefully. Run the interrupt handlers
+  // to make sure any special cleanups get done, in particular that we remove
+  // files registered with RemoveFileOnSignal.
+  sys::RunInterruptHandlers();
+  exit(1);
 }

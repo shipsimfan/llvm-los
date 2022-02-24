@@ -88,9 +88,12 @@ MachineInstr *AArch64CondBrTuning::convertToFlagSetting(MachineInstr &MI,
   // If this is already the flag setting version of the instruction (e.g., SUBS)
   // just make sure the implicit-def of NZCV isn't marked dead.
   if (IsFlagSetting) {
-    for (MachineOperand &MO : MI.implicit_operands())
+    for (unsigned I = MI.getNumExplicitOperands(), E = MI.getNumOperands();
+         I != E; ++I) {
+      MachineOperand &MO = MI.getOperand(I);
       if (MO.isReg() && MO.isDead() && MO.getReg() == AArch64::NZCV)
         MO.setIsDead(false);
+    }
     return &MI;
   }
   bool Is64Bit;
@@ -101,8 +104,8 @@ MachineInstr *AArch64CondBrTuning::convertToFlagSetting(MachineInstr &MI,
 
   MachineInstrBuilder MIB = BuildMI(*MI.getParent(), MI, MI.getDebugLoc(),
                                     TII->get(NewOpc), NewDestReg);
-  for (const MachineOperand &MO : llvm::drop_begin(MI.operands()))
-    MIB.add(MO);
+  for (unsigned I = 1, E = MI.getNumOperands(); I != E; ++I)
+    MIB.add(MI.getOperand(I));
 
   return MIB;
 }
@@ -292,7 +295,10 @@ bool AArch64CondBrTuning::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
   for (MachineBasicBlock &MBB : MF) {
     bool LocalChange = false;
-    for (MachineInstr &MI : MBB.terminators()) {
+    for (MachineBasicBlock::iterator I = MBB.getFirstTerminator(),
+                                     E = MBB.end();
+         I != E; ++I) {
+      MachineInstr &MI = *I;
       switch (MI.getOpcode()) {
       default:
         break;

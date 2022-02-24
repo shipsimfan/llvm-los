@@ -104,7 +104,7 @@ LogicalResult VulkanRuntime::countDeviceMemorySize() {
 }
 
 LogicalResult VulkanRuntime::initRuntime() {
-  if (resourceData.empty()) {
+  if (!resourceData.size()) {
     std::cerr << "Vulkan runtime needs at least one resource";
     return failure();
   }
@@ -237,20 +237,19 @@ LogicalResult VulkanRuntime::createInstance() {
   instanceCreateInfo.flags = 0;
   instanceCreateInfo.pApplicationInfo = &applicationInfo;
   instanceCreateInfo.enabledLayerCount = 0;
-  instanceCreateInfo.ppEnabledLayerNames = nullptr;
+  instanceCreateInfo.ppEnabledLayerNames = 0;
   instanceCreateInfo.enabledExtensionCount = 0;
-  instanceCreateInfo.ppEnabledExtensionNames = nullptr;
+  instanceCreateInfo.ppEnabledExtensionNames = 0;
 
-  RETURN_ON_VULKAN_ERROR(
-      vkCreateInstance(&instanceCreateInfo, nullptr, &instance),
-      "vkCreateInstance");
+  RETURN_ON_VULKAN_ERROR(vkCreateInstance(&instanceCreateInfo, 0, &instance),
+                         "vkCreateInstance");
   return success();
 }
 
 LogicalResult VulkanRuntime::createDevice() {
   uint32_t physicalDeviceCount = 0;
   RETURN_ON_VULKAN_ERROR(
-      vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr),
+      vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, 0),
       "vkEnumeratePhysicalDevices");
 
   std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
@@ -290,7 +289,7 @@ LogicalResult VulkanRuntime::createDevice() {
   deviceCreateInfo.pEnabledFeatures = nullptr;
 
   RETURN_ON_VULKAN_ERROR(
-      vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device),
+      vkCreateDevice(physicalDevice, &deviceCreateInfo, 0, &device),
       "vkCreateDevice");
 
   VkPhysicalDeviceMemoryProperties properties = {};
@@ -338,8 +337,8 @@ LogicalResult VulkanRuntime::createDevice() {
 
 LogicalResult VulkanRuntime::getBestComputeQueue() {
   uint32_t queueFamilyPropertiesCount = 0;
-  vkGetPhysicalDeviceQueueFamilyProperties(
-      physicalDevice, &queueFamilyPropertiesCount, nullptr);
+  vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice,
+                                           &queueFamilyPropertiesCount, 0);
 
   std::vector<VkQueueFamilyProperties> familyProperties(
       queueFamilyPropertiesCount);
@@ -431,13 +430,11 @@ LogicalResult VulkanRuntime::createMemoryBuffers() {
       memoryAllocateInfo.memoryTypeIndex = hostMemoryTypeIndex;
 
       // Allocate device memory.
-      RETURN_ON_VULKAN_ERROR(vkAllocateMemory(device, &memoryAllocateInfo,
-                                              nullptr,
+      RETURN_ON_VULKAN_ERROR(vkAllocateMemory(device, &memoryAllocateInfo, 0,
                                               &memoryBuffer.hostMemory),
                              "vkAllocateMemory");
       memoryAllocateInfo.memoryTypeIndex = deviceMemoryTypeIndex;
-      RETURN_ON_VULKAN_ERROR(vkAllocateMemory(device, &memoryAllocateInfo,
-                                              nullptr,
+      RETURN_ON_VULKAN_ERROR(vkAllocateMemory(device, &memoryAllocateInfo, 0,
                                               &memoryBuffer.deviceMemory),
                              "vkAllocateMemory");
       void *payload;
@@ -460,10 +457,10 @@ LogicalResult VulkanRuntime::createMemoryBuffers() {
       bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
       bufferCreateInfo.queueFamilyIndexCount = 1;
       bufferCreateInfo.pQueueFamilyIndices = &queueFamilyIndex;
-      RETURN_ON_VULKAN_ERROR(vkCreateBuffer(device, &bufferCreateInfo, nullptr,
+      RETURN_ON_VULKAN_ERROR(vkCreateBuffer(device, &bufferCreateInfo, 0,
                                             &memoryBuffer.hostBuffer),
                              "vkCreateBuffer");
-      RETURN_ON_VULKAN_ERROR(vkCreateBuffer(device, &bufferCreateInfo, nullptr,
+      RETURN_ON_VULKAN_ERROR(vkCreateBuffer(device, &bufferCreateInfo, 0,
                                             &memoryBuffer.deviceBuffer),
                              "vkCreateBuffer");
 
@@ -492,7 +489,7 @@ LogicalResult VulkanRuntime::createMemoryBuffers() {
 LogicalResult VulkanRuntime::copyResource(bool deviceToHost) {
   VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
       VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-      nullptr,
+      NULL,
       commandPool,
       VK_COMMAND_BUFFER_LEVEL_PRIMARY,
       1,
@@ -505,9 +502,9 @@ LogicalResult VulkanRuntime::copyResource(bool deviceToHost) {
 
   VkCommandBufferBeginInfo commandBufferBeginInfo = {
       VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      nullptr,
+      NULL,
       0,
-      nullptr,
+      NULL,
   };
   RETURN_ON_VULKAN_ERROR(
       vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo),
@@ -531,14 +528,14 @@ LogicalResult VulkanRuntime::copyResource(bool deviceToHost) {
                          "vkEndCommandBuffer");
   VkSubmitInfo submitInfo = {
       VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      nullptr,
+      NULL,
       0,
-      nullptr,
-      nullptr,
+      NULL,
+      NULL,
       1,
       &commandBuffer,
       0,
-      nullptr,
+      NULL,
   };
   submitInfo.pCommandBuffers = &commandBuffer;
   RETURN_ON_VULKAN_ERROR(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE),
@@ -558,9 +555,9 @@ LogicalResult VulkanRuntime::createShaderModule() {
   shaderModuleCreateInfo.codeSize = binarySize;
   // Set pointer to the binary shader.
   shaderModuleCreateInfo.pCode = reinterpret_cast<uint32_t *>(binary);
-  RETURN_ON_VULKAN_ERROR(vkCreateShaderModule(device, &shaderModuleCreateInfo,
-                                              nullptr, &shaderModule),
-                         "vkCreateShaderModule");
+  RETURN_ON_VULKAN_ERROR(
+      vkCreateShaderModule(device, &shaderModuleCreateInfo, 0, &shaderModule),
+      "vkCreateShaderModule");
   return success();
 }
 
@@ -577,7 +574,7 @@ void VulkanRuntime::initDescriptorSetLayoutBindingMap() {
       descriptorSetLayoutBinding.descriptorType = memBuffer.descriptorType;
       descriptorSetLayoutBinding.descriptorCount = 1;
       descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-      descriptorSetLayoutBinding.pImmutableSamplers = nullptr;
+      descriptorSetLayoutBinding.pImmutableSamplers = 0;
       descriptorSetLayoutBindings.push_back(descriptorSetLayoutBinding);
     }
     descriptorSetLayoutBindingMap[descriptorSetIndex] =
@@ -618,8 +615,8 @@ LogicalResult VulkanRuntime::createDescriptorSetLayout() {
     descriptorSetLayoutCreateInfo.pBindings =
         descriptorSetLayoutBindings.data();
     RETURN_ON_VULKAN_ERROR(
-        vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo,
-                                    nullptr, &descriptorSetLayout),
+        vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCreateInfo, 0,
+                                    &descriptorSetLayout),
         "vkCreateDescriptorSetLayout");
 
     descriptorSetLayouts.push_back(descriptorSetLayout);
@@ -639,10 +636,10 @@ LogicalResult VulkanRuntime::createPipelineLayout() {
   pipelineLayoutCreateInfo.setLayoutCount = descriptorSetLayouts.size();
   pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayouts.data();
   pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-  pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
+  pipelineLayoutCreateInfo.pPushConstantRanges = 0;
   RETURN_ON_VULKAN_ERROR(vkCreatePipelineLayout(device,
-                                                &pipelineLayoutCreateInfo,
-                                                nullptr, &pipelineLayout),
+                                                &pipelineLayoutCreateInfo, 0,
+                                                &pipelineLayout),
                          "vkCreatePipelineLayout");
   return success();
 }
@@ -656,7 +653,7 @@ LogicalResult VulkanRuntime::createComputePipeline() {
   stageInfo.module = shaderModule;
   // Set entry point.
   stageInfo.pName = entryPoint;
-  stageInfo.pSpecializationInfo = nullptr;
+  stageInfo.pSpecializationInfo = 0;
 
   VkComputePipelineCreateInfo computePipelineCreateInfo = {};
   computePipelineCreateInfo.sType =
@@ -665,11 +662,11 @@ LogicalResult VulkanRuntime::createComputePipeline() {
   computePipelineCreateInfo.flags = 0;
   computePipelineCreateInfo.stage = stageInfo;
   computePipelineCreateInfo.layout = pipelineLayout;
-  computePipelineCreateInfo.basePipelineHandle = nullptr;
+  computePipelineCreateInfo.basePipelineHandle = 0;
   computePipelineCreateInfo.basePipelineIndex = 0;
-  RETURN_ON_VULKAN_ERROR(vkCreateComputePipelines(device, nullptr, 1,
-                                                  &computePipelineCreateInfo,
-                                                  nullptr, &pipeline),
+  RETURN_ON_VULKAN_ERROR(vkCreateComputePipelines(device, 0, 1,
+                                                  &computePipelineCreateInfo, 0,
+                                                  &pipeline),
                          "vkCreateComputePipelines");
   return success();
 }
@@ -693,8 +690,8 @@ LogicalResult VulkanRuntime::createDescriptorPool() {
   descriptorPoolCreateInfo.poolSizeCount = descriptorPoolSizes.size();
   descriptorPoolCreateInfo.pPoolSizes = descriptorPoolSizes.data();
   RETURN_ON_VULKAN_ERROR(vkCreateDescriptorPool(device,
-                                                &descriptorPoolCreateInfo,
-                                                nullptr, &descriptorPool),
+                                                &descriptorPoolCreateInfo, 0,
+                                                &descriptorPool),
                          "vkCreateDescriptorPool");
   return success();
 }
@@ -820,7 +817,7 @@ LogicalResult VulkanRuntime::createComputeCommandBuffer() {
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
   vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                           pipelineLayout, 0, descriptorSets.size(),
-                          descriptorSets.data(), 0, nullptr);
+                          descriptorSets.data(), 0, 0);
   // Get a timestamp before invoking the compute shader.
   if (queryPool != VK_NULL_HANDLE)
     vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -845,13 +842,13 @@ LogicalResult VulkanRuntime::submitCommandBuffersToQueue() {
   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submitInfo.pNext = nullptr;
   submitInfo.waitSemaphoreCount = 0;
-  submitInfo.pWaitSemaphores = nullptr;
-  submitInfo.pWaitDstStageMask = nullptr;
+  submitInfo.pWaitSemaphores = 0;
+  submitInfo.pWaitDstStageMask = 0;
   submitInfo.commandBufferCount = commandBuffers.size();
   submitInfo.pCommandBuffers = commandBuffers.data();
   submitInfo.signalSemaphoreCount = 0;
   submitInfo.pSignalSemaphores = nullptr;
-  RETURN_ON_VULKAN_ERROR(vkQueueSubmit(queue, 1, &submitInfo, nullptr),
+  RETURN_ON_VULKAN_ERROR(vkQueueSubmit(queue, 1, &submitInfo, 0),
                          "vkQueueSubmit");
   return success();
 }

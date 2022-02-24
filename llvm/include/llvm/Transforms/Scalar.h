@@ -133,8 +133,7 @@ Pass *createIndVarSimplifyPass();
 //
 Pass *createLICMPass();
 Pass *createLICMPass(unsigned LicmMssaOptCap,
-                     unsigned LicmMssaNoAccForPromotionCap,
-                     bool AllowSpeculation);
+                     unsigned LicmMssaNoAccForPromotionCap);
 
 //===----------------------------------------------------------------------===//
 //
@@ -253,14 +252,6 @@ FunctionPass *createReassociatePass();
 //
 FunctionPass *createJumpThreadingPass(bool FreezeSelectCond = false,
                                       int Threshold = -1);
-
-//===----------------------------------------------------------------------===//
-//
-// DFAJumpThreading - When a switch statement inside a loop is used to
-// implement a deterministic finite automata we can jump thread the switch
-// statement reducing number of conditional jumps.
-//
-FunctionPass *createDFAJumpThreadingPass();
 
 //===----------------------------------------------------------------------===//
 //

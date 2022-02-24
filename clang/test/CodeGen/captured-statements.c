@@ -6,11 +6,11 @@
 
 typedef __INTPTR_TYPE__ intptr_t;
 
-int foo(void);
+int foo();
 int global;
 
 // Single statement
-void test1(void) {
+void test1() {
   int i = 0;
   #pragma clang __debug captured
   {
@@ -79,7 +79,7 @@ void test4(intptr_t size, intptr_t vla_arr[size]) {
   // CHECK-3: call void @__captured_stmt
 }
 
-void dont_capture_global(void) {
+void dont_capture_global() {
   static int s;
   extern int e;
   #pragma clang __debug captured

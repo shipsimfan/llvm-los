@@ -32,7 +32,7 @@ namespace llvm {
 class DefInit;
 class Record;
 class StringInit;
-} // namespace llvm
+} // end namespace llvm
 
 namespace mlir {
 namespace tblgen {
@@ -58,15 +58,8 @@ public:
   // Returns this op's C++ class name prefixed with namespaces.
   std::string getQualCppClassName() const;
 
-  // Returns this op's C++ namespace.
-  StringRef getCppNamespace() const;
-
   // Returns the name of op's adaptor C++ class.
   std::string getAdaptorName() const;
-
-  // Check invariants (like no duplicated or conflicted names) and abort the
-  // process if any invariant is broken.
-  void assertInvariants() const;
 
   /// A class used to represent the decorators of an operator variable, i.e.
   /// argument or result.
@@ -84,6 +77,8 @@ public:
   struct VariableDecoratorIterator
       : public llvm::mapped_iterator<llvm::Init *const *,
                                      VariableDecorator (*)(llvm::Init *)> {
+    using reference = VariableDecorator;
+
     /// Initializes the iterator to the specified iterator.
     VariableDecoratorIterator(llvm::Init *const *it)
         : llvm::mapped_iterator<llvm::Init *const *,
@@ -95,9 +90,7 @@ public:
   using var_decorator_range = llvm::iterator_range<VariableDecoratorIterator>;
 
   using value_iterator = NamedTypeConstraint *;
-  using const_value_iterator = const NamedTypeConstraint *;
   using value_range = llvm::iterator_range<value_iterator>;
-  using const_value_range = llvm::iterator_range<const_value_iterator>;
 
   // Returns true if this op has variable length operands or results.
   bool isVariadic() const;
@@ -106,9 +99,9 @@ public:
   bool skipDefaultBuilders() const;
 
   // Op result iterators.
-  const_value_iterator result_begin() const;
-  const_value_iterator result_end() const;
-  const_value_range getResults() const;
+  value_iterator result_begin();
+  value_iterator result_end();
+  value_range getResults();
 
   // Returns the number of results this op produces.
   int getNumResults() const;
@@ -140,14 +133,11 @@ public:
 
   // Op attribute accessors.
   NamedAttribute &getAttribute(int index) { return attributes[index]; }
-  const NamedAttribute &getAttribute(int index) const {
-    return attributes[index];
-  }
 
   // Op operand iterators.
-  const_value_iterator operand_begin() const;
-  const_value_iterator operand_end() const;
-  const_value_range getOperands() const;
+  value_iterator operand_begin();
+  value_iterator operand_end();
+  value_range getOperands();
 
   int getNumOperands() const { return operands.size(); }
   NamedTypeConstraint &getOperand(int index) { return operands[index]; }
@@ -222,7 +212,7 @@ public:
   const_trait_iterator trait_end() const;
   llvm::iterator_range<const_trait_iterator> getTraits() const;
 
-  ArrayRef<SMLoc> getLoc() const;
+  ArrayRef<llvm::SMLoc> getLoc() const;
 
   // Query functions for the documentation of the operator.
   bool hasDescription() const;
@@ -236,9 +226,6 @@ public:
 
   // Returns this op's extra class declaration code.
   StringRef getExtraClassDeclaration() const;
-
-  // Returns this op's extra class definition code.
-  StringRef getExtraClassDefinition() const;
 
   // Returns the Tablegen definition this operator was constructed from.
   // TODO: do not expose the TableGen record, this is a temporary solution to
@@ -287,7 +274,7 @@ public:
   struct OperandOrAttribute {
     enum class Kind { Operand, Attribute };
     OperandOrAttribute(Kind kind, int index) {
-      packed = (index << 1) | (kind == Kind::Attribute);
+      packed = (index << 1) & (kind == Kind::Attribute);
     }
     int operandOrAttributeIndex() const { return (packed >> 1); }
     Kind kind() { return (packed & 0x1) ? Kind::Attribute : Kind::Operand; }
@@ -301,17 +288,6 @@ public:
 
   // Returns the builders of this operation.
   ArrayRef<Builder> getBuilders() const { return builders; }
-
-  // Returns the preferred getter name for the accessor.
-  std::string getGetterName(StringRef name) const {
-    return getGetterNames(name).front();
-  }
-
-  // Returns the getter names for the accessor.
-  SmallVector<std::string, 2> getGetterNames(StringRef name) const;
-
-  // Returns the setter names for the accessor.
-  SmallVector<std::string, 2> getSetterNames(StringRef name) const;
 
 private:
   // Populates the vectors containing operands, attributes, results and traits.
@@ -327,9 +303,6 @@ private:
 
   // The unqualified C++ class name of the op.
   StringRef cppClassName;
-
-  // The C++ namespace for this op.
-  StringRef cppNamespace;
 
   // The operands of the op.
   SmallVector<NamedTypeConstraint, 4> operands;
@@ -375,7 +348,7 @@ private:
   bool allResultsHaveKnownTypes;
 };
 
-} // namespace tblgen
-} // namespace mlir
+} // end namespace tblgen
+} // end namespace mlir
 
 #endif // MLIR_TABLEGEN_OPERATOR_H_

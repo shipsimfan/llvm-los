@@ -8,7 +8,7 @@
 // RUN: not %clang_cc1 -triple arm64-none-linux-gnu -target-feature +neon \
 // RUN:   -S -O3 -o - %s 2>&1 | FileCheck --check-prefix=CHECK-NO-CRYPTO %s
 
-// REQUIRES: aarch64-registered-target || arm-registered-target
+// Test new aarch64 intrinsics and types
 
 #include <arm_neon.h>
 

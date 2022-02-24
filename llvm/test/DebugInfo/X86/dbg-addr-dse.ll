@@ -1,4 +1,4 @@
-; RUN: llc %s -o %t.s -experimental-debug-variable-locations=true
+; RUN: llc %s -o %t.s
 ; RUN: llvm-mc %t.s -filetype=obj -triple=x86_64-windows-msvc -o %t.o
 ; RUN: FileCheck %s < %t.s --check-prefix=ASM
 ; RUN: llvm-dwarfdump %t.o | FileCheck %s --check-prefix=DWARF
@@ -46,8 +46,8 @@ entry:
 }
 
 ; ASM-LABEL: f: # @f
-; ASM: #DEBUG_VALUE: f:x <- [DW_OP_plus_uconst [[OFF_X:[0-9]+]]] [$rsp+0]
-; ASM: movl    %ecx, [[OFF_X]](%rsp)
+; ASM: movl    %ecx, [[OFF_X:[0-9]+]](%rsp)
+; ASM: #DEBUG_VALUE: f:x <- [DW_OP_plus_uconst [[OFF_X]]] [$rsp+0]
 ; ASM: callq   escape
 ; ASM: #DEBUG_VALUE: f:x <- 1
 ; ASM: movl    $1, global(%rip)

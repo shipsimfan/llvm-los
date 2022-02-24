@@ -21,29 +21,28 @@ public:
 };
 
 struct ProcessStatus {
-  int platform_defined;
+  int PlatformDefined;
   const char *failure = nullptr;
 
-  static constexpr uintptr_t TIMEOUT = -1L;
+  static constexpr uintptr_t timeout = -1L;
 
-  static ProcessStatus error(const char *error) { return {0, error}; }
-  static ProcessStatus timed_out_ps() {
-    return {0, reinterpret_cast<const char *>(TIMEOUT)};
+  static ProcessStatus Error(const char *error) { return {0, error}; }
+  static ProcessStatus TimedOut() {
+    return {0, reinterpret_cast<const char *>(timeout)};
   }
 
-  bool timed_out() const {
-    return failure == reinterpret_cast<const char *>(TIMEOUT);
+  bool timedOut() const {
+    return failure == reinterpret_cast<const char *>(timeout);
   }
-  const char *get_error() const { return timed_out() ? nullptr : failure; }
-  bool exited_normally() const;
-  int get_exit_code() const;
-  int get_fatal_signal() const;
+  const char *getError() const { return timedOut() ? nullptr : failure; }
+  bool exitedNormally() const;
+  int getExitCode() const;
+  int getFatalSignal() const;
 };
 
-ProcessStatus invoke_in_subprocess(FunctionCaller *Func,
-                                   unsigned TimeoutMS = -1);
+ProcessStatus invokeInSubprocess(FunctionCaller *Func, unsigned TimeoutMS = -1);
 
-const char *signal_as_string(int Signum);
+const char *signalAsString(int Signum);
 
 } // namespace testutils
 } // namespace __llvm_libc

@@ -14,9 +14,10 @@
 
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/CodeGen/AsmPrinter.h"
+#include "llvm/CodeGen/BuiltinGCs.h"
 #include "llvm/CodeGen/GCMetadata.h"
 #include "llvm/CodeGen/GCMetadataPrinter.h"
-#include "llvm/IR/BuiltinGCs.h"
+#include "llvm/CodeGen/GCStrategy.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"

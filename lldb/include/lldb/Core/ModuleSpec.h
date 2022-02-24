@@ -25,14 +25,19 @@ namespace lldb_private {
 
 class ModuleSpec {
 public:
-  ModuleSpec() {}
+  ModuleSpec()
+      : m_file(), m_platform_file(), m_symbol_file(), m_arch(), m_uuid(),
+        m_object_name(), m_object_offset(0), m_object_size(0),
+        m_source_mappings() {}
 
   /// If the \c data argument is passed, its contents will be used
   /// as the module contents instead of trying to read them from
   /// \c file_spec .
   ModuleSpec(const FileSpec &file_spec, const UUID &uuid = UUID(),
              lldb::DataBufferSP data = lldb::DataBufferSP())
-      : m_file(file_spec), m_uuid(uuid), m_object_offset(0), m_data(data) {
+      : m_file(file_spec), m_platform_file(), m_symbol_file(), m_arch(),
+        m_uuid(uuid), m_object_name(), m_object_offset(0), m_source_mappings(),
+        m_data(data) {
     if (data)
       m_object_size = data->GetByteSize();
     else if (m_file)
@@ -40,8 +45,10 @@ public:
   }
 
   ModuleSpec(const FileSpec &file_spec, const ArchSpec &arch)
-      : m_file(file_spec), m_arch(arch), m_object_offset(0),
-        m_object_size(FileSystem::Instance().GetByteSize(file_spec)) {}
+      : m_file(file_spec), m_platform_file(), m_symbol_file(), m_arch(arch),
+        m_uuid(), m_object_name(), m_object_offset(0),
+        m_object_size(FileSystem::Instance().GetByteSize(file_spec)),
+        m_source_mappings() {}
 
   FileSpec *GetFileSpecPtr() { return (m_file ? &m_file : nullptr); }
 
@@ -264,8 +271,8 @@ protected:
   ArchSpec m_arch;
   UUID m_uuid;
   ConstString m_object_name;
-  uint64_t m_object_offset = 0;
-  uint64_t m_object_size = 0;
+  uint64_t m_object_offset;
+  uint64_t m_object_size;
   llvm::sys::TimePoint<> m_object_mod_time;
   mutable PathMappingList m_source_mappings;
   lldb::DataBufferSP m_data = {};
@@ -273,9 +280,9 @@ protected:
 
 class ModuleSpecList {
 public:
-  ModuleSpecList() {}
+  ModuleSpecList() : m_specs(), m_mutex() {}
 
-  ModuleSpecList(const ModuleSpecList &rhs) {
+  ModuleSpecList(const ModuleSpecList &rhs) : m_specs(), m_mutex() {
     std::lock_guard<std::recursive_mutex> lhs_guard(m_mutex);
     std::lock_guard<std::recursive_mutex> rhs_guard(rhs.m_mutex);
     m_specs = rhs.m_specs;

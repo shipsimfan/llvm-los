@@ -1,7 +1,10 @@
 // RUN: %clang_hwasan -O0 -DNEGATIVE %s -o %t && %run %t 2>&1
 // RUN: %clang_hwasan -O0 %s -o %t && not %run %t 2>&1 | FileCheck %s
 
-// REQUIRES: stable-runtime, pointer-tagging
+// REQUIRES: stable-runtime
+
+// Stack aliasing is not implemented on x86.
+// XFAIL: x86_64
 
 #include <stdlib.h>
 #include <assert.h>

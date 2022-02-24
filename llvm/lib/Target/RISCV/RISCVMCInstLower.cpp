@@ -109,7 +109,7 @@ bool llvm::LowerRISCVMachineOperandToMCOperand(const MachineOperand &MO,
     MCOp = lowerSymbolOperand(MO, MO.getMBB()->getSymbol(), AP);
     break;
   case MachineOperand::MO_GlobalAddress:
-    MCOp = lowerSymbolOperand(MO, AP.getSymbolPreferLocal(*MO.getGlobal()), AP);
+    MCOp = lowerSymbolOperand(MO, AP.getSymbol(MO.getGlobal()), AP);
     break;
   case MachineOperand::MO_BlockAddress:
     MCOp = lowerSymbolOperand(
@@ -148,21 +148,20 @@ static bool lowerRISCVVMachineInstrToMCInst(const MachineInstr *MI,
   assert(TRI && "TargetRegisterInfo expected");
 
   uint64_t TSFlags = MI->getDesc().TSFlags;
-  unsigned NumOps = MI->getNumExplicitOperands();
+  int NumOps = MI->getNumExplicitOperands();
 
-  // Skip policy, VL and SEW operands which are the last operands if present.
-  if (RISCVII::hasVecPolicyOp(TSFlags))
-    --NumOps;
-  if (RISCVII::hasVLOp(TSFlags))
-    --NumOps;
-  if (RISCVII::hasSEWOp(TSFlags))
-    --NumOps;
+  for (const MachineOperand &MO : MI->explicit_operands()) {
+    int OpNo = (int)MI->getOperandNo(&MO);
+    assert(OpNo >= 0 && "Operand number doesn't fit in an 'int' type");
 
-  for (unsigned OpNo = 0; OpNo != NumOps; ++OpNo) {
-    const MachineOperand &MO = MI->getOperand(OpNo);
+    // Skip VL and SEW operands which are the last two operands if present.
+    if ((TSFlags & RISCVII::HasVLOpMask) && OpNo == (NumOps - 2))
+      continue;
+    if ((TSFlags & RISCVII::HasSEWOpMask) && OpNo == (NumOps - 1))
+      continue;
 
     // Skip merge op. It should be the first operand after the result.
-    if (RISCVII::hasMergeOp(TSFlags) && OpNo == 1) {
+    if ((TSFlags & RISCVII::HasMergeOpMask) && OpNo == 1) {
       assert(MI->getNumExplicitDefs() == 1);
       continue;
     }
@@ -172,7 +171,7 @@ static bool lowerRISCVVMachineInstrToMCInst(const MachineInstr *MI,
     default:
       llvm_unreachable("Unknown operand type");
     case MachineOperand::MO_Register: {
-      Register Reg = MO.getReg();
+      unsigned Reg = MO.getReg();
 
       if (RISCV::VRM2RegClass.contains(Reg) ||
           RISCV::VRM4RegClass.contains(Reg) ||
@@ -199,7 +198,7 @@ static bool lowerRISCVVMachineInstrToMCInst(const MachineInstr *MI,
 
   // Unmasked pseudo instructions need to append dummy mask operand to
   // V instructions. All V instructions are modeled as the masked version.
-  if (RISCVII::hasDummyMaskOp(TSFlags))
+  if (TSFlags & RISCVII::HasDummyMaskOpMask)
     OutMI.addOperand(MCOperand::createReg(RISCV::NoRegister));
 
   return true;

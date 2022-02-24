@@ -182,19 +182,7 @@ OPTIONS
 
   Print just the file's name without any directories, instead of the
   absolute path.
-
-.. option:: --build-id
-
-  Look up the object using the given build ID, specified as a hexadecimal
-  string. Mutually exclusive with :option:`--obj`.
-
-.. option:: --debuginfod, --no-debuginfod
-
-  Whether or not to try debuginfod lookups for debug binaries. Unless specified,
-  debuginfod is only enabled if libcurl was compiled in (``LLVM_ENABLE_CURL``)
-  and at least one server URL was provided by the environment variable
-  ``DEBUGINFOD_URLS``.
-
+  
 .. _llvm-symbolizer-opt-C:
 
 .. option:: --demangle, -C
@@ -244,30 +232,26 @@ OPTIONS
 .. option:: --obj <path>, --exe, -e
 
   Path to object file to be symbolized. If ``-`` is specified, read the object
-  directly from the standard input stream. Mutually exclusive with
-  :option:`--build-id`.
+  directly from the standard input stream.
 
 .. _llvm-symbolizer-opt-output-style:
 
-.. option:: --output-style <LLVM|GNU|JSON>
+.. option:: --output-style <LLVM|GNU>
 
   Specify the preferred output style. Defaults to ``LLVM``. When the output
   style is set to ``GNU``, the tool follows the style of GNU's **addr2line**.
   The differences from the ``LLVM`` style are:
-
+  
   * Does not print the column of a source code location.
 
   * Does not add an empty line after the report for an address.
 
   * Does not replace the name of an inlined function with the name of the
-    topmost caller when inlined frames are not shown.
+    topmost caller when inlined frames are not shown and :option:`--use-symbol-table`
+    is on.
 
   * Prints an address's debug-data discriminator when it is non-zero. One way to
     produce discriminators is to compile with clang's -fdebug-info-for-profiling.
-
-  ``JSON`` style provides a machine readable output in JSON. If addresses are
-    supplied via stdin, the output JSON will be a series of individual objects.
-    Otherwise, all results will be contained in a single array.
 
   .. code-block:: console
 
@@ -290,58 +274,10 @@ OPTIONS
     $ llvm-symbolizer --output-style=GNU --obj=profiling.elf 0x401167 -p --no-inlines
     main at /tmp/test.cpp:15 (discriminator 2)
 
-    $ llvm-symbolizer --output-style=JSON --obj=inlined.elf 0x4004be 0x400486 -p
-    [
-      {
-        "Address": "0x4004be",
-        "ModuleName": "inlined.elf",
-        "Symbol": [
-          {
-            "Column": 18,
-            "Discriminator": 0,
-            "FileName": "/tmp/test.cpp",
-            "FunctionName": "baz()",
-            "Line": 11,
-            "StartAddress": "0x4004be",
-            "StartFileName": "/tmp/test.cpp",
-            "StartLine": 9
-          },
-          {
-            "Column": 0,
-            "Discriminator": 0,
-            "FileName": "/tmp/test.cpp",
-            "FunctionName": "main",
-            "Line": 15,
-            "StartAddress": "0x4004be",
-            "StartFileName": "/tmp/test.cpp",
-            "StartLine": 14
-          }
-        ]
-      },
-      {
-        "Address": "0x400486",
-        "ModuleName": "inlined.elf",
-        "Symbol": [
-          {
-            "Column": 3,
-            "Discriminator": 0,
-            "FileName": "/tmp/test.cpp",
-            "FunctionName": "foo()",
-            "Line": 6,
-            "StartAddress": "0x400486",
-            "StartFileName": "/tmp/test.cpp",
-            "StartLine": 5
-          }
-        ]
-      }
-    ]
-
 .. option:: --pretty-print, -p
 
   Print human readable output. If :option:`--inlining` is specified, the
   enclosing scope is prefixed by (inlined by).
-  For JSON output, the option will cause JSON to be indented and split over
-  new lines. Otherwise, the JSON output will be printed in a compact form.
 
   .. code-block:: console
 
@@ -372,7 +308,7 @@ OPTIONS
 
   .. code-block:: console
 
-    $ llvm-symbolizer --obj=test.elf 0x400490 --print-source-context-lines=3
+    $ llvm-symbolizer --obj=test.elf 0x400490 --print-source-context-lines=2
     baz()
     /tmp/test.cpp:11:0
     10  :   volatile int k = 42;
@@ -385,27 +321,30 @@ OPTIONS
   of the absolute path. If the command-line to the compiler included
   the full path, this will be the same as the default.
 
+.. _llvm-symbolizer-opt-use-symbol-table:
+
+.. option:: --use-symbol-table
+
+  Prefer function names stored in symbol table to function names in debug info
+  sections. Defaults to true.
+
 .. option:: --verbose
 
-  Print verbose address, line and column information.
+  Print verbose line and column information.
 
   .. code-block:: console
 
     $ llvm-symbolizer --obj=inlined.elf --verbose 0x4004be
     baz()
       Filename: /tmp/test.cpp
-      Function start filename: /tmp/test.cpp
-      Function start line: 9
-      Function start address: 0x4004b6
+    Function start line: 9
       Line: 11
       Column: 18
     main
       Filename: /tmp/test.cpp
-      Function start filename: /tmp/test.cpp
-      Function start line: 14
-      Function start address: 0x4004b0
+    Function start line: 14
       Line: 15
-      Column: 18
+      Column: 0
 
 .. option:: --version, -v
 

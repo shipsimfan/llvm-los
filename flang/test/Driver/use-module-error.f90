@@ -1,5 +1,7 @@
 ! Ensure that multiple module directories are not allowed
 
+! REQUIRES: new-flang-driver
+
 !--------------------------
 ! FLANG DRIVER (flang-new)
 !--------------------------

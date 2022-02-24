@@ -49,14 +49,14 @@ using AttrPtrVecVecTy = SmallVector<AttrPtrIdxVecVecTy, 3>;
 /// Given ChunksToKeep, produce a map of global variables/functions/calls
 /// and indexes of attributes to be preserved for each of them.
 class AttributeRemapper : public InstVisitor<AttributeRemapper> {
-  Oracle &O;
+  Oracle O;
 
 public:
   DenseMap<GlobalVariable *, AttrPtrVecTy> GlobalVariablesToRefine;
   DenseMap<Function *, AttrPtrVecVecTy> FunctionsToRefine;
   DenseMap<CallBase *, AttrPtrVecVecTy> CallsToRefine;
 
-  explicit AttributeRemapper(Oracle &O) : O(O) {}
+  explicit AttributeRemapper(ArrayRef<Chunk> ChunksToKeep) : O(ChunksToKeep) {}
 
   void visitModule(Module &M) {
     for (GlobalVariable &GV : M.getGlobalList())
@@ -84,7 +84,7 @@ public:
                           AttrPtrVecVecTy &AttributeSetsToPreserve) {
     assert(AttributeSetsToPreserve.empty() && "Should not be sharing vectors.");
     AttributeSetsToPreserve.reserve(AL.getNumAttrSets());
-    for (unsigned SetIdx : AL.indexes()) {
+    for (unsigned SetIdx : seq(AL.index_begin(), AL.index_end())) {
       AttrPtrIdxVecVecTy AttributesToPreserve;
       AttributesToPreserve.first = SetIdx;
       visitAttributeSet(AL.getAttributes(AttributesToPreserve.first),
@@ -141,7 +141,7 @@ struct AttributeCounter : public InstVisitor<AttributeCounter> {
 AttributeSet
 convertAttributeRefToAttributeSet(LLVMContext &C,
                                   ArrayRef<const Attribute *> Attributes) {
-  AttrBuilder B(C);
+  AttrBuilder B;
   for (const Attribute *A : Attributes)
     B.addAttribute(*A);
   return AttributeSet::get(C, B);
@@ -167,11 +167,12 @@ AttributeList convertAttributeRefVecToAttributeList(
 }
 
 /// Removes out-of-chunk attributes from module.
-static void extractAttributesFromModule(Oracle &O, Module &Program) {
-  AttributeRemapper R(O);
+static void extractAttributesFromModule(std::vector<Chunk> ChunksToKeep,
+                                        Module *Program) {
+  AttributeRemapper R(ChunksToKeep);
   R.visit(Program);
 
-  LLVMContext &C = Program.getContext();
+  LLVMContext &C = Program->getContext();
   for (const auto &I : R.GlobalVariablesToRefine)
     I.first->setAttributes(convertAttributeRefToAttributeSet(C, I.second));
   for (const auto &I : R.FunctionsToRefine)
@@ -180,7 +181,20 @@ static void extractAttributesFromModule(Oracle &O, Module &Program) {
     I.first->setAttributes(convertAttributeRefVecToAttributeList(C, I.second));
 }
 
+/// Counts the amount of attributes.
+static int countAttributes(Module *Program) {
+  AttributeCounter C;
+
+  // TODO: Silence index with --quiet flag
+  outs() << "----------------------------\n";
+  C.visit(Program);
+  outs() << "Number of attributes: " << C.AttributeCount << "\n";
+
+  return C.AttributeCount;
+}
+
 void llvm::reduceAttributesDeltaPass(TestRunner &Test) {
   outs() << "*** Reducing Attributes...\n";
-  runDeltaPass(Test, extractAttributesFromModule);
+  int AttributeCount = countAttributes(Test.getProgram());
+  runDeltaPass(Test, AttributeCount, extractAttributesFromModule);
 }

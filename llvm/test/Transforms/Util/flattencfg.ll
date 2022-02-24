@@ -1,5 +1,4 @@
 ; RUN: opt -flattencfg -S < %s -enable-new-pm=0 | FileCheck %s
-; RUN: opt -passes=flattencfg -S < %s | FileCheck %s
 
 
 ; This test checks whether the pass completes without a crash.

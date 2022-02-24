@@ -9,8 +9,6 @@
 // UNSUPPORTED: libcpp-has-no-threads
 // UNSUPPORTED: c++03
 
-// ALLOW_RETRIES: 3
-
 // <future>
 
 // class future<R>
@@ -19,9 +17,8 @@
 //   future_status
 //   wait_for(const chrono::duration<Rep, Period>& rel_time) const;
 
-#include <cassert>
-#include <chrono>
 #include <future>
+#include <cassert>
 
 #include "make_test_thread.h"
 #include "test_macros.h"

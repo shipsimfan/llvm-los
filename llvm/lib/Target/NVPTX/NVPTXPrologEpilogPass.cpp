@@ -74,6 +74,7 @@ bool NVPTXPrologEpilogPass::runOnMachineFunction(MachineFunction &MF) {
           auto Offset =
               TFI.getFrameIndexReference(MF, Op.getIndex(), Reg);
           Op.ChangeToRegister(Reg, /*isDef=*/false);
+          Op.setIsDebug();
           const DIExpression *DIExpr = MI.getDebugExpression();
           if (MI.isNonListDebugValue()) {
             DIExpr = TRI.prependOffsetExpression(MI.getDebugExpression(), DIExpression::ApplyOffset, Offset);

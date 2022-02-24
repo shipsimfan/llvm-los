@@ -1,11 +1,5 @@
-// RUN: %clang -cc1 -triple x86_64-gnu-linux -x c++ -S -emit-llvm %s -o - | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-INTEL
-// RUN: %clang -cc1 -triple aarch64-gnu-linux -x c++ -S -emit-llvm %s -o - | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-AARCH
-// RUN: %clang -cc1 -triple x86_64-gnu-linux -x c++ -S -emit-llvm -fsanitize-memory-param-retval %s -o - | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-INTEL
-// RUN: %clang -cc1 -triple aarch64-gnu-linux -x c++ -S -emit-llvm -fsanitize-memory-param-retval %s -o - | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-AARCH
-
-// no-sanitize-memory-param-retval does NOT conflict with enable-noundef-analysis
-// RUN: %clang -cc1 -triple x86_64-gnu-linux -x c++ -S -emit-llvm -fno-sanitize-memory-param-retval %s -o - | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-INTEL
-// RUN: %clang -cc1 -triple x86_64-gnu-linux -x c++ -S -emit-llvm -fno-sanitize-memory-param-retval %s -o - | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-INTEL
+// RUN: %clang -cc1 -triple x86_64-gnu-linux -x c++ -S -emit-llvm -enable-noundef-analysis %s -o - | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-INTEL
+// RUN: %clang -cc1 -triple aarch64-gnu-linux -x c++ -S -emit-llvm -enable-noundef-analysis %s -o - | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-AARCH
 
 //************ Passing structs by value
 // TODO: No structs may currently be marked noundef
@@ -17,7 +11,7 @@ struct Trivial {
 Trivial ret_trivial() { return {}; }
 void pass_trivial(Trivial e) {}
 // CHECK-INTEL: [[DEFINE:define( dso_local)?]] i32 @{{.*}}ret_trivial
-// CHECK-AARCH: [[DEFINE:define( dso_local)?]] i32 @{{.*}}ret_trivial
+// CHECK-AARCH: [[DEFINE:define( dso_local)?]] i64 @{{.*}}ret_trivial
 // CHECK-INTEL: [[DEFINE]] void @{{.*}}pass_trivial{{.*}}(i32 %
 // CHECK-AARCH: [[DEFINE]] void @{{.*}}pass_trivial{{.*}}(i64 %
 
@@ -49,7 +43,7 @@ union Trivial {
 Trivial ret_trivial() { return {}; }
 void pass_trivial(Trivial e) {}
 // CHECK-INTEL: [[DEFINE]] i32 @{{.*}}ret_trivial
-// CHECK-AARCH: [[DEFINE]] i32 @{{.*}}ret_trivial
+// CHECK-AARCH: [[DEFINE]] i64 @{{.*}}ret_trivial
 // CHECK-INTEL: [[DEFINE]] void @{{.*}}pass_trivial{{.*}}(i32 %
 // CHECK-AARCH: [[DEFINE]] void @{{.*}}pass_trivial{{.*}}(i64 %
 
@@ -86,9 +80,9 @@ void use_object() {
   obj.getData();
   obj.getThis();
 }
-// CHECK: define linkonce_odr void @{{.*}}Object{{.*}}(%"struct.check_this::Object"* noundef nonnull align 4 dereferenceable(1) %
-// CHECK: define linkonce_odr noundef i32 @{{.*}}Object{{.*}}getData{{.*}}(%"struct.check_this::Object"* noundef nonnull align 4 dereferenceable(1) %
-// CHECK: define linkonce_odr noundef %"struct.check_this::Object"* @{{.*}}Object{{.*}}getThis{{.*}}(%"struct.check_this::Object"* noundef nonnull align 4 dereferenceable(1) %
+// CHECK: define linkonce_odr void @{{.*}}Object{{.*}}(%"struct.check_this::Object"* noundef %
+// CHECK: define linkonce_odr noundef i32 @{{.*}}Object{{.*}}getData{{.*}}(%"struct.check_this::Object"* noundef %
+// CHECK: define linkonce_odr noundef %"struct.check_this::Object"* @{{.*}}Object{{.*}}getThis{{.*}}(%"struct.check_this::Object"* noundef %
 } // namespace check_this
 
 //************ Passing vector types
@@ -137,12 +131,12 @@ nullptr_t ret_npt() {
 }
 void pass_npt(nullptr_t t) {
 }
-_BitInt(3) ret_BitInt() {
+_ExtInt(3) ret_extint() {
   return 0;
 }
-void pass_BitInt(_BitInt(3) e) {
+void pass_extint(_ExtInt(3) e) {
 }
-void pass_large_BitInt(_BitInt(127) e) {
+void pass_large_extint(_ExtInt(127) e) {
 }
 
 // Pointers to arrays/functions are always noundef
@@ -159,10 +153,10 @@ void pass_large_BitInt(_BitInt(127) e) {
 // CHECK: [[DEFINE]] void @{{.*}}pass_npt{{.*}}(i8* %
 
 // TODO: for now, ExtInt is only noundef if it is sign/zero-extended
-// CHECK-INTEL: [[DEFINE]] noundef signext i3 @{{.*}}ret_BitInt{{.*}}()
-// CHECK-AARCH: [[DEFINE]] i3 @{{.*}}ret_BitInt{{.*}}()
-// CHECK-INTEL: [[DEFINE]] void @{{.*}}pass_BitInt{{.*}}(i3 noundef signext %
-// CHECK-AARCH: [[DEFINE]] void @{{.*}}pass_BitInt{{.*}}(i3 %
-// CHECK-INTEL: [[DEFINE]] void @{{.*}}pass_large_BitInt{{.*}}(i64 %{{.*}}, i64 %
-// CHECK-AARCH: [[DEFINE]] void @{{.*}}pass_large_BitInt{{.*}}(i127 %
+// CHECK-INTEL: [[DEFINE]] noundef signext i3 @{{.*}}ret_extint{{.*}}()
+// CHECK-AARCH: [[DEFINE]] i3 @{{.*}}ret_extint{{.*}}()
+// CHECK-INTEL: [[DEFINE]] void @{{.*}}pass_extint{{.*}}(i3 noundef signext %
+// CHECK-AARCH: [[DEFINE]] void @{{.*}}pass_extint{{.*}}(i3 %
+// CHECK-INTEL: [[DEFINE]] void @{{.*}}pass_large_extint{{.*}}(i64 %{{.*}}, i64 %
+// CHECK-AARCH: [[DEFINE]] void @{{.*}}pass_large_extint{{.*}}(i127 %
 } // namespace check_exotic

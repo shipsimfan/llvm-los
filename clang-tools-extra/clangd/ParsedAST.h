@@ -13,7 +13,7 @@
 // we have several customizations:
 //  - preamble handling
 //  - capturing diagnostics for later access
-//  - running clang-tidy checks
+//  - running clang-tidy checks checks
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,6 +24,7 @@
 #include "Compiler.h"
 #include "Diagnostics.h"
 #include "Headers.h"
+#include "HeuristicResolver.h"
 #include "Preamble.h"
 #include "index/CanonicalIncludes.h"
 #include "support/Path.h"
@@ -42,7 +43,7 @@
 
 namespace clang {
 namespace clangd {
-class HeuristicResolver;
+class SymbolIndex;
 
 /// Stores and provides access to parsed AST.
 class ParsedAST {
@@ -100,8 +101,6 @@ public:
   /// Gets all macro references (definition, expansions) present in the main
   /// file, including those in the preamble region.
   const MainFileMacros &getMacros() const;
-  /// Gets all pragma marks in the main file.
-  const std::vector<PragmaMark> &getMarks() const;
   /// Tokens recorded while parsing the main file.
   /// (!) does not have tokens from the preamble.
   const syntax::TokenBuffer &getTokens() const { return Tokens; }
@@ -122,8 +121,7 @@ private:
             std::shared_ptr<const PreambleData> Preamble,
             std::unique_ptr<CompilerInstance> Clang,
             std::unique_ptr<FrontendAction> Action, syntax::TokenBuffer Tokens,
-            MainFileMacros Macros, std::vector<PragmaMark> Marks,
-            std::vector<Decl *> LocalTopLevelDecls,
+            MainFileMacros Macros, std::vector<Decl *> LocalTopLevelDecls,
             llvm::Optional<std::vector<Diag>> Diags, IncludeStructure Includes,
             CanonicalIncludes CanonIncludes);
 
@@ -146,8 +144,6 @@ private:
 
   /// All macro definitions and expansions in the main file.
   MainFileMacros Macros;
-  // Pragma marks in the main file.
-  std::vector<PragmaMark> Marks;
   // Data, stored after parsing. None if AST was built with a stale preamble.
   llvm::Optional<std::vector<Diag>> Diags;
   // Top-level decls inside the current file. Not that this does not include

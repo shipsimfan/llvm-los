@@ -9,6 +9,7 @@
 // This file implements the Expression parsing implementation for C++.
 //
 //===----------------------------------------------------------------------===//
+#include "clang/Parse/Parser.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclTemplate.h"
@@ -16,7 +17,6 @@
 #include "clang/Basic/PrettyStackTrace.h"
 #include "clang/Lex/LiteralSupport.h"
 #include "clang/Parse/ParseDiagnostic.h"
-#include "clang/Parse/Parser.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/ParsedTemplate.h"
@@ -668,7 +668,7 @@ ExprResult Parser::ParseCXXIdExpression(bool isAddressOfOperand) {
   //
   CXXScopeSpec SS;
   ParseOptionalCXXScopeSpecifier(SS, /*ObjectType=*/nullptr,
-                                 /*ObjectHasErrors=*/false,
+                                 /*ObjectHadErrors=*/false,
                                  /*EnteringContext=*/false);
 
   Token Replacement;
@@ -1068,8 +1068,8 @@ bool Parser::ParseLambdaIntroducer(LambdaIntroducer &Intro,
 
     // Ensure that any ellipsis was in the right place.
     SourceLocation EllipsisLoc;
-    if (llvm::any_of(EllipsisLocs,
-                     [](SourceLocation Loc) { return Loc.isValid(); })) {
+    if (std::any_of(std::begin(EllipsisLocs), std::end(EllipsisLocs),
+                    [](SourceLocation Loc) { return Loc.isValid(); })) {
       // The '...' should appear before the identifier in an init-capture, and
       // after the identifier otherwise.
       bool InitCapture = InitKind != LambdaCaptureInitKind::NoInit;
@@ -1877,8 +1877,8 @@ Parser::ParseCXXTypeConstructExpression(const DeclSpec &DS) {
       QualType PreferredType;
       if (TypeRep)
         PreferredType = Actions.ProduceConstructorSignatureHelp(
-            TypeRep.get()->getCanonicalTypeInternal(), DS.getEndLoc(), Exprs,
-            T.getOpenLocation(), /*Braced=*/false);
+            getCurScope(), TypeRep.get()->getCanonicalTypeInternal(),
+            DS.getEndLoc(), Exprs, T.getOpenLocation());
       CalledSignatureHelp = true;
       return PreferredType;
     };
@@ -1910,28 +1910,6 @@ Parser::ParseCXXTypeConstructExpression(const DeclSpec &DS) {
   }
 }
 
-Parser::DeclGroupPtrTy
-Parser::ParseAliasDeclarationInInitStatement(DeclaratorContext Context,
-                                             ParsedAttributesWithRange &Attrs) {
-  assert(Tok.is(tok::kw_using) && "Expected using");
-  assert((Context == DeclaratorContext::ForInit ||
-          Context == DeclaratorContext::SelectionInit) &&
-         "Unexpected Declarator Context");
-  DeclGroupPtrTy DG;
-  SourceLocation DeclStart = ConsumeToken(), DeclEnd;
-
-  DG = ParseUsingDeclaration(Context, {}, DeclStart, DeclEnd, Attrs, AS_none);
-  if (!DG)
-    return DG;
-
-  Diag(DeclStart, !getLangOpts().CPlusPlus2b
-                      ? diag::ext_alias_in_init_statement
-                      : diag::warn_cxx20_alias_in_init_statement)
-      << SourceRange(DeclStart, DeclEnd);
-
-  return DG;
-}
-
 /// ParseCXXCondition - if/switch/while condition expression.
 ///
 ///       condition:
@@ -1953,9 +1931,6 @@ Parser::ParseAliasDeclarationInInitStatement(DeclaratorContext Context,
 /// \param Loc The location of the start of the statement that requires this
 /// condition, e.g., the "for" in a for loop.
 ///
-/// \param MissingOK Whether an empty condition is acceptable here. Otherwise
-/// it is considered an error to be recovered from.
-///
 /// \param FRI If non-null, a for range declaration is permitted, and if
 /// present will be parsed and stored here, and a null result will be returned.
 ///
@@ -1963,10 +1938,11 @@ Parser::ParseAliasDeclarationInInitStatement(DeclaratorContext Context,
 /// appropriate moment for a 'for' loop.
 ///
 /// \returns The parsed condition.
-Sema::ConditionResult
-Parser::ParseCXXCondition(StmtResult *InitStmt, SourceLocation Loc,
-                          Sema::ConditionKind CK, bool MissingOK,
-                          ForRangeInfo *FRI, bool EnterForConditionScope) {
+Sema::ConditionResult Parser::ParseCXXCondition(StmtResult *InitStmt,
+                                                SourceLocation Loc,
+                                                Sema::ConditionKind CK,
+                                                ForRangeInfo *FRI,
+                                                bool EnterForConditionScope) {
   // Helper to ensure we always enter a continue/break scope if requested.
   struct ForConditionScopeRAII {
     Scope *S;
@@ -2021,7 +1997,7 @@ Parser::ParseCXXCondition(StmtResult *InitStmt, SourceLocation Loc,
       }
       ConsumeToken();
       *InitStmt = Actions.ActOnNullStmt(SemiLoc);
-      return ParseCXXCondition(nullptr, Loc, CK, MissingOK);
+      return ParseCXXCondition(nullptr, Loc, CK);
     }
 
     // Parse the expression.
@@ -2033,25 +2009,19 @@ Parser::ParseCXXCondition(StmtResult *InitStmt, SourceLocation Loc,
       WarnOnInit();
       *InitStmt = Actions.ActOnExprStmt(Expr.get());
       ConsumeToken();
-      return ParseCXXCondition(nullptr, Loc, CK, MissingOK);
+      return ParseCXXCondition(nullptr, Loc, CK);
     }
 
-    return Actions.ActOnCondition(getCurScope(), Loc, Expr.get(), CK,
-                                  MissingOK);
+    return Actions.ActOnCondition(getCurScope(), Loc, Expr.get(), CK);
   }
 
   case ConditionOrInitStatement::InitStmtDecl: {
     WarnOnInit();
-    DeclGroupPtrTy DG;
     SourceLocation DeclStart = Tok.getLocation(), DeclEnd;
-    if (Tok.is(tok::kw_using))
-      DG = ParseAliasDeclarationInInitStatement(
-          DeclaratorContext::SelectionInit, attrs);
-    else
-      DG = ParseSimpleDeclaration(DeclaratorContext::SelectionInit, DeclEnd,
-                                  attrs, /*RequireSemi=*/true);
+    DeclGroupPtrTy DG = ParseSimpleDeclaration(
+        DeclaratorContext::SelectionInit, DeclEnd, attrs, /*RequireSemi=*/true);
     *InitStmt = Actions.ActOnDeclStmt(DG, DeclStart, DeclEnd);
-    return ParseCXXCondition(nullptr, Loc, CK, MissingOK);
+    return ParseCXXCondition(nullptr, Loc, CK);
   }
 
   case ConditionOrInitStatement::ForRangeDecl: {
@@ -2063,8 +2033,6 @@ Parser::ParseCXXCondition(StmtResult *InitStmt, SourceLocation Loc,
     DeclGroupPtrTy DG = ParseSimpleDeclaration(DeclaratorContext::ForInit,
                                                DeclEnd, attrs, false, FRI);
     FRI->LoopVar = Actions.ActOnDeclStmt(DG, DeclStart, Tok.getLocation());
-    assert((FRI->ColonLoc.isValid() || !DG) &&
-           "cannot find for range declaration");
     return Sema::ConditionResult();
   }
 
@@ -2194,14 +2162,12 @@ void Parser::ParseCXXSimpleTypeSpecifier(DeclSpec &DS) {
     return;
   }
 
-  case tok::kw__ExtInt:
-  case tok::kw__BitInt: {
-    DiagnoseBitIntUse(Tok);
+  case tok::kw__ExtInt: {
     ExprResult ER = ParseExtIntegerArgument();
     if (ER.isInvalid())
       DS.SetTypeSpecError();
     else
-      DS.SetBitIntType(Loc, ER.get(), PrevSpec, DiagID, Policy);
+      DS.SetExtIntType(Loc, ER.get(), PrevSpec, DiagID, Policy);
 
     // Do this here because we have already consumed the close paren.
     DS.SetRangeEnd(PrevTokLocation);
@@ -2257,9 +2223,6 @@ void Parser::ParseCXXSimpleTypeSpecifier(DeclSpec &DS) {
     break;
   case tok::kw___float128:
     DS.SetTypeSpecType(DeclSpec::TST_float128, Loc, PrevSpec, DiagID, Policy);
-    break;
-  case tok::kw___ibm128:
-    DS.SetTypeSpecType(DeclSpec::TST_ibm128, Loc, PrevSpec, DiagID, Policy);
     break;
   case tok::kw_wchar_t:
     DS.SetTypeSpecType(DeclSpec::TST_wchar, Loc, PrevSpec, DiagID, Policy);
@@ -2457,8 +2420,8 @@ bool Parser::ParseUnqualifiedIdTemplateId(
   // Parse the enclosed template argument list.
   SourceLocation LAngleLoc, RAngleLoc;
   TemplateArgList TemplateArgs;
-  if (ParseTemplateIdAfterTemplateName(true, LAngleLoc, TemplateArgs, RAngleLoc,
-                                       Template))
+  if (ParseTemplateIdAfterTemplateName(true, LAngleLoc, TemplateArgs,
+                                       RAngleLoc))
     return true;
 
   // If this is a non-template, we already issued a diagnostic.
@@ -2671,10 +2634,9 @@ bool Parser::ParseUnqualifiedIdOperator(CXXScopeSpec &SS, bool EnteringContext,
 
     // Grab the literal operator's suffix, which will be either the next token
     // or a ud-suffix from the string literal.
-    bool IsUDSuffix = !Literal.getUDSuffix().empty();
     IdentifierInfo *II = nullptr;
     SourceLocation SuffixLoc;
-    if (IsUDSuffix) {
+    if (!Literal.getUDSuffix().empty()) {
       II = &PP.getIdentifierTable().get(Literal.getUDSuffix());
       SuffixLoc =
         Lexer::AdvanceToTokenCharacter(TokLocs[Literal.getUDSuffixToken()],
@@ -2711,7 +2673,7 @@ bool Parser::ParseUnqualifiedIdOperator(CXXScopeSpec &SS, bool EnteringContext,
 
     Result.setLiteralOperatorId(II, KeywordLoc, SuffixLoc);
 
-    return Actions.checkLiteralOperatorId(SS, Result, IsUDSuffix);
+    return Actions.checkLiteralOperatorId(SS, Result);
   }
 
   // Parse a conversion-function-id.
@@ -3170,9 +3132,8 @@ Parser::ParseCXXNewExpression(bool UseGlobal, SourceLocation Start) {
         // `new decltype(invalid) (^)`.
         if (TypeRep)
           PreferredType = Actions.ProduceConstructorSignatureHelp(
-              TypeRep.get()->getCanonicalTypeInternal(),
-              DeclaratorInfo.getEndLoc(), ConstructorArgs, ConstructorLParen,
-              /*Braced=*/false);
+              getCurScope(), TypeRep.get()->getCanonicalTypeInternal(),
+              DeclaratorInfo.getEndLoc(), ConstructorArgs, ConstructorLParen);
         CalledSignatureHelp = true;
         return PreferredType;
       };
@@ -3589,7 +3550,7 @@ ExprResult Parser::ParseRequiresExpression() {
 
           // We need to consume the typename to allow 'requires { typename a; }'
           SourceLocation TypenameKWLoc = ConsumeToken();
-          if (TryAnnotateOptionalCXXScopeToken()) {
+          if (TryAnnotateCXXScopeToken()) {
             TPA.Commit();
             SkipUntil(tok::semi, tok::r_brace, SkipUntilFlags::StopBeforeMatch);
             break;
@@ -3638,7 +3599,7 @@ ExprResult Parser::ParseRequiresExpression() {
           break;
         }
         if (!Expression.isInvalid() && PossibleRequiresExprInSimpleRequirement)
-          Diag(StartLoc, diag::err_requires_expr_in_simple_requirement)
+          Diag(StartLoc, diag::warn_requires_expr_in_simple_requirement)
               << FixItHint::CreateInsertion(StartLoc, "requires");
         if (auto *Req = Actions.ActOnSimpleRequirement(Expression.get()))
           Requirements.push_back(Req);

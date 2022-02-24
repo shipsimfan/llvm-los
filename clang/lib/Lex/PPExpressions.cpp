@@ -133,8 +133,6 @@ static bool EvaluateDefined(PPValue &Result, Token &PeekTok, DefinedTracker &DT,
   Result.Val.setIsUnsigned(false); // Result is signed intmax_t.
   DT.IncludedUndefinedIds = !Macro;
 
-  PP.emitMacroExpansionWarnings(PeekTok);
-
   // If there is a macro, mark it used.
   if (Result.Val != 0 && ValueLive)
     PP.markMacroAsUsed(Macro.getMacroInfo());
@@ -662,19 +660,19 @@ static bool EvaluateDirectiveSubExpr(PPValue &LHS, unsigned MinPrec,
     case tok::ampamp:         // Logical && does not do UACs.
       break;                  // No UAC
     default:
-      Res.setIsUnsigned(LHS.isUnsigned() || RHS.isUnsigned());
+      Res.setIsUnsigned(LHS.isUnsigned()|RHS.isUnsigned());
       // If this just promoted something from signed to unsigned, and if the
       // value was negative, warn about it.
       if (ValueLive && Res.isUnsigned()) {
         if (!LHS.isUnsigned() && LHS.Val.isNegative())
           PP.Diag(OpLoc, diag::warn_pp_convert_to_positive) << 0
-            << toString(LHS.Val, 10, true) + " to " +
-               toString(LHS.Val, 10, false)
+            << LHS.Val.toString(10, true) + " to " +
+               LHS.Val.toString(10, false)
             << LHS.getRange() << RHS.getRange();
         if (!RHS.isUnsigned() && RHS.Val.isNegative())
           PP.Diag(OpLoc, diag::warn_pp_convert_to_positive) << 1
-            << toString(RHS.Val, 10, true) + " to " +
-               toString(RHS.Val, 10, false)
+            << RHS.Val.toString(10, true) + " to " +
+               RHS.Val.toString(10, false)
             << LHS.getRange() << RHS.getRange();
       }
       LHS.Val.setIsUnsigned(Res.isUnsigned());
@@ -822,7 +820,7 @@ static bool EvaluateDirectiveSubExpr(PPValue &LHS, unsigned MinPrec,
 
       // Usual arithmetic conversions (C99 6.3.1.8p1): result is unsigned if
       // either operand is unsigned.
-      Res.setIsUnsigned(RHS.isUnsigned() || AfterColonVal.isUnsigned());
+      Res.setIsUnsigned(RHS.isUnsigned() | AfterColonVal.isUnsigned());
 
       // Figure out the precedence of the token after the : part.
       PeekPrec = getPrecedence(PeekTok.getKind());

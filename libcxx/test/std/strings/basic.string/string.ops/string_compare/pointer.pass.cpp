@@ -16,7 +16,7 @@
 #include "test_macros.h"
 #include "min_allocator.h"
 
-TEST_CONSTEXPR_CXX20 int sign(int x)
+int sign(int x)
 {
     if (x == 0)
         return 0;
@@ -26,15 +26,16 @@ TEST_CONSTEXPR_CXX20 int sign(int x)
 }
 
 template <class S>
-TEST_CONSTEXPR_CXX20 void
+void
 test(const S& s, const typename S::value_type* str, int x)
 {
     LIBCPP_ASSERT_NOEXCEPT(s.compare(str));
     assert(sign(s.compare(str)) == sign(x));
 }
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     typedef std::string S;
     test(S(""), "", 0);
     test(S(""), "abcde", -5);
@@ -52,9 +53,9 @@ bool test() {
     test(S("abcdefghijklmnopqrst"), "abcde", 15);
     test(S("abcdefghijklmnopqrst"), "abcdefghij", 10);
     test(S("abcdefghijklmnopqrst"), "abcdefghijklmnopqrst", 0);
-  }
+    }
 #if TEST_STD_VER >= 11
-  {
+    {
     typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
     test(S(""), "", 0);
     test(S(""), "abcde", -5);
@@ -72,17 +73,7 @@ bool test() {
     test(S("abcdefghijklmnopqrst"), "abcde", 15);
     test(S("abcdefghijklmnopqrst"), "abcdefghij", 10);
     test(S("abcdefghijklmnopqrst"), "abcdefghijklmnopqrst", 0);
-  }
-#endif
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
+    }
 #endif
 
   return 0;

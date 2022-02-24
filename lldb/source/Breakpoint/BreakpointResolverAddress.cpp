@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Breakpoint/BreakpointResolverAddress.h"
+
+
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/Section.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/LLDBLog.h"
+#include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
 
 using namespace lldb;
@@ -28,7 +30,8 @@ BreakpointResolverAddress::BreakpointResolverAddress(
 BreakpointResolverAddress::BreakpointResolverAddress(const BreakpointSP &bkpt,
                                                      const Address &addr)
     : BreakpointResolver(bkpt, BreakpointResolver::AddressResolver),
-      m_addr(addr), m_resolved_addr(LLDB_INVALID_ADDRESS) {}
+      m_addr(addr), m_resolved_addr(LLDB_INVALID_ADDRESS), m_module_filespec() {
+}
 
 BreakpointResolver *BreakpointResolverAddress::CreateFromStructuredData(
     const BreakpointSP &bkpt, const StructuredData::Dictionary &options_dict,
@@ -140,7 +143,8 @@ Searcher::CallbackReturn BreakpointResolverAddress::SearchCallback(
       if (bp_loc_sp && !breakpoint.IsInternal()) {
         StreamString s;
         bp_loc_sp->GetDescription(&s, lldb::eDescriptionLevelVerbose);
-        Log *log = GetLog(LLDBLog::Breakpoints);
+        Log *log(
+            lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_BREAKPOINTS));
         LLDB_LOGF(log, "Added location: %s\n", s.GetData());
       }
     } else {

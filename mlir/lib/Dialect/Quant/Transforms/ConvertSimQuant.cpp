@@ -20,7 +20,7 @@ using namespace mlir::quant;
 namespace {
 struct ConvertSimulatedQuantPass
     : public QuantConvertSimulatedQuantBase<ConvertSimulatedQuantPass> {
-  void runOnOperation() override;
+  void runOnFunction() override;
 };
 
 /// Base class rewrites ConstFakeQuant into a qbarrier/dbarrier pair.
@@ -122,11 +122,11 @@ public:
 
 } // namespace
 
-void ConvertSimulatedQuantPass::runOnOperation() {
+void ConvertSimulatedQuantPass::runOnFunction() {
   bool hadFailure = false;
-  auto func = getOperation();
+  auto func = getFunction();
   RewritePatternSet patterns(func.getContext());
-  auto *ctx = func.getContext();
+  auto ctx = func.getContext();
   patterns.add<ConstFakeQuantRewrite, ConstFakeQuantPerAxisRewrite>(
       ctx, &hadFailure);
   (void)applyPatternsAndFoldGreedily(func, std::move(patterns));

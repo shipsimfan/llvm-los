@@ -34,7 +34,7 @@ MATCHER_P2(Pos, Line, Col, "") {
   return arg.line == int(Line) && arg.character == int(Col);
 }
 
-MATCHER_P(macroName, Name, "") { return arg.Name == Name; }
+MATCHER_P(MacroName, Name, "") { return arg.Name == Name; }
 
 /// A helper to make tests easier to read.
 Position position(int Line, int Character) {
@@ -315,16 +315,6 @@ TEST(SourceCodeTests, SourceLocationInMainFile) {
   }
 }
 
-TEST(SourceCodeTests, isReservedName) {
-  EXPECT_FALSE(isReservedName(""));
-  EXPECT_FALSE(isReservedName("_"));
-  EXPECT_FALSE(isReservedName("foo"));
-  EXPECT_FALSE(isReservedName("_foo"));
-  EXPECT_TRUE(isReservedName("__foo"));
-  EXPECT_TRUE(isReservedName("_Foo"));
-  EXPECT_FALSE(isReservedName("foo__bar")) << "FIXME";
-}
-
 TEST(SourceCodeTests, CollectIdentifiers) {
   auto Style = format::getLLVMStyle();
   auto IDs = collectIdentifiers(R"cpp(
@@ -542,7 +532,7 @@ TEST(SourceCodeTests, GetMacros) {
   ASSERT_TRUE(Id);
   auto Result = locateMacroAt(*Id, AST.getPreprocessor());
   ASSERT_TRUE(Result);
-  EXPECT_THAT(*Result, macroName("MACRO"));
+  EXPECT_THAT(*Result, MacroName("MACRO"));
 }
 
 TEST(SourceCodeTests, WorksAtBeginOfFile) {
@@ -556,7 +546,7 @@ TEST(SourceCodeTests, WorksAtBeginOfFile) {
   ASSERT_TRUE(Id);
   auto Result = locateMacroAt(*Id, AST.getPreprocessor());
   ASSERT_TRUE(Result);
-  EXPECT_THAT(*Result, macroName("MACRO"));
+  EXPECT_THAT(*Result, MacroName("MACRO"));
 }
 
 TEST(SourceCodeTests, IsInsideMainFile) {

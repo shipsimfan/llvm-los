@@ -45,10 +45,6 @@
 
 using namespace llvm;
 
-static cl::opt<bool> DisableI2pP2iOpt(
-    "disable-i2p-p2i-opt", cl::init(false),
-    cl::desc("Disables inttoptr/ptrtoint roundtrip optimization"));
-
 //===----------------------------------------------------------------------===//
 //                            AllocaInst Class
 //===----------------------------------------------------------------------===//
@@ -318,8 +314,9 @@ bool CallBase::isReturnNonNull() const {
   if (hasRetAttr(Attribute::NonNull))
     return true;
 
-  if (getRetDereferenceableBytes() > 0 &&
-      !NullPointerIsDefined(getCaller(), getType()->getPointerAddressSpace()))
+  if (getDereferenceableBytes(AttributeList::ReturnIndex) > 0 &&
+           !NullPointerIsDefined(getCaller(),
+                                 getType()->getPointerAddressSpace()))
     return true;
 
   return false;
@@ -328,10 +325,11 @@ bool CallBase::isReturnNonNull() const {
 Value *CallBase::getReturnedArgOperand() const {
   unsigned Index;
 
-  if (Attrs.hasAttrSomewhere(Attribute::Returned, &Index))
+  if (Attrs.hasAttrSomewhere(Attribute::Returned, &Index) && Index)
     return getArgOperand(Index - AttributeList::FirstArgIndex);
   if (const Function *F = getCalledFunction())
-    if (F->getAttributes().hasAttrSomewhere(Attribute::Returned, &Index))
+    if (F->getAttributes().hasAttrSomewhere(Attribute::Returned, &Index) &&
+        Index)
       return getArgOperand(Index - AttributeList::FirstArgIndex);
 
   return nullptr;
@@ -339,36 +337,24 @@ Value *CallBase::getReturnedArgOperand() const {
 
 /// Determine whether the argument or parameter has the given attribute.
 bool CallBase::paramHasAttr(unsigned ArgNo, Attribute::AttrKind Kind) const {
-  assert(ArgNo < arg_size() && "Param index out of bounds!");
+  assert(ArgNo < getNumArgOperands() && "Param index out of bounds!");
 
-  if (Attrs.hasParamAttr(ArgNo, Kind))
+  if (Attrs.hasParamAttribute(ArgNo, Kind))
     return true;
   if (const Function *F = getCalledFunction())
-    return F->getAttributes().hasParamAttr(ArgNo, Kind);
+    return F->getAttributes().hasParamAttribute(ArgNo, Kind);
   return false;
 }
 
 bool CallBase::hasFnAttrOnCalledFunction(Attribute::AttrKind Kind) const {
-  Value *V = getCalledOperand();
-  if (auto *CE = dyn_cast<ConstantExpr>(V))
-    if (CE->getOpcode() == BitCast)
-      V = CE->getOperand(0);
-
-  if (auto *F = dyn_cast<Function>(V))
-    return F->getAttributes().hasFnAttr(Kind);
-
+  if (const Function *F = getCalledFunction())
+    return F->getAttributes().hasFnAttribute(Kind);
   return false;
 }
 
 bool CallBase::hasFnAttrOnCalledFunction(StringRef Kind) const {
-  Value *V = getCalledOperand();
-  if (auto *CE = dyn_cast<ConstantExpr>(V))
-    if (CE->getOpcode() == BitCast)
-      V = CE->getOperand(0);
-
-  if (auto *F = dyn_cast<Function>(V))
-    return F->getAttributes().hasFnAttr(Kind);
-
+  if (const Function *F = getCalledFunction())
+    return F->getAttributes().hasFnAttribute(Kind);
   return false;
 }
 
@@ -482,10 +468,9 @@ CallBase *CallBase::removeOperandBundle(CallBase *CB, uint32_t ID,
 
 bool CallBase::hasReadingOperandBundles() const {
   // Implementation note: this is a conservative implementation of operand
-  // bundle semantics, where *any* non-assume operand bundle (other than
-  // ptrauth) forces a callsite to be at least readonly.
-  return hasOperandBundlesOtherThan(LLVMContext::OB_ptrauth) &&
-         getIntrinsicID() != Intrinsic::assume;
+  // bundle semantics, where *any* non-assume operand bundle forces a callsite
+  // to be at least readonly.
+  return hasOperandBundles() && getIntrinsicID() != Intrinsic::assume;
 }
 
 //===----------------------------------------------------------------------===//
@@ -497,6 +482,7 @@ void CallInst::init(FunctionType *FTy, Value *Func, ArrayRef<Value *> Args,
   this->FTy = FTy;
   assert(getNumOperands() == Args.size() + CountBundleInputs(Bundles) + 1 &&
          "NumOperands not set up?");
+  setCalledOperand(Func);
 
 #ifndef NDEBUG
   assert((Args.size() == FTy->getNumParams() ||
@@ -509,10 +495,7 @@ void CallInst::init(FunctionType *FTy, Value *Func, ArrayRef<Value *> Args,
            "Calling a function with a bad signature!");
 #endif
 
-  // Set operands in order of their index to match use-list-order
-  // prediction.
   llvm::copy(Args, op_begin());
-  setCalledOperand(Func);
 
   auto It = populateBundleOperandInfos(Bundles, Args.size());
   (void)It;
@@ -841,6 +824,9 @@ void InvokeInst::init(FunctionType *FTy, Value *Fn, BasicBlock *IfNormal,
   assert((int)getNumOperands() ==
              ComputeNumOperands(Args.size(), CountBundleInputs(Bundles)) &&
          "NumOperands not set up?");
+  setNormalDest(IfNormal);
+  setUnwindDest(IfException);
+  setCalledOperand(Fn);
 
 #ifndef NDEBUG
   assert(((Args.size() == FTy->getNumParams()) ||
@@ -853,12 +839,7 @@ void InvokeInst::init(FunctionType *FTy, Value *Fn, BasicBlock *IfNormal,
            "Invoking a function with a bad signature!");
 #endif
 
-  // Set operands in order of their index to match use-list-order
-  // prediction.
   llvm::copy(Args, op_begin());
-  setNormalDest(IfNormal);
-  setUnwindDest(IfException);
-  setCalledOperand(Fn);
 
   auto It = populateBundleOperandInfos(Bundles, Args.size());
   (void)It;
@@ -911,6 +892,11 @@ void CallBrInst::init(FunctionType *FTy, Value *Fn, BasicBlock *Fallthrough,
              ComputeNumOperands(Args.size(), IndirectDests.size(),
                                 CountBundleInputs(Bundles)) &&
          "NumOperands not set up?");
+  NumIndirectDests = IndirectDests.size();
+  setDefaultDest(Fallthrough);
+  for (unsigned i = 0; i != NumIndirectDests; ++i)
+    setIndirectDest(i, IndirectDests[i]);
+  setCalledOperand(Fn);
 
 #ifndef NDEBUG
   assert(((Args.size() == FTy->getNumParams()) ||
@@ -923,14 +909,7 @@ void CallBrInst::init(FunctionType *FTy, Value *Fn, BasicBlock *Fallthrough,
            "Calling a function with a bad signature!");
 #endif
 
-  // Set operands in order of their index to match use-list-order
-  // prediction.
   std::copy(Args.begin(), Args.end(), op_begin());
-  NumIndirectDests = IndirectDests.size();
-  setDefaultDest(Fallthrough);
-  for (unsigned i = 0; i != NumIndirectDests; ++i)
-    setIndirectDest(i, IndirectDests[i]);
-  setCalledOperand(Fn);
 
   auto It = populateBundleOperandInfos(Bundles, Args.size());
   (void)It;
@@ -944,7 +923,7 @@ void CallBrInst::updateArgBlockAddresses(unsigned i, BasicBlock *B) {
   if (BasicBlock *OldBB = getIndirectDest(i)) {
     BlockAddress *Old = BlockAddress::get(OldBB);
     BlockAddress *New = BlockAddress::get(B);
-    for (unsigned ArgNo = 0, e = arg_size(); ArgNo != e; ++ArgNo)
+    for (unsigned ArgNo = 0, e = getNumArgOperands(); ArgNo != e; ++ArgNo)
       if (dyn_cast<BlockAddress>(getArgOperand(ArgNo)) == Old)
         setArgOperand(ArgNo, New);
   }
@@ -1262,10 +1241,9 @@ BranchInst::BranchInst(BasicBlock *IfTrue, BasicBlock *IfFalse, Value *Cond,
     : Instruction(Type::getVoidTy(IfTrue->getContext()), Instruction::Br,
                   OperandTraits<BranchInst>::op_end(this) - 3, 3,
                   InsertBefore) {
-  // Assign in order of operand index to make use-list order predictable.
-  Op<-3>() = Cond;
-  Op<-2>() = IfFalse;
   Op<-1>() = IfTrue;
+  Op<-2>() = IfFalse;
+  Op<-3>() = Cond;
 #ifndef NDEBUG
   AssertOK();
 #endif
@@ -1282,10 +1260,9 @@ BranchInst::BranchInst(BasicBlock *IfTrue, BasicBlock *IfFalse, Value *Cond,
                        BasicBlock *InsertAtEnd)
     : Instruction(Type::getVoidTy(IfTrue->getContext()), Instruction::Br,
                   OperandTraits<BranchInst>::op_end(this) - 3, 3, InsertAtEnd) {
-  // Assign in order of operand index to make use-list order predictable.
-  Op<-3>() = Cond;
-  Op<-2>() = IfFalse;
   Op<-1>() = IfTrue;
+  Op<-2>() = IfFalse;
+  Op<-3>() = Cond;
 #ifndef NDEBUG
   AssertOK();
 #endif
@@ -1295,13 +1272,12 @@ BranchInst::BranchInst(const BranchInst &BI)
     : Instruction(Type::getVoidTy(BI.getContext()), Instruction::Br,
                   OperandTraits<BranchInst>::op_end(this) - BI.getNumOperands(),
                   BI.getNumOperands()) {
-  // Assign in order of operand index to make use-list order predictable.
+  Op<-1>() = BI.Op<-1>();
   if (BI.getNumOperands() != 1) {
     assert(BI.getNumOperands() == 3 && "BR can have 1 or 3 operands!");
     Op<-3>() = BI.Op<-3>();
     Op<-2>() = BI.Op<-2>();
   }
-  Op<-1>() = BI.Op<-1>();
   SubclassOptionalData = BI.SubclassOptionalData;
 }
 
@@ -1411,6 +1387,8 @@ bool AllocaInst::isStaticAlloca() const {
 void LoadInst::AssertOK() {
   assert(getOperand(0)->getType()->isPointerTy() &&
          "Ptr must have pointer type.");
+  assert(!(isAtomic() && getAlignment() == 0) &&
+         "Alignment required for atomic load");
 }
 
 static Align computeLoadStoreDefaultAlign(Type *Ty, BasicBlock *BB) {
@@ -1458,7 +1436,7 @@ LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name, bool isVolatile,
                    Align Align, AtomicOrdering Order, SyncScope::ID SSID,
                    Instruction *InsertBef)
     : UnaryInstruction(Ty, Load, Ptr, InsertBef) {
-  assert(cast<PointerType>(Ptr->getType())->isOpaqueOrPointeeTypeMatches(Ty));
+  assert(Ty == cast<PointerType>(Ptr->getType())->getElementType());
   setVolatile(isVolatile);
   setAlignment(Align);
   setAtomic(Order, SSID);
@@ -1470,7 +1448,7 @@ LoadInst::LoadInst(Type *Ty, Value *Ptr, const Twine &Name, bool isVolatile,
                    Align Align, AtomicOrdering Order, SyncScope::ID SSID,
                    BasicBlock *InsertAE)
     : UnaryInstruction(Ty, Load, Ptr, InsertAE) {
-  assert(cast<PointerType>(Ptr->getType())->isOpaqueOrPointeeTypeMatches(Ty));
+  assert(Ty == cast<PointerType>(Ptr->getType())->getElementType());
   setVolatile(isVolatile);
   setAlignment(Align);
   setAtomic(Order, SSID);
@@ -1486,9 +1464,11 @@ void StoreInst::AssertOK() {
   assert(getOperand(0) && getOperand(1) && "Both operands must be non-null!");
   assert(getOperand(1)->getType()->isPointerTy() &&
          "Ptr must have pointer type!");
-  assert(cast<PointerType>(getOperand(1)->getType())
-             ->isOpaqueOrPointeeTypeMatches(getOperand(0)->getType()) &&
-         "Ptr must be a pointer to Val type!");
+  assert(getOperand(0)->getType() ==
+                 cast<PointerType>(getOperand(1)->getType())->getElementType()
+         && "Ptr must be a pointer to Val type!");
+  assert(!(isAtomic() && getAlignment() == 0) &&
+         "Alignment required for atomic store");
 }
 
 StoreInst::StoreInst(Value *val, Value *addr, Instruction *InsertBefore)
@@ -1568,14 +1548,22 @@ void AtomicCmpXchgInst::Init(Value *Ptr, Value *Cmp, Value *NewVal,
          "All operands must be non-null!");
   assert(getOperand(0)->getType()->isPointerTy() &&
          "Ptr must have pointer type!");
-  assert(cast<PointerType>(getOperand(0)->getType())
-             ->isOpaqueOrPointeeTypeMatches(getOperand(1)->getType()) &&
-         "Ptr must be a pointer to Cmp type!");
-  assert(cast<PointerType>(getOperand(0)->getType())
-             ->isOpaqueOrPointeeTypeMatches(getOperand(2)->getType()) &&
-         "Ptr must be a pointer to NewVal type!");
-  assert(getOperand(1)->getType() == getOperand(2)->getType() &&
-         "Cmp type and NewVal type must be same!");
+  assert(getOperand(1)->getType() ==
+                 cast<PointerType>(getOperand(0)->getType())->getElementType()
+         && "Ptr must be a pointer to Cmp type!");
+  assert(getOperand(2)->getType() ==
+                 cast<PointerType>(getOperand(0)->getType())->getElementType()
+         && "Ptr must be a pointer to NewVal type!");
+  assert(SuccessOrdering != AtomicOrdering::NotAtomic &&
+         "AtomicCmpXchg instructions must be atomic!");
+  assert(FailureOrdering != AtomicOrdering::NotAtomic &&
+         "AtomicCmpXchg instructions must be atomic!");
+  assert(!isStrongerThan(FailureOrdering, SuccessOrdering) &&
+         "AtomicCmpXchg failure argument shall be no stronger than the success "
+         "argument");
+  assert(FailureOrdering != AtomicOrdering::Release &&
+         FailureOrdering != AtomicOrdering::AcquireRelease &&
+         "AtomicCmpXchg failure ordering cannot include release semantics");
 }
 
 AtomicCmpXchgInst::AtomicCmpXchgInst(Value *Ptr, Value *Cmp, Value *NewVal,
@@ -1622,9 +1610,9 @@ void AtomicRMWInst::Init(BinOp Operation, Value *Ptr, Value *Val,
          "All operands must be non-null!");
   assert(getOperand(0)->getType()->isPointerTy() &&
          "Ptr must have pointer type!");
-  assert(cast<PointerType>(getOperand(0)->getType())
-             ->isOpaqueOrPointeeTypeMatches(getOperand(1)->getType()) &&
-         "Ptr must be a pointer to Val type!");
+  assert(getOperand(1)->getType() ==
+         cast<PointerType>(getOperand(0)->getType())->getElementType()
+         && "Ptr must be a pointer to Val type!");
   assert(Ordering != AtomicOrdering::NotAtomic &&
          "AtomicRMW instructions must be atomic!");
 }
@@ -1820,7 +1808,7 @@ bool GetElementPtrInst::accumulateConstantOffset(const DataLayout &DL,
 
 bool GetElementPtrInst::collectOffset(
     const DataLayout &DL, unsigned BitWidth,
-    MapVector<Value *, APInt> &VariableOffsets,
+    SmallDenseMap<Value *, APInt, 8> &VariableOffsets,
     APInt &ConstantOffset) const {
   // Delegate to the generic GEPOperator implementation.
   return cast<GEPOperator>(this)->collectOffset(DL, BitWidth, VariableOffsets,
@@ -1915,32 +1903,6 @@ bool InsertElementInst::isValidOperands(const Value *Vec, const Value *Elt,
 //===----------------------------------------------------------------------===//
 //                      ShuffleVectorInst Implementation
 //===----------------------------------------------------------------------===//
-
-static Value *createPlaceholderForShuffleVector(Value *V) {
-  assert(V && "Cannot create placeholder of nullptr V");
-  return PoisonValue::get(V->getType());
-}
-
-ShuffleVectorInst::ShuffleVectorInst(Value *V1, Value *Mask, const Twine &Name,
-                                     Instruction *InsertBefore)
-    : ShuffleVectorInst(V1, createPlaceholderForShuffleVector(V1), Mask, Name,
-                        InsertBefore) {}
-
-ShuffleVectorInst::ShuffleVectorInst(Value *V1, Value *Mask, const Twine &Name,
-                                     BasicBlock *InsertAtEnd)
-    : ShuffleVectorInst(V1, createPlaceholderForShuffleVector(V1), Mask, Name,
-                        InsertAtEnd) {}
-
-ShuffleVectorInst::ShuffleVectorInst(Value *V1, ArrayRef<int> Mask,
-                                     const Twine &Name,
-                                     Instruction *InsertBefore)
-    : ShuffleVectorInst(V1, createPlaceholderForShuffleVector(V1), Mask, Name,
-                        InsertBefore) {}
-
-ShuffleVectorInst::ShuffleVectorInst(Value *V1, ArrayRef<int> Mask,
-                                     const Twine &Name, BasicBlock *InsertAtEnd)
-    : ShuffleVectorInst(V1, createPlaceholderForShuffleVector(V1), Mask, Name,
-                        InsertAtEnd) {}
 
 ShuffleVectorInst::ShuffleVectorInst(Value *V1, Value *V2, Value *Mask,
                                      const Twine &Name,
@@ -2129,7 +2091,6 @@ void ShuffleVectorInst::setShuffleMask(ArrayRef<int> Mask) {
   ShuffleMask.assign(Mask.begin(), Mask.end());
   ShuffleMaskForBitcode = convertShuffleMaskForBitcode(Mask, getType());
 }
-
 Constant *ShuffleVectorInst::convertShuffleMaskForBitcode(ArrayRef<int> Mask,
                                                           Type *ResultTy) {
   Type *Int32Ty = Type::getInt32Ty(ResultTy->getContext());
@@ -2292,79 +2253,6 @@ bool ShuffleVectorInst::isExtractSubvectorMask(ArrayRef<int> Mask,
   return false;
 }
 
-bool ShuffleVectorInst::isInsertSubvectorMask(ArrayRef<int> Mask,
-                                              int NumSrcElts, int &NumSubElts,
-                                              int &Index) {
-  int NumMaskElts = Mask.size();
-
-  // Don't try to match if we're shuffling to a smaller size.
-  if (NumMaskElts < NumSrcElts)
-    return false;
-
-  // TODO: We don't recognize self-insertion/widening.
-  if (isSingleSourceMaskImpl(Mask, NumSrcElts))
-    return false;
-
-  // Determine which mask elements are attributed to which source.
-  APInt UndefElts = APInt::getZero(NumMaskElts);
-  APInt Src0Elts = APInt::getZero(NumMaskElts);
-  APInt Src1Elts = APInt::getZero(NumMaskElts);
-  bool Src0Identity = true;
-  bool Src1Identity = true;
-
-  for (int i = 0; i != NumMaskElts; ++i) {
-    int M = Mask[i];
-    if (M < 0) {
-      UndefElts.setBit(i);
-      continue;
-    }
-    if (M < NumSrcElts) {
-      Src0Elts.setBit(i);
-      Src0Identity &= (M == i);
-      continue;
-    }
-    Src1Elts.setBit(i);
-    Src1Identity &= (M == (i + NumSrcElts));
-  }
-  assert((Src0Elts | Src1Elts | UndefElts).isAllOnes() &&
-         "unknown shuffle elements");
-  assert(!Src0Elts.isZero() && !Src1Elts.isZero() &&
-         "2-source shuffle not found");
-
-  // Determine lo/hi span ranges.
-  // TODO: How should we handle undefs at the start of subvector insertions?
-  int Src0Lo = Src0Elts.countTrailingZeros();
-  int Src1Lo = Src1Elts.countTrailingZeros();
-  int Src0Hi = NumMaskElts - Src0Elts.countLeadingZeros();
-  int Src1Hi = NumMaskElts - Src1Elts.countLeadingZeros();
-
-  // If src0 is in place, see if the src1 elements is inplace within its own
-  // span.
-  if (Src0Identity) {
-    int NumSub1Elts = Src1Hi - Src1Lo;
-    ArrayRef<int> Sub1Mask = Mask.slice(Src1Lo, NumSub1Elts);
-    if (isIdentityMaskImpl(Sub1Mask, NumSrcElts)) {
-      NumSubElts = NumSub1Elts;
-      Index = Src1Lo;
-      return true;
-    }
-  }
-
-  // If src1 is in place, see if the src0 elements is inplace within its own
-  // span.
-  if (Src1Identity) {
-    int NumSub0Elts = Src0Hi - Src0Lo;
-    ArrayRef<int> Sub0Mask = Mask.slice(Src0Lo, NumSub0Elts);
-    if (isIdentityMaskImpl(Sub0Mask, NumSrcElts)) {
-      NumSubElts = NumSub0Elts;
-      Index = Src0Lo;
-      return true;
-    }
-  }
-
-  return false;
-}
-
 bool ShuffleVectorInst::isIdentityWithPadding() const {
   if (isa<UndefValue>(Op<2>()))
     return false;
@@ -2430,87 +2318,6 @@ bool ShuffleVectorInst::isConcat() const {
   // and neither of the inputs are undef vectors. If the mask picks consecutive
   // elements from both inputs, then this is a concatenation of the inputs.
   return isIdentityMaskImpl(getShuffleMask(), NumMaskElts);
-}
-
-static bool isReplicationMaskWithParams(ArrayRef<int> Mask,
-                                        int ReplicationFactor, int VF) {
-  assert(Mask.size() == (unsigned)ReplicationFactor * VF &&
-         "Unexpected mask size.");
-
-  for (int CurrElt : seq(0, VF)) {
-    ArrayRef<int> CurrSubMask = Mask.take_front(ReplicationFactor);
-    assert(CurrSubMask.size() == (unsigned)ReplicationFactor &&
-           "Run out of mask?");
-    Mask = Mask.drop_front(ReplicationFactor);
-    if (!all_of(CurrSubMask, [CurrElt](int MaskElt) {
-          return MaskElt == UndefMaskElem || MaskElt == CurrElt;
-        }))
-      return false;
-  }
-  assert(Mask.empty() && "Did not consume the whole mask?");
-
-  return true;
-}
-
-bool ShuffleVectorInst::isReplicationMask(ArrayRef<int> Mask,
-                                          int &ReplicationFactor, int &VF) {
-  // undef-less case is trivial.
-  if (none_of(Mask, [](int MaskElt) { return MaskElt == UndefMaskElem; })) {
-    ReplicationFactor =
-        Mask.take_while([](int MaskElt) { return MaskElt == 0; }).size();
-    if (ReplicationFactor == 0 || Mask.size() % ReplicationFactor != 0)
-      return false;
-    VF = Mask.size() / ReplicationFactor;
-    return isReplicationMaskWithParams(Mask, ReplicationFactor, VF);
-  }
-
-  // However, if the mask contains undef's, we have to enumerate possible tuples
-  // and pick one. There are bounds on replication factor: [1, mask size]
-  // (where RF=1 is an identity shuffle, RF=mask size is a broadcast shuffle)
-  // Additionally, mask size is a replication factor multiplied by vector size,
-  // which further significantly reduces the search space.
-
-  // Before doing that, let's perform basic correctness checking first.
-  int Largest = -1;
-  for (int MaskElt : Mask) {
-    if (MaskElt == UndefMaskElem)
-      continue;
-    // Elements must be in non-decreasing order.
-    if (MaskElt < Largest)
-      return false;
-    Largest = std::max(Largest, MaskElt);
-  }
-
-  // Prefer larger replication factor if all else equal.
-  for (int PossibleReplicationFactor :
-       reverse(seq_inclusive<unsigned>(1, Mask.size()))) {
-    if (Mask.size() % PossibleReplicationFactor != 0)
-      continue;
-    int PossibleVF = Mask.size() / PossibleReplicationFactor;
-    if (!isReplicationMaskWithParams(Mask, PossibleReplicationFactor,
-                                     PossibleVF))
-      continue;
-    ReplicationFactor = PossibleReplicationFactor;
-    VF = PossibleVF;
-    return true;
-  }
-
-  return false;
-}
-
-bool ShuffleVectorInst::isReplicationMask(int &ReplicationFactor,
-                                          int &VF) const {
-  // Not possible to express a shuffle mask for a scalable vector for this
-  // case.
-  if (isa<ScalableVectorType>(getType()))
-    return false;
-
-  VF = cast<FixedVectorType>(Op<0>()->getType())->getNumElements();
-  if (ShuffleMask.size() % VF != 0)
-    return false;
-  ReplicationFactor = ShuffleMask.size() / VF;
-
-  return isReplicationMaskWithParams(ShuffleMask, ReplicationFactor, VF);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3036,10 +2843,6 @@ unsigned CastInst::isEliminableCastPair(
         return secondOp;
       return 0;
     case 7: {
-      // Disable inttoptr/ptrtoint optimization if enabled.
-      if (DisableI2pP2iOpt)
-        return 0;
-
       // Cannot simplify if address spaces are different!
       if (SrcTy->getPointerAddressSpace() != DstTy->getPointerAddressSpace())
         return 0;
@@ -3105,15 +2908,13 @@ unsigned CastInst::isEliminableCastPair(
         "Illegal addrspacecast, bitcast sequence!");
       // Allowed, use first cast's opcode
       return firstOp;
-    case 14: {
+    case 14:
       // bitcast, addrspacecast -> addrspacecast if the element type of
       // bitcast's source is the same as that of addrspacecast's destination.
-      PointerType *SrcPtrTy = cast<PointerType>(SrcTy->getScalarType());
-      PointerType *DstPtrTy = cast<PointerType>(DstTy->getScalarType());
-      if (SrcPtrTy->hasSameElementTypeAs(DstPtrTy))
+      if (SrcTy->getScalarType()->getPointerElementType() ==
+          DstTy->getScalarType()->getPointerElementType())
         return Instruction::AddrSpaceCast;
       return 0;
-    }
     case 15:
       // FIXME: this state can be merged with (1), but the following assert
       // is useful to check the correcteness of the sequence due to semantic
@@ -4132,76 +3933,6 @@ bool CmpInst::isSigned(Predicate predicate) {
   }
 }
 
-bool ICmpInst::compare(const APInt &LHS, const APInt &RHS,
-                       ICmpInst::Predicate Pred) {
-  assert(ICmpInst::isIntPredicate(Pred) && "Only for integer predicates!");
-  switch (Pred) {
-  case ICmpInst::Predicate::ICMP_EQ:
-    return LHS.eq(RHS);
-  case ICmpInst::Predicate::ICMP_NE:
-    return LHS.ne(RHS);
-  case ICmpInst::Predicate::ICMP_UGT:
-    return LHS.ugt(RHS);
-  case ICmpInst::Predicate::ICMP_UGE:
-    return LHS.uge(RHS);
-  case ICmpInst::Predicate::ICMP_ULT:
-    return LHS.ult(RHS);
-  case ICmpInst::Predicate::ICMP_ULE:
-    return LHS.ule(RHS);
-  case ICmpInst::Predicate::ICMP_SGT:
-    return LHS.sgt(RHS);
-  case ICmpInst::Predicate::ICMP_SGE:
-    return LHS.sge(RHS);
-  case ICmpInst::Predicate::ICMP_SLT:
-    return LHS.slt(RHS);
-  case ICmpInst::Predicate::ICMP_SLE:
-    return LHS.sle(RHS);
-  default:
-    llvm_unreachable("Unexpected non-integer predicate.");
-  };
-}
-
-bool FCmpInst::compare(const APFloat &LHS, const APFloat &RHS,
-                       FCmpInst::Predicate Pred) {
-  APFloat::cmpResult R = LHS.compare(RHS);
-  switch (Pred) {
-  default:
-    llvm_unreachable("Invalid FCmp Predicate");
-  case FCmpInst::FCMP_FALSE:
-    return false;
-  case FCmpInst::FCMP_TRUE:
-    return true;
-  case FCmpInst::FCMP_UNO:
-    return R == APFloat::cmpUnordered;
-  case FCmpInst::FCMP_ORD:
-    return R != APFloat::cmpUnordered;
-  case FCmpInst::FCMP_UEQ:
-    return R == APFloat::cmpUnordered || R == APFloat::cmpEqual;
-  case FCmpInst::FCMP_OEQ:
-    return R == APFloat::cmpEqual;
-  case FCmpInst::FCMP_UNE:
-    return R != APFloat::cmpEqual;
-  case FCmpInst::FCMP_ONE:
-    return R == APFloat::cmpLessThan || R == APFloat::cmpGreaterThan;
-  case FCmpInst::FCMP_ULT:
-    return R == APFloat::cmpUnordered || R == APFloat::cmpLessThan;
-  case FCmpInst::FCMP_OLT:
-    return R == APFloat::cmpLessThan;
-  case FCmpInst::FCMP_UGT:
-    return R == APFloat::cmpUnordered || R == APFloat::cmpGreaterThan;
-  case FCmpInst::FCMP_OGT:
-    return R == APFloat::cmpGreaterThan;
-  case FCmpInst::FCMP_ULE:
-    return R != APFloat::cmpGreaterThan;
-  case FCmpInst::FCMP_OLE:
-    return R == APFloat::cmpLessThan || R == APFloat::cmpEqual;
-  case FCmpInst::FCMP_UGE:
-    return R != APFloat::cmpLessThan;
-  case FCmpInst::FCMP_OGE:
-    return R == APFloat::cmpGreaterThan || R == APFloat::cmpEqual;
-  }
-}
-
 CmpInst::Predicate CmpInst::getFlippedSignednessPredicate(Predicate pred) {
   assert(CmpInst::isRelational(pred) &&
          "Call only with non-equality predicates!");
@@ -4448,7 +4179,7 @@ void SwitchInstProfUpdateWrapper::addCase(
     Weights.getValue()[SI.getNumSuccessors() - 1] = *W;
   } else if (Weights) {
     Changed = true;
-    Weights.getValue().push_back(W.getValueOr(0));
+    Weights.getValue().push_back(W ? *W : 0);
   }
   if (Weights)
     assert(SI.getNumSuccessors() == Weights->size() &&

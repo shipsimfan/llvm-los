@@ -108,11 +108,6 @@ public:
 protected:
   NativeThreadWindows *GetThreadByID(lldb::tid_t thread_id);
 
-  llvm::Expected<llvm::ArrayRef<uint8_t>>
-  GetSoftwareBreakpointTrapOpcode(size_t size_hint) override;
-
-  size_t GetSoftwareBreakpointPCOffset() override;
-
   bool FindSoftwareBreakpoint(lldb::addr_t addr);
 
   void StopThread(lldb::tid_t thread_id, lldb::StopReason reason,

@@ -250,7 +250,7 @@ bool lldb_private::formatters::LibStdcppStringSummaryProvider(
           addr_of_data == LLDB_INVALID_ADDRESS)
         return false;
       options.SetLocation(addr_of_data);
-      options.SetTargetSP(valobj.GetTargetSP());
+      options.SetProcessSP(process_sp);
       options.SetStream(&stream);
       options.SetNeedsZeroTermination(false);
       options.SetBinaryZeroIsTerminator(true);
@@ -311,7 +311,7 @@ bool lldb_private::formatters::LibStdcppWStringSummaryProvider(
           addr_of_data == LLDB_INVALID_ADDRESS)
         return false;
       options.SetLocation(addr_of_data);
-      options.SetTargetSP(valobj.GetTargetSP());
+      options.SetProcessSP(process_sp);
       options.SetStream(&stream);
       options.SetNeedsZeroTermination(false);
       options.SetBinaryZeroIsTerminator(false);

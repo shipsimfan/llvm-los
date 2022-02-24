@@ -98,7 +98,7 @@ TEST(FormatTest, Reindent) {
                  
                  
   )";
-  ros.printReindented(desc);
+  ros.reindent(desc);
   ros.flush();
   const auto *expected =
       R"(First line

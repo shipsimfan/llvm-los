@@ -81,27 +81,35 @@ inline bool isPrimitiveIntegral(PrimType Type) {
 /// Helper macro to simplify type switches.
 /// The macro implicitly exposes a type T in the scope of the inner block.
 #define TYPE_SWITCH_CASE(Name, B) \
-  case Name: { using T = PrimConv<Name>::T; B; break; }
+  case Name: { using T = PrimConv<Name>::T; do {B;} while(0); break; }
 #define TYPE_SWITCH(Expr, B)                                                   \
-  do {                                                                         \
-    switch (Expr) {                                                            \
-      TYPE_SWITCH_CASE(PT_Sint8, B)                                            \
-      TYPE_SWITCH_CASE(PT_Uint8, B)                                            \
-      TYPE_SWITCH_CASE(PT_Sint16, B)                                           \
-      TYPE_SWITCH_CASE(PT_Uint16, B)                                           \
-      TYPE_SWITCH_CASE(PT_Sint32, B)                                           \
-      TYPE_SWITCH_CASE(PT_Uint32, B)                                           \
-      TYPE_SWITCH_CASE(PT_Sint64, B)                                           \
-      TYPE_SWITCH_CASE(PT_Uint64, B)                                           \
-      TYPE_SWITCH_CASE(PT_Bool, B)                                             \
-      TYPE_SWITCH_CASE(PT_Ptr, B)                                              \
-    }                                                                          \
-  } while (0)
+  switch (Expr) {                                                              \
+    TYPE_SWITCH_CASE(PT_Sint8, B)                                              \
+    TYPE_SWITCH_CASE(PT_Uint8, B)                                              \
+    TYPE_SWITCH_CASE(PT_Sint16, B)                                             \
+    TYPE_SWITCH_CASE(PT_Uint16, B)                                             \
+    TYPE_SWITCH_CASE(PT_Sint32, B)                                             \
+    TYPE_SWITCH_CASE(PT_Uint32, B)                                             \
+    TYPE_SWITCH_CASE(PT_Sint64, B)                                             \
+    TYPE_SWITCH_CASE(PT_Uint64, B)                                             \
+    TYPE_SWITCH_CASE(PT_Bool, B)                                               \
+    TYPE_SWITCH_CASE(PT_Ptr, B)                                                \
+  }
 #define COMPOSITE_TYPE_SWITCH(Expr, B, D)                                      \
-  do {                                                                         \
-    switch (Expr) {                                                            \
-      TYPE_SWITCH_CASE(PT_Ptr, B)                                              \
-      default: { D; break; }                                                   \
-    }                                                                          \
-  } while (0)
+  switch (Expr) {                                                              \
+    TYPE_SWITCH_CASE(PT_Ptr, B)                                                \
+    default: do { D; } while(0); break;                                        \
+  }
+#define INT_TYPE_SWITCH(Expr, B)                                               \
+  switch (Expr) {                                                              \
+    TYPE_SWITCH_CASE(PT_Sint8, B)                                              \
+    TYPE_SWITCH_CASE(PT_Uint8, B)                                              \
+    TYPE_SWITCH_CASE(PT_Sint16, B)                                             \
+    TYPE_SWITCH_CASE(PT_Uint16, B)                                             \
+    TYPE_SWITCH_CASE(PT_Sint32, B)                                             \
+    TYPE_SWITCH_CASE(PT_Uint32, B)                                             \
+    TYPE_SWITCH_CASE(PT_Sint64, B)                                             \
+    TYPE_SWITCH_CASE(PT_Uint64, B)                                             \
+    default: llvm_unreachable("not an integer");                               \
+  }
 #endif

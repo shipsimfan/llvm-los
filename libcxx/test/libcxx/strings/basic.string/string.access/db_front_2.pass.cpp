@@ -13,12 +13,15 @@
 // UNSUPPORTED: libcxx-no-debug-mode
 
 // ADDITIONAL_COMPILE_FLAGS: -D_LIBCPP_DEBUG=1
+#define _LIBCPP_ASSERT(x, m) ((x) ? (void)0 : std::exit(0))
 
 #include <string>
 #include <cassert>
+#include <iterator>
+#include <exception>
+#include <cstdlib>
 
 #include "test_macros.h"
-#include "debug_macros.h"
 #include "min_allocator.h"
 
 int main(int, char**) {
@@ -26,7 +29,8 @@ int main(int, char**) {
   S s(1, '\0');
   assert(s.front() == 0);
   s.clear();
-  TEST_LIBCPP_ASSERT_FAILURE(s.front(), "string::front(): string is empty");
+  assert(s.front() == 0);
+  assert(false);
 
   return 0;
 }

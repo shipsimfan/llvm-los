@@ -1506,13 +1506,13 @@ bool FilterChooser::filterProcessor(bool AllowMixed, bool Greedy) {
   if (AllowMixed && !Greedy) {
     assert(numInstructions == 3);
 
-    for (auto Opcode : Opcodes) {
+    for (unsigned i = 0; i < Opcodes.size(); ++i) {
       std::vector<unsigned> StartBits;
       std::vector<unsigned> EndBits;
       std::vector<uint64_t> FieldVals;
       insn_t Insn;
 
-      insnWithID(Insn, Opcode.EncodingID);
+      insnWithID(Insn, Opcodes[i].EncodingID);
 
       // Look for islands of undecoded bits of any instruction.
       if (getIslands(StartBits, EndBits, FieldVals, Insn) > 0) {
@@ -1774,13 +1774,13 @@ void FilterChooser::emitTableEntries(DecoderTableInfo &TableInfo) const {
 
   dumpStack(errs(), "\t\t");
 
-  for (auto Opcode : Opcodes) {
+  for (unsigned i = 0; i < Opcodes.size(); ++i) {
     errs() << '\t';
-    emitNameWithID(errs(), Opcode.EncodingID);
+    emitNameWithID(errs(), Opcodes[i].EncodingID);
     errs() << " ";
     dumpBits(
         errs(),
-        getBitsField(*AllInstructions[Opcode.EncodingID].EncodingDef, "Inst"));
+        getBitsField(*AllInstructions[Opcodes[i].EncodingID].EncodingDef, "Inst"));
     errs() << '\n';
   }
 }
@@ -2402,8 +2402,6 @@ static void emitDecodeInstruction(formatted_raw_ostream &OS) {
 void FixedLenDecoderEmitter::run(raw_ostream &o) {
   formatted_raw_ostream OS(o);
   OS << "#include \"llvm/MC/MCInst.h\"\n";
-  OS << "#include \"llvm/MC/MCSubtargetInfo.h\"\n";
-  OS << "#include \"llvm/MC/SubtargetFeature.h\"\n";
   OS << "#include \"llvm/Support/DataTypes.h\"\n";
   OS << "#include \"llvm/Support/Debug.h\"\n";
   OS << "#include \"llvm/Support/LEB128.h\"\n";

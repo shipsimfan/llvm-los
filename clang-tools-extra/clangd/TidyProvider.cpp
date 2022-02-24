@@ -213,9 +213,7 @@ TidyProvider disableUnusableChecks(llvm::ArrayRef<std::string> ExtraBadChecks) {
                        // Check can choke on invalid (intermediate) c++
                        // code, which is often the case when clangd
                        // tries to build an AST.
-                       "-bugprone-use-after-move",
-                       // Alias for bugprone-use-after-moe.
-                       "-hicpp-invalid-access-moved");
+                       "-bugprone-use-after-move");
 
   size_t Size = BadChecks.size();
   for (const std::string &Str : ExtraBadChecks) {

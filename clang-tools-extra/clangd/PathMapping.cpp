@@ -40,7 +40,7 @@ llvm::Optional<std::string> doPathMapping(llvm::StringRef S,
     llvm::StringRef Body = Uri->body();
     if (Body.consume_front(From) && (Body.empty() || Body.front() == '/')) {
       std::string MappedBody = (To + Body).str();
-      return URI(Uri->scheme(), Uri->authority(), MappedBody)
+      return URI(Uri->scheme(), Uri->authority(), MappedBody.c_str())
           .toString();
     }
   }
@@ -151,8 +151,7 @@ llvm::Expected<std::string> parsePath(llvm::StringRef Path) {
   namespace path = llvm::sys::path;
   if (path::is_absolute(Path, path::Style::posix)) {
     return std::string(Path);
-  }
-  if (path::is_absolute(Path, path::Style::windows)) {
+  } else if (path::is_absolute(Path, path::Style::windows)) {
     std::string Converted = path::convert_to_slash(Path, path::Style::windows);
     if (Converted.front() != '/')
       Converted = "/" + Converted;

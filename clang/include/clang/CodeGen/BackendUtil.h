@@ -44,9 +44,6 @@ namespace clang {
 
   void EmbedBitcode(llvm::Module *M, const CodeGenOptions &CGOpts,
                     llvm::MemoryBufferRef Buf);
-
-  void EmbedObject(llvm::Module *M, const CodeGenOptions &CGOpts,
-                   DiagnosticsEngine &Diags);
 }
 
 #endif

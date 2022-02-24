@@ -54,14 +54,13 @@ private:
       Argv.reserve(Cmd.CommandLine.size());
       for (auto &Arg : Cmd.CommandLine) {
         Argv.push_back(Arg.c_str());
-        if (!Arg.empty())
-          SeenRSPFile |= Arg.front() == '@';
+        SeenRSPFile |= Arg.front() == '@';
       }
       if (!SeenRSPFile)
         continue;
       llvm::BumpPtrAllocator Alloc;
       llvm::StringSaver Saver(Alloc);
-      llvm::cl::ExpandResponseFiles(Saver, Tokenizer, Argv, false, false, false,
+      llvm::cl::ExpandResponseFiles(Saver, Tokenizer, Argv, false, false,
                                     llvm::StringRef(Cmd.Directory), *FS);
       // Don't assign directly, Argv aliases CommandLine.
       std::vector<std::string> ExpandedArgv(Argv.begin(), Argv.end());

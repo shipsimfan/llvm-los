@@ -14,9 +14,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "WebAssemblyDisassemblerEmitter.h"
-#include "CodeGenInstruction.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/TableGen/Record.h"
 
 namespace llvm {

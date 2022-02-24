@@ -4,7 +4,6 @@ set(LLVM_LINK_COMPONENTS
 
 add_clang_unittest(BasicTests
   CharInfoTest.cpp
-  DarwinSDKInfoTest.cpp
   DiagnosticTest.cpp
   FileEntryTest.cpp
   FileManagerTest.cpp
@@ -19,8 +18,3 @@ clang_target_link_libraries(BasicTests
   clangBasic
   clangLex
   )
-
-target_link_libraries(BasicTests
-  PRIVATE
-  LLVMTestingSupport
-)

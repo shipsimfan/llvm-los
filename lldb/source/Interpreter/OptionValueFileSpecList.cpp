@@ -8,6 +8,7 @@
 
 #include "lldb/Interpreter/OptionValueFileSpecList.h"
 
+#include "lldb/Host/StringConvert.h"
 #include "lldb/Utility/Args.h"
 #include "lldb/Utility/Stream.h"
 
@@ -56,12 +57,13 @@ Status OptionValueFileSpecList::SetValueFromString(llvm::StringRef value,
 
   case eVarSetOperationReplace:
     if (argc > 1) {
-      uint32_t idx;
+      uint32_t idx =
+          StringConvert::ToUInt32(args.GetArgumentAtIndex(0), UINT32_MAX);
       const uint32_t count = m_current_value.GetSize();
-      if (!llvm::to_integer(args.GetArgumentAtIndex(0), idx) || idx > count) {
+      if (idx > count) {
         error.SetErrorStringWithFormat(
-            "invalid file list index %s, index must be 0 through %u",
-            args.GetArgumentAtIndex(0), count);
+            "invalid file list index %u, index must be 0 through %u", idx,
+            count);
       } else {
         for (size_t i = 1; i < argc; ++i, ++idx) {
           FileSpec file(args.GetArgumentAtIndex(i));
@@ -99,12 +101,13 @@ Status OptionValueFileSpecList::SetValueFromString(llvm::StringRef value,
   case eVarSetOperationInsertBefore:
   case eVarSetOperationInsertAfter:
     if (argc > 1) {
-      uint32_t idx;
+      uint32_t idx =
+          StringConvert::ToUInt32(args.GetArgumentAtIndex(0), UINT32_MAX);
       const uint32_t count = m_current_value.GetSize();
-      if (!llvm::to_integer(args.GetArgumentAtIndex(0), idx) || idx > count) {
+      if (idx > count) {
         error.SetErrorStringWithFormat(
-            "invalid insert file list index %s, index must be 0 through %u",
-            args.GetArgumentAtIndex(0), count);
+            "invalid insert file list index %u, index must be 0 through %u",
+            idx, count);
       } else {
         if (op == eVarSetOperationInsertAfter)
           ++idx;
@@ -126,8 +129,9 @@ Status OptionValueFileSpecList::SetValueFromString(llvm::StringRef value,
       bool all_indexes_valid = true;
       size_t i;
       for (i = 0; all_indexes_valid && i < argc; ++i) {
-        int idx;
-        if (!llvm::to_integer(args.GetArgumentAtIndex(i), idx))
+        const int idx =
+            StringConvert::ToSInt32(args.GetArgumentAtIndex(i), INT32_MAX);
+        if (idx == INT32_MAX)
           all_indexes_valid = false;
         else
           remove_indexes.push_back(idx);

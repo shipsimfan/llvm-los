@@ -47,7 +47,7 @@ static void addVariantDeclaration(CallInst &CI, const ElementCount &VF,
   // Add function declaration.
   Type *RetTy = ToVectorTy(CI.getType(), VF);
   SmallVector<Type *, 4> Tys;
-  for (Value *ArgOperand : CI.args())
+  for (Value *ArgOperand : CI.arg_operands())
     Tys.push_back(ToVectorTy(ArgOperand->getType(), VF));
   assert(!CI.getFunctionType()->isVarArg() &&
          "VarArg functions are not supported.");
@@ -94,8 +94,8 @@ static void addMappingsFromTLI(const TargetLibraryInfo &TLI, CallInst &CI) {
     const std::string TLIName =
         std::string(TLI.getVectorizedFunction(ScalarName, VF));
     if (!TLIName.empty()) {
-      std::string MangledName =
-          VFABI::mangleTLIVectorName(TLIName, ScalarName, CI.arg_size(), VF);
+      std::string MangledName = VFABI::mangleTLIVectorName(
+          TLIName, ScalarName, CI.getNumArgOperands(), VF);
       if (!OriginalSetOfMappings.count(MangledName)) {
         Mappings.push_back(MangledName);
         ++NumCallInjected;

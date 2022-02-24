@@ -1,7 +1,7 @@
 add_mlir_dialect_library(MLIRLinalg
   LinalgInterfaces.cpp
   LinalgOps.cpp
-  LinalgDialect.cpp
+  LinalgTypes.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Dialect/Linalg
@@ -13,18 +13,13 @@ add_mlir_dialect_library(MLIRLinalg
 
   LINK_LIBS PUBLIC
   MLIRAffine
-  MLIRArithmetic
-  MLIRBufferization
   MLIRDialectUtils
   MLIRInferTypeOpInterface
   MLIRIR
   MLIRParser
   MLIRSideEffectInterfaces
-  MLIRSparseTensor
-  MLIRSCF
-  MLIRMath
+  MLIRViewLikeInterface
+  MLIRStandard
   MLIRMemRef
   MLIRTensor
-  MLIRTilingInterface
-  MLIRViewLikeInterface
   )

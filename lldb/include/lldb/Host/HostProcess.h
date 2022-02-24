@@ -37,6 +37,7 @@ public:
   ~HostProcess();
 
   Status Terminate();
+  Status GetMainModule(FileSpec &file_spec) const;
 
   lldb::pid_t GetProcessId() const;
   bool IsRunning() const;

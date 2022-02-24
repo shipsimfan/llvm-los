@@ -7,10 +7,10 @@
 # RUN: not llvm-mc %s -triple=riscv64 -filetype=asm 2>&1 | FileCheck %s
 
 .attribute arch, "foo"
-# CHECK: [[@LINE-1]]:18: error: invalid arch name 'foo', string must begin with rv32{i,e,g} or rv64{i,g}
+# CHECK: [[@LINE-1]]:18: error: bad arch string foo
 
 .attribute arch, "rv32i2p0_y2p0"
-# CHECK: [[@LINE-1]]:18: error: invalid arch name 'rv32i2p0_y2p0', invalid standard user-level extension 'y'
+# CHECK: [[@LINE-1]]:18: error: bad arch string y2p0
 
 .attribute stack_align, "16"
 # CHECK: [[@LINE-1]]:25: error: expected numeric constant

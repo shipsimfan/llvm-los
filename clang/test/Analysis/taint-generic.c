@@ -58,11 +58,9 @@ extern FILE *stdin;
 
 #define bool _Bool
 
-char *getenv(const char *name);
 int fscanf(FILE *restrict stream, const char *restrict format, ...);
 int sprintf(char *str, const char *format, ...);
 void setproctitle(const char *fmt, ...);
-void setproctitle_init(int argc, char *argv[], char *envp[]);
 typedef __typeof(sizeof(int)) size_t;
 
 // Define string functions. Use builtin for some of them. They all default to
@@ -118,7 +116,7 @@ void bufferScanfAssignment(int x) {
   }
 }
 
-void scanfArg(void) {
+void scanfArg() {
   int t = 0;
   scanf("%d", t); // expected-warning {{format specifies type 'int *' but the argument has type 'int'}}
 }
@@ -162,7 +160,7 @@ void testUncontrolledFormatString(char **p) {
 }
 
 int system(const char *command);
-void testTaintSystemCall(void) {
+void testTaintSystemCall() {
   char buffer[156];
   char addr[128];
   scanf("%s", addr);
@@ -173,7 +171,7 @@ void testTaintSystemCall(void) {
   system(buffer); // expected-warning {{Untrusted data is passed to a system call}}
 }
 
-void testTaintSystemCall2(void) {
+void testTaintSystemCall2() {
   // Test that snpintf transfers taint.
   char buffern[156];
   char addr[128];
@@ -182,7 +180,7 @@ void testTaintSystemCall2(void) {
   system(buffern); // expected-warning {{Untrusted data is passed to a system call}}
 }
 
-void testTaintSystemCall3(void) {
+void testTaintSystemCall3() {
   char buffern2[156];
   int numt;
   char addr[128];
@@ -191,13 +189,13 @@ void testTaintSystemCall3(void) {
   system(buffern2); // expected-warning {{Untrusted data is passed to a system call}}
 }
 
-void testGets(void) {
+void testGets() {
   char str[50];
   gets(str);
   system(str); // expected-warning {{Untrusted data is passed to a system call}}
 }
 
-void testTaintedBufferSize(void) {
+void testTaintedBufferSize() {
   size_t ts;
   scanf("%zd", &ts);
 
@@ -219,7 +217,7 @@ int socket(int, int, int);
 size_t read(int, void *, size_t);
 int  execl(const char *, const char *, ...);
 
-void testSocket(void) {
+void testSocket() {
   int sock;
   char buffer[100];
 
@@ -237,7 +235,7 @@ void testSocket(void) {
   execl(buffer, "filename", 0); // expected-warning {{Untrusted data is passed to a system call}}
 }
 
-void testStruct(void) {
+void testStruct() {
   struct {
     char buf[16];
     int length;
@@ -251,7 +249,7 @@ void testStruct(void) {
   __builtin_memcpy(buffer, tainted.buf, tainted.length); // expected-warning {{Untrusted data is used to specify the buffer size}}
 }
 
-void testStructArray(void) {
+void testStructArray() {
   struct {
     int length;
   } tainted[4];
@@ -276,7 +274,7 @@ void testStructArray(void) {
   __builtin_memcpy(dstbuf, srcbuf, tainted[2].length); // no-warning
 }
 
-void testUnion(void) {
+void testUnion() {
   union {
     int x;
     char y[4];
@@ -290,14 +288,14 @@ void testUnion(void) {
   __builtin_memcpy(buffer, tainted.y, tainted.x);
 }
 
-int testDivByZero(void) {
+int testDivByZero() {
   int x;
   scanf("%d", &x);
   return 5/x; // expected-warning {{Division by a tainted value, possibly zero}}
 }
 
 // Zero-sized VLAs.
-void testTaintedVLASize(void) {
+void testTaintedVLASize() {
   int x;
   scanf("%d", &x);
   int vla[x]; // expected-warning{{Declared variable-length array (VLA) has tainted size}}
@@ -343,19 +341,9 @@ void constraintManagerShouldTreatAsOpaque(int rhs) {
     *(volatile int *) 0; // no-warning
 }
 
-int sprintf_is_not_a_source(char *buf, char *msg) {
-  int x = sprintf(buf, "%s", msg); // no-warning
-  return 1 / x; // no-warning: 'sprintf' is not a taint source
-}
-
-int sprintf_propagates_taint(char *buf, char *msg) {
-  scanf("%s", msg);
-  int x = sprintf(buf, "%s", msg); // propagate taint!
-  return 1 / x; // expected-warning {{Division by a tainted value, possibly zero}}
-}
 
 // Test configuration
-int mySource1(void);
+int mySource1();
 void mySource2(int*);
 void myScanf(const char*, ...);
 int myPropagator(int, int*);
@@ -363,38 +351,38 @@ int mySnprintf(char*, size_t, const char*, ...);
 bool isOutOfRange(const int*);
 void mySink(int, int, int);
 
-void testConfigurationSources1(void) {
+void testConfigurationSources1() {
   int x = mySource1();
   Buffer[x] = 1; // expected-warning {{Out of bound memory access }}
 }
 
-void testConfigurationSources2(void) {
+void testConfigurationSources2() {
   int x;
   mySource2(&x);
   Buffer[x] = 1; // expected-warning {{Out of bound memory access }}
 }
 
-void testConfigurationSources3(void) {
+void testConfigurationSources3() {
   int x, y;
   myScanf("%d %d", &x, &y);
   Buffer[y] = 1; // expected-warning {{Out of bound memory access }}
 }
 
-void testConfigurationPropagation(void) {
+void testConfigurationPropagation() {
   int x = mySource1();
   int y;
   myPropagator(x, &y);
   Buffer[y] = 1; // expected-warning {{Out of bound memory access }}
 }
 
-void testConfigurationFilter(void) {
+void testConfigurationFilter() {
   int x = mySource1();
   if (isOutOfRange(&x)) // the filter function
     return;
   Buffer[x] = 1; // no-warning
 }
 
-void testConfigurationSinks(void) {
+void testConfigurationSinks() {
   int x = mySource1();
   mySink(x, 1, 2);
   // expected-warning@-1 {{Untrusted data is passed to a user-defined sink}}
@@ -405,21 +393,4 @@ void testConfigurationSinks(void) {
 
 void testUnknownFunction(void (*foo)(void)) {
   foo(); // no-crash
-}
-
-void testProctitleFalseNegative(void) {
-  char flag[80];
-  fscanf(stdin, "%79s", flag);
-  char *argv[] = {"myapp", flag};
-  // FIXME: We should have a warning below: Untrusted data passed to sink.
-  setproctitle_init(1, argv, 0);
-}
-
-void testProctitle2(char *real_argv[]) {
-  char *app = getenv("APP_NAME");
-  if (!app)
-    return;
-  char *argv[] = {app, "--foobar"};
-  setproctitle_init(1, argv, 0);         // expected-warning {{Untrusted data is passed to a user-defined sink}}
-  setproctitle_init(1, real_argv, argv); // expected-warning {{Untrusted data is passed to a user-defined sink}}
 }

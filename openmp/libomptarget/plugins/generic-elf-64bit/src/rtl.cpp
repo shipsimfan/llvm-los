@@ -41,7 +41,7 @@
 
 /// Array of Dynamic libraries loaded for this target.
 struct DynLibTy {
-  std::string FileName;
+  char *FileName;
   void *Handle;
 };
 
@@ -100,7 +100,7 @@ public:
     for (auto &lib : DynLibs) {
       if (lib.Handle) {
         dlclose(lib.Handle);
-        remove(lib.FileName.c_str());
+        remove(lib.FileName);
       }
     }
   }

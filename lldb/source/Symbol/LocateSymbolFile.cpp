@@ -15,7 +15,6 @@
 #include "lldb/Utility/ArchSpec.h"
 #include "lldb/Utility/DataBuffer.h"
 #include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/Reproducer.h"
 #include "lldb/Utility/StreamString.h"
@@ -153,7 +152,7 @@ static bool LookForDsymNextToExecutablePath(const ModuleSpec &mod_spec,
 
 static bool LocateDSYMInVincinityOfExecutable(const ModuleSpec &module_spec,
                                               FileSpec &dsym_fspec) {
-  Log *log = GetLog(LLDBLog::Host);
+  Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
   const FileSpec &exec_fspec = module_spec.GetFileSpec();
   if (exec_fspec) {
     if (::LookForDsymNextToExecutablePath(module_spec, exec_fspec,

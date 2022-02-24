@@ -10,7 +10,8 @@
 
 using namespace lldb_private;
 
-StoppointCallbackContext::StoppointCallbackContext() = default;
+StoppointCallbackContext::StoppointCallbackContext()
+    : event(nullptr), exe_ctx_ref(), is_synchronous(false) {}
 
 StoppointCallbackContext::StoppointCallbackContext(
     Event *e, const ExecutionContext &exe_ctx, bool synchronously)

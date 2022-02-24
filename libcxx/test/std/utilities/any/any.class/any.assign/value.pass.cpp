@@ -9,7 +9,10 @@
 // UNSUPPORTED: c++03, c++11, c++14
 
 // Throwing bad_any_cast is supported starting in macosx10.13
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11|12}} && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.12 && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.11 && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.10 && !no-exceptions
+// XFAIL: with_system_cxx_lib=macosx10.9 && !no-exceptions
 
 // <any>
 
@@ -25,6 +28,9 @@
 #include "count_new.h"
 #include "test_macros.h"
 
+using std::any;
+using std::any_cast;
+
 template <class LHS, class RHS>
 void test_assign_value() {
     assert(LHS::count == 0);
@@ -32,8 +38,8 @@ void test_assign_value() {
     LHS::reset();
     RHS::reset();
     {
-        std::any lhs = LHS(1);
-        const std::any rhs = RHS(2);
+        any lhs(LHS(1));
+        any const rhs(RHS(2));
 
         assert(LHS::count == 1);
         assert(RHS::count == 1);
@@ -53,8 +59,8 @@ void test_assign_value() {
     LHS::reset();
     RHS::reset();
     {
-        std::any lhs = LHS(1);
-        std::any rhs = RHS(2);
+        any lhs(LHS(1));
+        any rhs(RHS(2));
 
         assert(LHS::count == 1);
         assert(RHS::count == 1);
@@ -81,7 +87,7 @@ void test_assign_value_empty() {
     assert(RHS::count == 0);
     RHS::reset();
     {
-        std::any lhs;
+        any lhs;
         RHS rhs(42);
         assert(RHS::count == 1);
         assert(RHS::copied == 0);
@@ -96,7 +102,7 @@ void test_assign_value_empty() {
     assert(RHS::count == 0);
     RHS::reset();
     {
-        std::any lhs;
+        any lhs;
         RHS rhs(42);
         assert(RHS::count == 1);
         assert(RHS::moved == 0);
@@ -117,12 +123,12 @@ template <class Tp, bool Move = false>
 void test_assign_throws() {
 #if !defined(TEST_HAS_NO_EXCEPTIONS)
     auto try_throw =
-    [](std::any& lhs, Tp& rhs) {
+    [](any& lhs, Tp& rhs) {
         try {
             Move ? lhs = std::move(rhs)
                  : lhs = rhs;
             assert(false);
-        } catch (const my_any_exception&) {
+        } catch (my_any_exception const &) {
             // do nothing
         } catch (...) {
             assert(false);
@@ -130,7 +136,7 @@ void test_assign_throws() {
     };
     // const lvalue to empty
     {
-        std::any lhs;
+        any lhs;
         Tp rhs(1);
         assert(Tp::count == 1);
 
@@ -140,8 +146,8 @@ void test_assign_throws() {
         assertEmpty<Tp>(lhs);
     }
     {
-        std::any lhs = small(2);
-        Tp rhs(1);
+        any lhs((small(2)));
+        Tp  rhs(1);
         assert(small::count == 1);
         assert(Tp::count == 1);
 
@@ -152,7 +158,7 @@ void test_assign_throws() {
         assertContains<small>(lhs, 2);
     }
     {
-        std::any lhs = large(2);
+        any lhs((large(2)));
         Tp rhs(1);
         assert(large::count == 1);
         assert(Tp::count == 1);

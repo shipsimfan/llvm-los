@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_HEURISTICRESOLVER_H
-#define LLVM_CLANG_TOOLS_EXTRA_CLANGD_HEURISTICRESOLVER_H
+#ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_HEURISTIC_RESOLVER_H
+#define LLVM_CLANG_TOOLS_EXTRA_CLANGD_HEURISTIC_RESOLVER_H
 
 #include "clang/AST/Decl.h"
 #include "llvm/ADT/STLExtras.h"
@@ -56,8 +56,6 @@ public:
   std::vector<const NamedDecl *>
   resolveTypeOfCallExpr(const CallExpr *CE) const;
   std::vector<const NamedDecl *>
-  resolveCalleeOfCallExpr(const CallExpr *CE) const;
-  std::vector<const NamedDecl *>
   resolveUsingValueDecl(const UnresolvedUsingValueDecl *UUVD) const;
   std::vector<const NamedDecl *>
   resolveDependentNameType(const DependentNameType *DNT) const;
@@ -89,7 +87,6 @@ private:
   // Try to heuristically resolve the type of a possibly-dependent expression
   // `E`.
   const Type *resolveExprToType(const Expr *E) const;
-  std::vector<const NamedDecl *> resolveExprToDecls(const Expr *E) const;
 
   // Given the type T of a dependent expression that appears of the LHS of a
   // "->", heuristically find a corresponding pointee type in whose scope we

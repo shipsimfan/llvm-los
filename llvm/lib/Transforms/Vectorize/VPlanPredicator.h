@@ -68,7 +68,7 @@ public:
   VPlanPredicator(VPlan &Plan);
 
   /// Predicate Plan's HCFG.
-  void predicate();
+  void predicate(void);
 };
 } // end namespace llvm
 #endif // LLVM_TRANSFORMS_VECTORIZE_VPLAN_PREDICATOR_H

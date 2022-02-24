@@ -53,6 +53,7 @@ namespace clang {
 
 class ASTContext;
 struct ASTTemplateArgumentListInfo;
+class Attr;
 class CompoundStmt;
 class DependentFunctionTemplateSpecializationInfo;
 class EnumDecl;
@@ -73,27 +74,12 @@ class TemplateArgumentList;
 class TemplateArgumentListInfo;
 class TemplateParameterList;
 class TypeAliasTemplateDecl;
+class TypeLoc;
 class UnresolvedSetImpl;
 class VarTemplateDecl;
 
 /// The top declaration context.
-class TranslationUnitDecl : public Decl,
-                            public DeclContext,
-                            public Redeclarable<TranslationUnitDecl> {
-  using redeclarable_base = Redeclarable<TranslationUnitDecl>;
-
-  TranslationUnitDecl *getNextRedeclarationImpl() override {
-    return getNextRedeclaration();
-  }
-
-  TranslationUnitDecl *getPreviousDeclImpl() override {
-    return getPreviousDecl();
-  }
-
-  TranslationUnitDecl *getMostRecentDeclImpl() override {
-    return getMostRecentDecl();
-  }
-
+class TranslationUnitDecl : public Decl, public DeclContext {
   ASTContext &Ctx;
 
   /// The (most recently entered) anonymous namespace for this
@@ -105,16 +91,6 @@ class TranslationUnitDecl : public Decl,
   virtual void anchor();
 
 public:
-  using redecl_range = redeclarable_base::redecl_range;
-  using redecl_iterator = redeclarable_base::redecl_iterator;
-
-  using redeclarable_base::getMostRecentDecl;
-  using redeclarable_base::getPreviousDecl;
-  using redeclarable_base::isFirstDecl;
-  using redeclarable_base::redecls;
-  using redeclarable_base::redecls_begin;
-  using redeclarable_base::redecls_end;
-
   ASTContext &getASTContext() const { return Ctx; }
 
   NamespaceDecl *getAnonymousNamespace() const { return AnonymousNamespace; }
@@ -380,10 +356,6 @@ public:
   /// a C++ class.
   bool isCXXInstanceMember() const;
 
-  /// Determine if the declaration obeys the reserved identifier rules of the
-  /// given language.
-  ReservedIdentifierStatus isReserved(const LangOptions &LangOpts) const;
-
   /// Determine what kind of linkage this entity has.
   ///
   /// This is not the linkage as defined by the standard or the codegen notion
@@ -612,9 +584,7 @@ public:
     if (!isInline())
       return false;
     auto X = lookup(Name);
-    // We should not perform a lookup within a transparent context, so find a
-    // non-transparent parent context.
-    auto Y = getParent()->getNonTransparentContext()->lookup(Name);
+    auto Y = getParent()->lookup(Name);
     return std::distance(X.begin(), X.end()) ==
       std::distance(Y.begin(), Y.end());
   }
@@ -1520,9 +1490,6 @@ public:
     NonParmVarDeclBits.EscapingByref = true;
   }
 
-  /// Determines if this variable's alignment is dependent.
-  bool hasDependentAlignment() const;
-
   /// Retrieve the variable declaration from which this variable could
   /// be instantiated, if it is an instantiation (rather than a non-template).
   VarDecl *getTemplateInstantiationPattern() const;
@@ -1838,8 +1805,7 @@ enum class MultiVersionKind {
   None,
   Target,
   CPUSpecific,
-  CPUDispatch,
-  TargetClones
+  CPUDispatch
 };
 
 /// Represents a function declaration or definition.
@@ -1991,8 +1957,8 @@ private:
 protected:
   FunctionDecl(Kind DK, ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
                const DeclarationNameInfo &NameInfo, QualType T,
-               TypeSourceInfo *TInfo, StorageClass S, bool UsesFPIntrin,
-               bool isInlineSpecified, ConstexprSpecKind ConstexprKind,
+               TypeSourceInfo *TInfo, StorageClass S, bool isInlineSpecified,
+               ConstexprSpecKind ConstexprKind,
                Expr *TrailingRequiresClause = nullptr);
 
   using redeclarable_base = Redeclarable<FunctionDecl>;
@@ -2026,23 +1992,23 @@ public:
   static FunctionDecl *
   Create(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
          SourceLocation NLoc, DeclarationName N, QualType T,
-         TypeSourceInfo *TInfo, StorageClass SC, bool UsesFPIntrin = false,
-         bool isInlineSpecified = false, bool hasWrittenPrototype = true,
+         TypeSourceInfo *TInfo, StorageClass SC, bool isInlineSpecified = false,
+         bool hasWrittenPrototype = true,
          ConstexprSpecKind ConstexprKind = ConstexprSpecKind::Unspecified,
          Expr *TrailingRequiresClause = nullptr) {
     DeclarationNameInfo NameInfo(N, NLoc);
     return FunctionDecl::Create(C, DC, StartLoc, NameInfo, T, TInfo, SC,
-                                UsesFPIntrin, isInlineSpecified,
-                                hasWrittenPrototype, ConstexprKind,
-                                TrailingRequiresClause);
+                                isInlineSpecified, hasWrittenPrototype,
+                                ConstexprKind, TrailingRequiresClause);
   }
 
-  static FunctionDecl *
-  Create(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
-         const DeclarationNameInfo &NameInfo, QualType T, TypeSourceInfo *TInfo,
-         StorageClass SC, bool UsesFPIntrin, bool isInlineSpecified,
-         bool hasWrittenPrototype, ConstexprSpecKind ConstexprKind,
-         Expr *TrailingRequiresClause);
+  static FunctionDecl *Create(ASTContext &C, DeclContext *DC,
+                              SourceLocation StartLoc,
+                              const DeclarationNameInfo &NameInfo, QualType T,
+                              TypeSourceInfo *TInfo, StorageClass SC,
+                              bool isInlineSpecified, bool hasWrittenPrototype,
+                              ConstexprSpecKind ConstexprKind,
+                              Expr *TrailingRequiresClause);
 
   static FunctionDecl *CreateDeserialized(ASTContext &C, unsigned ID);
 
@@ -2458,10 +2424,6 @@ public:
   /// the target functionality.
   bool isTargetMultiVersion() const;
 
-  /// True if this function is a multiversioned dispatch function as a part of
-  /// the target-clones functionality.
-  bool isTargetClonesMultiVersion() const;
-
   /// \brief Get the associated-constraints of this function declaration.
   /// Currently, this will either be a vector of size 1 containing the
   /// trailing-requires-clause or an empty vector.
@@ -2598,14 +2560,6 @@ public:
     FunctionDeclBits.IsInlineSpecified = I;
     FunctionDeclBits.IsInline = I;
   }
-
-  /// Determine whether the function was declared in source context
-  /// that requires constrained FP intrinsics
-  bool UsesFPIntrin() const { return FunctionDeclBits.UsesFPIntrin; }
-
-  /// Set whether the function was declared in source context
-  /// that requires constrained FP intrinsics
-  void setUsesFPIntrin(bool I) { FunctionDeclBits.UsesFPIntrin = I; }
 
   /// Flag that this function is implicitly inline.
   void setImplicitlyInline(bool I = true) { FunctionDeclBits.IsInline = I; }
@@ -3486,24 +3440,6 @@ public:
   /// parameters.
   bool isDependentType() const { return isDependentContext(); }
 
-  /// Whether this declaration was a definition in some module but was forced
-  /// to be a declaration.
-  ///
-  /// Useful for clients checking if a module has a definition of a specific
-  /// symbol and not interested in the final AST with deduplicated definitions.
-  bool isThisDeclarationADemotedDefinition() const {
-    return TagDeclBits.IsThisDeclarationADemotedDefinition;
-  }
-
-  /// Mark a definition as a declaration and maintain information it _was_
-  /// a definition.
-  void demoteThisDefinitionToDeclaration() {
-    assert(isCompleteDefinition() &&
-           "Should demote definitions only, not forward declarations");
-    setCompleteDefinition(false);
-    TagDeclBits.IsThisDeclarationADemotedDefinition = true;
-  }
-
   /// Starts the definition of this tag declaration.
   ///
   /// This method should be invoked at the beginning of the definition
@@ -3721,10 +3657,6 @@ public:
                           bool IsScoped, bool IsScopedUsingClassTag,
                           bool IsFixed);
   static EnumDecl *CreateDeserialized(ASTContext &C, unsigned ID);
-
-  /// Overrides to provide correct range when there's an enum-base specifier
-  /// with forward declarations.
-  SourceRange getSourceRange() const override LLVM_READONLY;
 
   /// When created, the EnumDecl corresponds to a
   /// forward-declared enum. This method is used to mark the
@@ -4614,7 +4546,7 @@ public:
 /// into a diagnostic with <<.
 inline const StreamingDiagnostic &operator<<(const StreamingDiagnostic &PD,
                                              const NamedDecl *ND) {
-  PD.AddTaggedVal(reinterpret_cast<uint64_t>(ND),
+  PD.AddTaggedVal(reinterpret_cast<intptr_t>(ND),
                   DiagnosticsEngine::ak_nameddecl);
   return PD;
 }

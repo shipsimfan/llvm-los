@@ -24,9 +24,7 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCTargetOptionsCommandFlags.h"
-#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Option/Arg.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Option/Option.h"
@@ -38,12 +36,11 @@
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/Process.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/WithColor.h"
-#include <ctime>
 
 using namespace llvm;
 using namespace llvm::opt;
@@ -63,7 +60,7 @@ enum ID {
 #include "Opts.inc"
 #undef PREFIX
 
-const opt::OptTable::Info InfoTable[] = {
+static const opt::OptTable::Info InfoTable[] = {
 #define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
                HELPTEXT, METAVAR, VALUES)                                      \
   {                                                                            \
@@ -132,31 +129,8 @@ static int AssembleInput(StringRef ProgName, const Target *TheTarget,
                          MCAsmInfo &MAI, MCSubtargetInfo &STI,
                          MCInstrInfo &MCII, MCTargetOptions &MCOptions,
                          const opt::ArgList &InputArgs) {
-  struct tm TM;
-  time_t Timestamp;
-  if (InputArgs.hasArg(OPT_timestamp)) {
-    StringRef TimestampStr = InputArgs.getLastArgValue(OPT_timestamp);
-    int64_t IntTimestamp;
-    if (TimestampStr.getAsInteger(10, IntTimestamp)) {
-      WithColor::error(errs(), ProgName)
-          << "invalid timestamp '" << TimestampStr
-          << "'; must be expressed in seconds since the UNIX epoch.\n";
-      return 1;
-    }
-    Timestamp = IntTimestamp;
-  } else {
-    Timestamp = time(nullptr);
-  }
-  if (InputArgs.hasArg(OPT_utc)) {
-    // Not thread-safe.
-    TM = *gmtime(&Timestamp);
-  } else {
-    // Not thread-safe.
-    TM = *localtime(&Timestamp);
-  }
-
   std::unique_ptr<MCAsmParser> Parser(
-      createMCMasmParser(SrcMgr, Ctx, Str, MAI, TM, 0));
+      createMCMasmParser(SrcMgr, Ctx, Str, MAI, 0));
   std::unique_ptr<MCTargetAsmParser> TAP(
       TheTarget->createMCAsmParser(STI, *Parser, MCII, MCOptions));
 
@@ -245,7 +219,7 @@ int main(int Argc, char **Argv) {
 
   if (InputArgs.hasArg(OPT_help)) {
     std::string Usage = llvm::formatv("{0} [ /options ] file", ProgName).str();
-    T.printHelp(outs(), Usage.c_str(), "LLVM MASM Assembler",
+    T.PrintHelp(outs(), Usage.c_str(), "LLVM MASM Assembler",
                 /*ShowHidden=*/false);
     return 0;
   } else if (InputFilename.empty()) {
@@ -289,21 +263,8 @@ int main(int Argc, char **Argv) {
   SrcMgr.AddNewSourceBuffer(std::move(*BufferPtr), SMLoc());
 
   // Record the location of the include directories so that the lexer can find
-  // included files later.
-  std::vector<std::string> IncludeDirs =
-      InputArgs.getAllArgValues(OPT_include_path);
-  if (!InputArgs.hasArg(OPT_ignore_include_envvar)) {
-    if (llvm::Optional<std::string> IncludeEnvVar =
-            llvm::sys::Process::GetEnv("INCLUDE")) {
-      SmallVector<StringRef, 8> Dirs;
-      StringRef(*IncludeEnvVar)
-          .split(Dirs, ";", /*MaxSplit=*/-1, /*KeepEmpty=*/false);
-      IncludeDirs.reserve(IncludeDirs.size() + Dirs.size());
-      for (StringRef Dir : Dirs)
-        IncludeDirs.push_back(Dir.str());
-    }
-  }
-  SrcMgr.setIncludeDirs(IncludeDirs);
+  // it later.
+  SrcMgr.setIncludeDirs(InputArgs.getAllArgValues(OPT_include_path));
 
   std::unique_ptr<MCRegisterInfo> MRI(TheTarget->createMCRegInfo(TripleName));
   assert(MRI && "Unable to create target register info!");
@@ -314,16 +275,12 @@ int main(int Argc, char **Argv) {
 
   MAI->setPreserveAsmComments(InputArgs.hasArg(OPT_preserve_comments));
 
-  std::unique_ptr<MCSubtargetInfo> STI(TheTarget->createMCSubtargetInfo(
-      TripleName, /*CPU=*/"", /*Features=*/""));
-  assert(STI && "Unable to create subtarget info!");
-
   // FIXME: This is not pretty. MCContext has a ptr to MCObjectFileInfo and
   // MCObjectFileInfo needs a MCContext reference in order to initialize itself.
-  MCContext Ctx(TheTriple, MAI.get(), MRI.get(), STI.get(), &SrcMgr);
-  std::unique_ptr<MCObjectFileInfo> MOFI(TheTarget->createMCObjectFileInfo(
-      Ctx, /*PIC=*/false, /*LargeCodeModel=*/true));
-  Ctx.setObjectFileInfo(MOFI.get());
+  MCObjectFileInfo MOFI;
+  MCContext Ctx(MAI.get(), MRI.get(), &MOFI, &SrcMgr);
+  MOFI.InitMCObjectFileInfo(TheTriple, /*PIC=*/false, Ctx,
+                            /*LargeCodeModel=*/true);
 
   if (InputArgs.hasArg(OPT_save_temp_labels))
     Ctx.setAllowTemporaryLabels(false);
@@ -355,6 +312,10 @@ int main(int Argc, char **Argv) {
   std::unique_ptr<MCInstrInfo> MCII(TheTarget->createMCInstrInfo());
   assert(MCII && "Unable to create instruction info!");
 
+  std::unique_ptr<MCSubtargetInfo> STI(TheTarget->createMCSubtargetInfo(
+      TripleName, /*CPU=*/"", /*Features=*/""));
+  assert(STI && "Unable to create subtarget info!");
+
   MCInstPrinter *IP = nullptr;
   if (FileType == "s") {
     const bool OutputATTAsm = InputArgs.hasArg(OPT_output_att_asm);
@@ -377,7 +338,7 @@ int main(int Argc, char **Argv) {
     // Set up the AsmStreamer.
     std::unique_ptr<MCCodeEmitter> CE;
     if (InputArgs.hasArg(OPT_show_encoding))
-      CE.reset(TheTarget->createMCCodeEmitter(*MCII, Ctx));
+      CE.reset(TheTarget->createMCCodeEmitter(*MCII, *MRI, Ctx));
 
     std::unique_ptr<MCAsmBackend> MAB(
         TheTarget->createMCAsmBackend(*STI, *MRI, MCOptions));
@@ -395,7 +356,7 @@ int main(int Argc, char **Argv) {
       OS = BOS.get();
     }
 
-    MCCodeEmitter *CE = TheTarget->createMCCodeEmitter(*MCII, Ctx);
+    MCCodeEmitter *CE = TheTarget->createMCCodeEmitter(*MCII, *MRI, Ctx);
     MCAsmBackend *MAB = TheTarget->createMCAsmBackend(*STI, *MRI, MCOptions);
     Str.reset(TheTarget->createMCObjectStreamer(
         TheTriple, Ctx, std::unique_ptr<MCAsmBackend>(MAB),

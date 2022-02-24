@@ -27,14 +27,14 @@ class AddDsymCommandCase(TestBase):
 
         # Call the program generator to produce main.cpp, version 1.
         self.generate_main_cpp(version=1)
-        self.build(debug_info="dsym")
+        self.buildDefault(dictionary={'MAKE_DSYM':'YES'})
 
         # Insert some delay and then call the program generator to produce
         # main.cpp, version 2.
         time.sleep(5)
         self.generate_main_cpp(version=101)
         # Now call make again, but this time don't generate the dSYM.
-        self.build(debug_info="dwarf")
+        self.buildDefault(dictionary={'MAKE_DSYM':'NO'})
 
         self.exe_name = 'a.out'
         self.do_add_dsym_with_error(self.exe_name)
@@ -45,7 +45,7 @@ class AddDsymCommandCase(TestBase):
 
         # Call the program generator to produce main.cpp, version 1.
         self.generate_main_cpp(version=1)
-        self.build(debug_info="dsym")
+        self.buildDefault(dictionary={'MAKE_DSYM':'YES'})
 
         self.exe_name = 'a.out'
         self.do_add_dsym_with_success(self.exe_name)
@@ -56,7 +56,7 @@ class AddDsymCommandCase(TestBase):
 
         # Call the program generator to produce main.cpp, version 1.
         self.generate_main_cpp(version=1)
-        self.build(debug_info="dsym")
+        self.buildDefault(dictionary={'MAKE_DSYM':'YES'})
 
         self.exe_name = 'a.out'
         self.do_add_dsym_with_dSYM_bundle(self.exe_name)

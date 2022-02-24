@@ -6,7 +6,6 @@
 #include "gmock/foo.h"
 #include "i.h"
 #include <s.h>
-#include <a.h>
 #include "llvm/a.h"
 #include "clang/b.h"
 #include "clang-c/c.h" // hi
@@ -20,7 +19,6 @@
 // CHECK-FIXES-NEXT: #include "llvm/a.h"
 // CHECK-FIXES-NEXT: #include "gmock/foo.h"
 // CHECK-FIXES-NEXT: #include "gtest/foo.h"
-// CHECK-FIXES-NEXT: #include <a.h>
 // CHECK-FIXES-NEXT: #include <s.h>
 
 #include "b.h"

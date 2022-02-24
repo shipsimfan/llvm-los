@@ -9,21 +9,15 @@
 #ifndef LLVM_LIBC_SRC_STDLIB_ABS_UTILS_H
 #define LLVM_LIBC_SRC_STDLIB_ABS_UTILS_H
 
-#include "src/__support/CPP/TypeTraits.h"
+#include "utils/CPP/TypeTraits.h"
 
 namespace __llvm_libc {
 
 template <typename T>
-static constexpr cpp::EnableIfType<cpp::IsIntegral<T>::Value, T>
-integer_abs(T n) {
-  return (n < 0) ? -n : n;
-}
-
-template <typename T>
-static constexpr cpp::EnableIfType<cpp::IsIntegral<T>::Value, void>
-integer_rem_quo(T x, T y, T &quot, T &rem) {
-  quot = x / y;
-  rem = x % y;
+static inline cpp::EnableIfType<cpp::IsIntegral<T>::Value, T> integerAbs(T n) {
+  if (n < 0)
+    return -n;
+  return n;
 }
 
 } // namespace __llvm_libc

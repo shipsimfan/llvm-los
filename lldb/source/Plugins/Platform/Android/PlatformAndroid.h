@@ -30,15 +30,13 @@ public:
   // lldb_private::PluginInterface functions
   static lldb::PlatformSP CreateInstance(bool force, const ArchSpec *arch);
 
-  static llvm::StringRef GetPluginNameStatic(bool is_host) {
-    return is_host ? Platform::GetHostPlatformName() : "remote-android";
-  }
+  static ConstString GetPluginNameStatic(bool is_host);
 
-  static llvm::StringRef GetPluginDescriptionStatic(bool is_host);
+  static const char *GetPluginDescriptionStatic(bool is_host);
 
-  llvm::StringRef GetPluginName() override {
-    return GetPluginNameStatic(IsHost());
-  }
+  ConstString GetPluginName() override;
+
+  uint32_t GetPluginVersion() override { return 1; }
 
   // lldb_private::Platform functions
 

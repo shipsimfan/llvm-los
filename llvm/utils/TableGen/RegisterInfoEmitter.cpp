@@ -305,8 +305,9 @@ EmitRegUnitPressure(raw_ostream &OS, const CodeGenRegBank &RegBank,
   for (unsigned i = 0, e = NumRCUnitSets; i != e; ++i) {
     ArrayRef<unsigned> PSetIDs = RegBank.getRCPressureSetIDs(i);
     PSets[i].reserve(PSetIDs.size());
-    for (unsigned PSetID : PSetIDs) {
-      PSets[i].push_back(RegBank.getRegPressureSet(PSetID).Order);
+    for (ArrayRef<unsigned>::iterator PSetI = PSetIDs.begin(),
+           PSetE = PSetIDs.end(); PSetI != PSetE; ++PSetI) {
+      PSets[i].push_back(RegBank.getRegPressureSet(*PSetI).Order);
     }
     llvm::sort(PSets[i]);
     PSetsSeqs.add(PSets[i]);
@@ -398,9 +399,11 @@ void RegisterInfoEmitter::EmitRegMappingTables(
     return;
 
   // Now we know maximal length of number list. Append -1's, where needed
-  for (auto &DwarfRegNum : DwarfRegNums)
-    for (unsigned I = DwarfRegNum.second.size(), E = maxLength; I != E; ++I)
-      DwarfRegNum.second.push_back(-1);
+  for (DwarfRegNumsVecTy::iterator I = DwarfRegNums.begin(),
+                                   E = DwarfRegNums.end();
+       I != E; ++I)
+    for (unsigned i = I->second.size(), e = maxLength; i != e; ++i)
+      I->second.push_back(-1);
 
   StringRef Namespace = Regs.front().TheDef->getValueAsString("Namespace");
 
@@ -408,10 +411,10 @@ void RegisterInfoEmitter::EmitRegMappingTables(
 
   // Emit reverse information about the dwarf register numbers.
   for (unsigned j = 0; j < 2; ++j) {
-    for (unsigned I = 0, E = maxLength; I != E; ++I) {
+    for (unsigned i = 0, e = maxLength; i != e; ++i) {
       OS << "extern const MCRegisterInfo::DwarfLLVMRegPair " << Namespace;
       OS << (j == 0 ? "DwarfFlavour" : "EHFlavour");
-      OS << I << "Dwarf2L[]";
+      OS << i << "Dwarf2L[]";
 
       if (!isCtor) {
         OS << " = {\n";
@@ -419,15 +422,17 @@ void RegisterInfoEmitter::EmitRegMappingTables(
         // Store the mapping sorted by the LLVM reg num so lookup can be done
         // with a binary search.
         std::map<uint64_t, Record*> Dwarf2LMap;
-        for (auto &DwarfRegNum : DwarfRegNums) {
-          int DwarfRegNo = DwarfRegNum.second[I];
+        for (DwarfRegNumsVecTy::iterator
+               I = DwarfRegNums.begin(), E = DwarfRegNums.end(); I != E; ++I) {
+          int DwarfRegNo = I->second[i];
           if (DwarfRegNo < 0)
             continue;
-          Dwarf2LMap[DwarfRegNo] = DwarfRegNum.first;
+          Dwarf2LMap[DwarfRegNo] = I->first;
         }
 
-        for (auto &I : Dwarf2LMap)
-          OS << "  { " << I.first << "U, " << getQualifiedName(I.second)
+        for (std::map<uint64_t, Record*>::iterator
+               I = Dwarf2LMap.begin(), E = Dwarf2LMap.end(); I != E; ++I)
+          OS << "  { " << I->first << "U, " << getQualifiedName(I->second)
              << " },\n";
 
         OS << "};\n";
@@ -438,10 +443,11 @@ void RegisterInfoEmitter::EmitRegMappingTables(
       // We have to store the size in a const global, it's used in multiple
       // places.
       OS << "extern const unsigned " << Namespace
-         << (j == 0 ? "DwarfFlavour" : "EHFlavour") << I << "Dwarf2LSize";
+         << (j == 0 ? "DwarfFlavour" : "EHFlavour") << i << "Dwarf2LSize";
       if (!isCtor)
         OS << " = array_lengthof(" << Namespace
-           << (j == 0 ? "DwarfFlavour" : "EHFlavour") << I << "Dwarf2L);\n\n";
+           << (j == 0 ? "DwarfFlavour" : "EHFlavour") << i
+           << "Dwarf2L);\n\n";
       else
         OS << ";\n\n";
     }
@@ -480,12 +486,13 @@ void RegisterInfoEmitter::EmitRegMappingTables(
         OS << " = {\n";
         // Store the mapping sorted by the Dwarf reg num so lookup can be done
         // with a binary search.
-        for (auto &DwarfRegNum : DwarfRegNums) {
-          int RegNo = DwarfRegNum.second[i];
+        for (DwarfRegNumsVecTy::iterator
+               I = DwarfRegNums.begin(), E = DwarfRegNums.end(); I != E; ++I) {
+          int RegNo = I->second[i];
           if (RegNo == -1) // -1 is the default value, don't emit a mapping.
             continue;
 
-          OS << "  { " << getQualifiedName(DwarfRegNum.first) << ", " << RegNo
+          OS << "  { " << getQualifiedName(I->first) << ", " << RegNo
              << "U },\n";
         }
         OS << "};\n";
@@ -1046,24 +1053,25 @@ RegisterInfoEmitter::runMCDesc(raw_ostream &OS, CodeGenTarget &Target,
 
     RegClassStrings.add(Name);
 
-    // Emit the register list now (unless it would be a zero-length array).
-    if (!Order.empty()) {
-      OS << "  // " << Name << " Register Class...\n"
-         << "  const MCPhysReg " << Name << "[] = {\n    ";
-      for (Record *Reg : Order) {
-        OS << getQualifiedName(Reg) << ", ";
-      }
-      OS << "\n  };\n\n";
-
-      OS << "  // " << Name << " Bit set.\n"
-         << "  const uint8_t " << Name << "Bits[] = {\n    ";
-      BitVectorEmitter BVE;
-      for (Record *Reg : Order) {
-        BVE.add(Target.getRegBank().getReg(Reg)->EnumValue);
-      }
-      BVE.print(OS);
-      OS << "\n  };\n\n";
+    // Emit the register list now.
+    OS << "  // " << Name << " Register Class...\n"
+       << "  const MCPhysReg " << Name
+       << "[] = {\n    ";
+    for (Record *Reg : Order) {
+      OS << getQualifiedName(Reg) << ", ";
     }
+    OS << "\n  };\n\n";
+
+    OS << "  // " << Name << " Bit set.\n"
+       << "  const uint8_t " << Name
+       << "Bits[] = {\n    ";
+    BitVectorEmitter BVE;
+    for (Record *Reg : Order) {
+      BVE.add(Target.getRegBank().getReg(Reg)->EnumValue);
+    }
+    BVE.print(OS);
+    OS << "\n  };\n\n";
+
   }
   OS << "} // end anonymous namespace\n\n";
 
@@ -1075,17 +1083,14 @@ RegisterInfoEmitter::runMCDesc(raw_ostream &OS, CodeGenTarget &Target,
      << "MCRegisterClasses[] = {\n";
 
   for (const auto &RC : RegisterClasses) {
-    ArrayRef<Record *> Order = RC.getOrder();
-    std::string RCName = Order.empty() ? "nullptr" : RC.getName();
-    std::string RCBitsName = Order.empty() ? "nullptr" : RC.getName() + "Bits";
-    std::string RCBitsSize = Order.empty() ? "0" : "sizeof(" + RCBitsName + ")";
     assert(isInt<8>(RC.CopyCost) && "Copy cost too large.");
     uint32_t RegSize = 0;
     if (RC.RSI.isSimple())
       RegSize = RC.RSI.getSimple().RegSize;
-    OS << "  { " << RCName << ", " << RCBitsName << ", "
+    OS << "  { " << RC.getName() << ", " << RC.getName() << "Bits, "
        << RegClassStrings.get(RC.getName()) << ", " << RC.getOrder().size()
-       << ", " << RCBitsSize << ", " << RC.getQualifiedName() + "RegClassID"
+       << ", sizeof(" << RC.getName() << "Bits), "
+       << RC.getQualifiedName() + "RegClassID"
        << ", " << RegSize << ", " << RC.CopyCost << ", "
        << (RC.Allocatable ? "true" : "false") << " },\n";
   }
@@ -1178,10 +1183,6 @@ RegisterInfoEmitter::runTargetHeader(raw_ostream &OS, CodeGenTarget &Target,
      << "unsigned RegUnit) const override;\n"
      << "  ArrayRef<const char *> getRegMaskNames() const override;\n"
      << "  ArrayRef<const uint32_t *> getRegMasks() const override;\n"
-     << "  bool isGeneralPurposeRegister(const MachineFunction &, "
-     << "MCRegister) const override;\n"
-     << "  bool isFixedRegister(const MachineFunction &, "
-     << "MCRegister) const override;\n"
      << "  /// Devirtualized TargetFrameLowering.\n"
      << "  static const " << TargetName << "FrameLowering *getFrameLowering(\n"
      << "      const MachineFunction &MF);\n"
@@ -1417,7 +1418,6 @@ RegisterInfoEmitter::runTargetDesc(raw_ostream &OS, CodeGenTarget &Target,
          << SuperRegIdxSeqs.get(SuperRegIdxLists[RC.EnumValue]) << ",\n    ";
       printMask(OS, RC.LaneMask);
       OS << ",\n    " << (unsigned)RC.AllocationPriority << ",\n    "
-         << format("0x%02x", RC.TSFlags) << ", /* TSFlags */\n    "
          << (RC.HasDisjunctSubRegs?"true":"false")
          << ", /* HasDisjunctSubRegs */\n    "
          << (RC.CoveredBySubRegs?"true":"false")
@@ -1626,36 +1626,6 @@ RegisterInfoEmitter::runTargetDesc(raw_ostream &OS, CodeGenTarget &Target,
   }
   OS << "}\n\n";
 
-  const std::list<CodeGenRegisterCategory> &RegCategories =
-      RegBank.getRegCategories();
-  OS << "bool " << ClassName << "::\n"
-     << "isGeneralPurposeRegister(const MachineFunction &MF, "
-     << "MCRegister PhysReg) const {\n"
-     << "  return\n";
-  for (const CodeGenRegisterCategory &Category : RegCategories)
-    if (Category.getName() == "GeneralPurposeRegisters") {
-      for (const CodeGenRegisterClass *RC : Category.getClasses())
-        OS << "      " << RC->getQualifiedName()
-           << "RegClass.contains(PhysReg) ||\n";
-      break;
-    }
-  OS << "      false;\n";
-  OS << "}\n\n";
-
-  OS << "bool " << ClassName << "::\n"
-     << "isFixedRegister(const MachineFunction &MF, "
-     << "MCRegister PhysReg) const {\n"
-     << "  return\n";
-  for (const CodeGenRegisterCategory &Category : RegCategories)
-    if (Category.getName() == "FixedRegisters") {
-      for (const CodeGenRegisterClass *RC : Category.getClasses())
-        OS << "      " << RC->getQualifiedName()
-           << "RegClass.contains(PhysReg) ||\n";
-      break;
-    }
-  OS << "      false;\n";
-  OS << "}\n\n";
-
   OS << "ArrayRef<const char *> " << ClassName
      << "::getRegMaskNames() const {\n";
   if (!CSRSets.empty()) {
@@ -1719,7 +1689,6 @@ void RegisterInfoEmitter::debugDump(raw_ostream &OS) {
     OS << "\tLaneMask: " << PrintLaneMask(RC.LaneMask) << '\n';
     OS << "\tHasDisjunctSubRegs: " << RC.HasDisjunctSubRegs << '\n';
     OS << "\tCoveredBySubRegs: " << RC.CoveredBySubRegs << '\n';
-    OS << "\tAllocatable: " << RC.Allocatable << '\n';
     OS << "\tRegs:";
     for (const CodeGenRegister *R : RC.getMembers()) {
       OS << " " << R->getName();

@@ -28,7 +28,6 @@
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceManager.h"
-#include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicExtent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SValBuilder.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
@@ -444,7 +443,7 @@ std::string MemRegion::getString() const {
   std::string s;
   llvm::raw_string_ostream os(s);
   dumpToStream(os);
-  return s;
+  return os.str();
 }
 
 void MemRegion::dumpToStream(raw_ostream &os) const {
@@ -769,39 +768,14 @@ DefinedOrUnknownSVal MemRegionManager::getStaticSize(const MemRegion *MR,
       return UnknownVal();
 
     QualType Ty = cast<TypedValueRegion>(SR)->getDesugaredValueType(Ctx);
-    const DefinedOrUnknownSVal Size = getElementExtent(Ty, SVB);
+    DefinedOrUnknownSVal Size = getElementExtent(Ty, SVB);
 
-    // We currently don't model flexible array members (FAMs), which are:
-    //  - int array[]; of IncompleteArrayType
-    //  - int array[0]; of ConstantArrayType with size 0
-    //  - int array[1]; of ConstantArrayType with size 1 (*)
-    // (*): Consider single element array object members as FAM candidates only
-    //      if the consider-single-element-arrays-as-flexible-array-members
-    //      analyzer option is true.
-    // https://gcc.gnu.org/onlinedocs/gcc/Zero-Length.html
-    const auto isFlexibleArrayMemberCandidate = [this,
-                                                 &SVB](QualType Ty) -> bool {
-      const ArrayType *AT = Ctx.getAsArrayType(Ty);
-      if (!AT)
-        return false;
-      if (isa<IncompleteArrayType>(AT))
-        return true;
-
-      if (const auto *CAT = dyn_cast<ConstantArrayType>(AT)) {
-        const llvm::APInt &Size = CAT->getSize();
-        if (Size.isZero())
-          return true;
-
-        const AnalyzerOptions &Opts = SVB.getAnalyzerOptions();
-        if (Opts.ShouldConsiderSingleElementArraysAsFlexibleArrayMembers &&
-            Size.isOne())
-          return true;
-      }
-      return false;
-    };
-
-    if (isFlexibleArrayMemberCandidate(Ty))
-      return UnknownVal();
+    // A zero-length array at the end of a struct often stands for dynamically
+    // allocated extra memory.
+    if (Size.isZeroConstant()) {
+      if (isa<ConstantArrayType>(Ty))
+        return UnknownVal();
+    }
 
     return Size;
   }
@@ -974,9 +948,9 @@ const VarRegion *MemRegionManager::getVarRegion(const VarDecl *D,
 
     // First handle the globals defined in system headers.
     if (Ctx.getSourceManager().isInSystemHeader(D->getLocation())) {
-      //  Allow the system globals which often DO GET modified, assume the
+      // Whitelist the system globals which often DO GET modified, assume the
       // rest are immutable.
-      if (D->getName().contains("errno"))
+      if (D->getName().find("errno") != StringRef::npos)
         sReg = getGlobalsRegion(MemRegion::GlobalSystemSpaceRegionKind);
       else
         sReg = getGlobalsRegion(MemRegion::GlobalImmutableSpaceRegionKind);
@@ -1012,15 +986,14 @@ const VarRegion *MemRegionManager::getVarRegion(const VarDecl *D,
       sReg = getUnknownRegion();
     } else {
       if (D->hasLocalStorage()) {
-        sReg =
-            isa<ParmVarDecl, ImplicitParamDecl>(D)
-                ? static_cast<const MemRegion *>(getStackArgumentsRegion(STC))
-                : static_cast<const MemRegion *>(getStackLocalsRegion(STC));
+        sReg = isa<ParmVarDecl>(D) || isa<ImplicitParamDecl>(D)
+               ? static_cast<const MemRegion*>(getStackArgumentsRegion(STC))
+               : static_cast<const MemRegion*>(getStackLocalsRegion(STC));
       }
       else {
         assert(D->isStaticLocal());
         const Decl *STCD = STC->getDecl();
-        if (isa<FunctionDecl, ObjCMethodDecl>(STCD))
+        if (isa<FunctionDecl>(STCD) || isa<ObjCMethodDecl>(STCD))
           sReg = getGlobalsRegion(MemRegion::StaticGlobalSpaceRegionKind,
                                   getFunctionCodeRegion(cast<NamedDecl>(STCD)));
         else if (const auto *BD = dyn_cast<BlockDecl>(STCD)) {
@@ -1284,7 +1257,9 @@ bool MemRegion::hasStackParametersStorage() const {
 }
 
 bool MemRegion::hasGlobalsOrParametersStorage() const {
-  return isa<StackArgumentsSpaceRegion, GlobalsSpaceRegion>(getMemorySpace());
+  const MemSpaceRegion *MS = getMemorySpace();
+  return isa<StackArgumentsSpaceRegion>(MS) ||
+         isa<GlobalsSpaceRegion>(MS);
 }
 
 // getBaseRegion strips away all elements and fields, and get the base region

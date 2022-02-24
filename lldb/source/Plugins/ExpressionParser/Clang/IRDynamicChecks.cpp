@@ -22,7 +22,6 @@
 #include "lldb/Target/StackFrame.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 
 #include "Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.h"
@@ -317,7 +316,7 @@ public:
 
 protected:
   bool InstrumentInstruction(llvm::Instruction *inst) override {
-    Log *log = GetLog(LLDBLog::Expressions);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
     LLDB_LOGF(log, "Instrumenting load/store instruction: %s\n",
               PrintValue(inst).c_str());
@@ -354,7 +353,7 @@ protected:
   }
 
   bool InspectInstruction(llvm::Instruction &i) override {
-    if (isa<llvm::LoadInst>(&i) || isa<llvm::StoreInst>(&i))
+    if (dyn_cast<llvm::LoadInst>(&i) || dyn_cast<llvm::StoreInst>(&i))
       RegisterInstruction(i);
 
     return true;
@@ -468,7 +467,7 @@ protected:
   }
 
   bool InspectInstruction(llvm::Instruction &i) override {
-    Log *log = GetLog(LLDBLog::Expressions);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
     CallInst *call_inst = dyn_cast<CallInst>(&i);
 
@@ -539,7 +538,7 @@ IRDynamicChecks::IRDynamicChecks(
 IRDynamicChecks::~IRDynamicChecks() = default;
 
 bool IRDynamicChecks::runOnModule(llvm::Module &M) {
-  Log *log = GetLog(LLDBLog::Expressions);
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
 
   llvm::Function *function = M.getFunction(StringRef(m_func_name));
 

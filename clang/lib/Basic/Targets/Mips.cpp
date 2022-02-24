@@ -50,7 +50,7 @@ static constexpr llvm::StringLiteral ValidCPUNames[] = {
     {"octeon"}, {"octeon+"}, {"p5600"}};
 
 bool MipsTargetInfo::isValidCPUName(StringRef Name) const {
-  return llvm::is_contained(ValidCPUNames, Name);
+  return llvm::find(ValidCPUNames, Name) != std::end(ValidCPUNames);
 }
 
 void MipsTargetInfo::fillValidCPUList(

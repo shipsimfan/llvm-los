@@ -20,7 +20,6 @@
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
-#include "clang/Basic/Specifiers.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitmaskEnum.h"
 #include "llvm/ADT/PointerIntPair.h"
@@ -161,8 +160,8 @@ protected:
 
     unsigned : NumStmtBits;
 
-    /// Whether this is a constexpr if, or a consteval if, or neither.
-    unsigned Kind : 3;
+    /// True if this if statement is a constexpr if.
+    unsigned IsConstexpr : 1;
 
     /// True if this if statement has storage for an else statement.
     unsigned HasElse : 1;
@@ -1216,11 +1215,6 @@ public:
                    const PrintingPolicy &Policy, unsigned Indentation = 0,
                    StringRef NewlineSymbol = "\n",
                    const ASTContext *Context = nullptr) const;
-  void printPrettyControlled(raw_ostream &OS, PrinterHelper *Helper,
-                             const PrintingPolicy &Policy,
-                             unsigned Indentation = 0,
-                             StringRef NewlineSymbol = "\n",
-                             const ASTContext *Context = nullptr) const;
 
   /// Pretty-prints in JSON format.
   void printJson(raw_ostream &Out, PrinterHelper *Helper,
@@ -1804,7 +1798,6 @@ public:
 class LabelStmt : public ValueStmt {
   LabelDecl *TheDecl;
   Stmt *SubStmt;
-  bool SideEntry = false;
 
 public:
   /// Build a label statement.
@@ -1840,8 +1833,6 @@ public:
   static bool classof(const Stmt *T) {
     return T->getStmtClass() == LabelStmtClass;
   }
-  bool isSideEntry() const { return SideEntry; }
-  void setSideEntry(bool SE) { SideEntry = SE; }
 };
 
 /// Represents an attribute applied to a statement.
@@ -1956,8 +1947,8 @@ class IfStmt final
   unsigned elseOffset() const { return condOffset() + ElseOffsetFromCond; }
 
   /// Build an if/then/else statement.
-  IfStmt(const ASTContext &Ctx, SourceLocation IL, IfStatementKind Kind,
-         Stmt *Init, VarDecl *Var, Expr *Cond, SourceLocation LParenLoc,
+  IfStmt(const ASTContext &Ctx, SourceLocation IL, bool IsConstexpr, Stmt *Init,
+         VarDecl *Var, Expr *Cond, SourceLocation LParenLoc,
          SourceLocation RParenLoc, Stmt *Then, SourceLocation EL, Stmt *Else);
 
   /// Build an empty if/then/else statement.
@@ -1966,9 +1957,9 @@ class IfStmt final
 public:
   /// Create an IfStmt.
   static IfStmt *Create(const ASTContext &Ctx, SourceLocation IL,
-                        IfStatementKind Kind, Stmt *Init, VarDecl *Var,
-                        Expr *Cond, SourceLocation LPL, SourceLocation RPL,
-                        Stmt *Then, SourceLocation EL = SourceLocation(),
+                        bool IsConstexpr, Stmt *Init, VarDecl *Var, Expr *Cond,
+                        SourceLocation LPL, SourceLocation RPL, Stmt *Then,
+                        SourceLocation EL = SourceLocation(),
                         Stmt *Else = nullptr);
 
   /// Create an empty IfStmt optionally with storage for an else statement,
@@ -2083,35 +2074,12 @@ public:
     *getTrailingObjects<SourceLocation>() = ElseLoc;
   }
 
-  bool isConsteval() const {
-    return getStatementKind() == IfStatementKind::ConstevalNonNegated ||
-           getStatementKind() == IfStatementKind::ConstevalNegated;
-  }
-
-  bool isNonNegatedConsteval() const {
-    return getStatementKind() == IfStatementKind::ConstevalNonNegated;
-  }
-
-  bool isNegatedConsteval() const {
-    return getStatementKind() == IfStatementKind::ConstevalNegated;
-  }
-
-  bool isConstexpr() const {
-    return getStatementKind() == IfStatementKind::Constexpr;
-  }
-
-  void setStatementKind(IfStatementKind Kind) {
-    IfStmtBits.Kind = static_cast<unsigned>(Kind);
-  }
-
-  IfStatementKind getStatementKind() const {
-    return static_cast<IfStatementKind>(IfStmtBits.Kind);
-  }
+  bool isConstexpr() const { return IfStmtBits.IsConstexpr; }
+  void setConstexpr(bool C) { IfStmtBits.IsConstexpr = C; }
 
   /// If this is an 'if constexpr', determine which substatement will be taken.
   /// Otherwise, or if the condition is value-dependent, returns None.
   Optional<const Stmt*> getNondiscardedCase(const ASTContext &Ctx) const;
-  Optional<Stmt *> getNondiscardedCase(const ASTContext &Ctx);
 
   bool isObjCAvailabilityCheck() const;
 
@@ -2129,19 +2097,13 @@ public:
   // Iterators over subexpressions.  The iterators will include iterating
   // over the initialization expression referenced by the condition variable.
   child_range children() {
-    // We always store a condition, but there is none for consteval if
-    // statements, so skip it.
-    return child_range(getTrailingObjects<Stmt *>() +
-                           (isConsteval() ? thenOffset() : 0),
+    return child_range(getTrailingObjects<Stmt *>(),
                        getTrailingObjects<Stmt *>() +
                            numTrailingObjects(OverloadToken<Stmt *>()));
   }
 
   const_child_range children() const {
-    // We always store a condition, but there is none for consteval if
-    // statements, so skip it.
-    return const_child_range(getTrailingObjects<Stmt *>() +
-                                 (isConsteval() ? thenOffset() : 0),
+    return const_child_range(getTrailingObjects<Stmt *>(),
                              getTrailingObjects<Stmt *>() +
                                  numTrailingObjects(OverloadToken<Stmt *>()));
   }

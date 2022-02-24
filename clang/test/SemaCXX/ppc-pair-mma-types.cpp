@@ -1,7 +1,5 @@
 // RUN: %clang_cc1 -triple powerpc64le-unknown-unknown -fsyntax-only \
-// RUN:   -fcxx-exceptions -target-cpu pwr10 %s -verify
-// RUN: %clang_cc1 -triple powerpc64-unknown-unknown -fsyntax-only \
-// RUN:   -fcxx-exceptions -target-cpu pwr10 %s -verify
+// RUN:   -fcxx-exceptions -target-cpu future %s -verify
 
 // vector quad
 
@@ -370,7 +368,6 @@ void TestVPLambda() {
     return *vpp; // expected-error {{invalid use of PPC MMA type}}
   };
   auto f3 = [](vector unsigned char vc) { __vector_pair vp; __builtin_vsx_assemble_pair(&vp, vc, vc); return vp; }; // expected-error {{invalid use of PPC MMA type}}
-  auto f4 = [](vector unsigned char vc) { __vector_pair vp; __builtin_vsx_build_pair(&vp, vc, vc); return vp; }; // expected-error {{invalid use of PPC MMA type}}
 }
 
 // cast

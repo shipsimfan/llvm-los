@@ -612,7 +612,7 @@ struct MatchableInfo {
   /// operator< - Compare two matchables.
   bool operator<(const MatchableInfo &RHS) const {
     // The primary comparator is the instruction mnemonic.
-    if (int Cmp = Mnemonic.compare_insensitive(RHS.Mnemonic))
+    if (int Cmp = Mnemonic.compare_lower(RHS.Mnemonic))
       return Cmp == -1;
 
     if (AsmOperands.size() != RHS.AsmOperands.size())
@@ -635,15 +635,6 @@ struct MatchableInfo {
     // requires V6 while MOV does not.
     if (RequiredFeatures.size() != RHS.RequiredFeatures.size())
       return RequiredFeatures.size() > RHS.RequiredFeatures.size();
-
-    // For X86 AVX/AVX512 instructions, we prefer vex encoding because the
-    // vex encoding size is smaller. Since X86InstrSSE.td is included ahead
-    // of X86InstrAVX512.td, the AVX instruction ID is less than AVX512 ID.
-    // We use the ID to sort AVX instruction before AVX512 instruction in
-    // matching table.
-    if (TheDef->isSubClassOf("Instruction") &&
-        TheDef->getValueAsBit("HasPositionOrder"))
-      return TheDef->getID() < RHS.TheDef->getID();
 
     return false;
   }
@@ -1071,7 +1062,7 @@ bool MatchableInfo::validate(StringRef CommentDelimiter, bool IsAlias) const {
   // Remove comments from the asm string.  We know that the asmstring only
   // has one line.
   if (!CommentDelimiter.empty() &&
-      StringRef(AsmString).contains(CommentDelimiter))
+      StringRef(AsmString).find(CommentDelimiter) != StringRef::npos)
     PrintFatalError(TheDef->getLoc(),
                   "asmstring for instruction has comment character in it, "
                   "mark it isCodeGenOnly");
@@ -1086,7 +1077,7 @@ bool MatchableInfo::validate(StringRef CommentDelimiter, bool IsAlias) const {
   std::set<std::string> OperandNames;
   for (const AsmOperand &Op : AsmOperands) {
     StringRef Tok = Op.Token;
-    if (Tok[0] == '$' && Tok.contains(':'))
+    if (Tok[0] == '$' && Tok.find(':') != StringRef::npos)
       PrintFatalError(TheDef->getLoc(),
                       "matchable with operand modifier '" + Tok +
                       "' not supported by asm matcher.  Mark isCodeGenOnly!");
@@ -1331,8 +1322,9 @@ buildRegisterClasses(SmallPtrSetImpl<Record*> &SingletonRegisters) {
   }
 
   // Populate the map for individual registers.
-  for (auto &It : RegisterMap)
-    RegisterClasses[It.first] = RegisterSetClasses[It.second];
+  for (std::map<Record*, RegisterSet>::iterator it = RegisterMap.begin(),
+         ie = RegisterMap.end(); it != ie; ++it)
+    RegisterClasses[it->first] = RegisterSetClasses[it->second];
 
   // Name the register classes which correspond to singleton registers.
   for (Record *Rec : SingletonRegisters) {
@@ -1537,8 +1529,9 @@ void AsmMatcherInfo::buildInfo() {
     // matchables.
     std::vector<Record*> AllInstAliases =
       Records.getAllDerivedDefinitions("InstAlias");
-    for (Record *InstAlias : AllInstAliases) {
-      auto Alias = std::make_unique<CodeGenInstAlias>(InstAlias, Target);
+    for (unsigned i = 0, e = AllInstAliases.size(); i != e; ++i) {
+      auto Alias = std::make_unique<CodeGenInstAlias>(AllInstAliases[i],
+                                                       Target);
 
       // If the tblgen -match-prefix option is specified (for tblgen hackers),
       // filter the set of instruction aliases we consider, based on the target
@@ -2758,14 +2751,10 @@ static void emitMnemonicAliasVariant(raw_ostream &OS,const AsmMatcherInfo &Info,
       // If this unconditionally matches, remember it for later and diagnose
       // duplicates.
       if (FeatureMask.empty()) {
-        if (AliasWithNoPredicate != -1 &&
-            R->getValueAsString("ToMnemonic") !=
-                ToVec[AliasWithNoPredicate]->getValueAsString("ToMnemonic")) {
-          // We can't have two different aliases from the same mnemonic with no
-          // predicate.
-          PrintError(
-              ToVec[AliasWithNoPredicate]->getLoc(),
-              "two different MnemonicAliases with the same 'from' mnemonic!");
+        if (AliasWithNoPredicate != -1) {
+          // We can't have two aliases from the same mnemonic with no predicate.
+          PrintError(ToVec[AliasWithNoPredicate]->getLoc(),
+                     "two MnemonicAliases with the same 'from' mnemonic!");
           PrintFatalError(R->getLoc(), "this is the other MnemonicAlias.");
         }
 
@@ -3924,7 +3913,8 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
 
   if (HasDeprecation) {
     OS << "    std::string Info;\n";
-    OS << "    if (!getParser().getTargetParser().getTargetOptions().MCNoDeprecatedWarn &&\n";
+    OS << "    if (!getParser().getTargetParser().\n";
+    OS << "        getTargetOptions().MCNoDeprecatedWarn &&\n";
     OS << "        MII.getDeprecatedInfo(Inst, getSTI(), Info)) {\n";
     OS << "      SMLoc Loc = ((" << Target.getName()
        << "Operand &)*Operands[0]).getStartLoc();\n";

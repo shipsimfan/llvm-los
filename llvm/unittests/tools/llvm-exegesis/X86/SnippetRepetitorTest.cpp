@@ -42,13 +42,11 @@ protected:
     const auto Repetitor = SnippetRepetitor::Create(RepetitionMode, State);
     const std::vector<MCInst> Instructions = {MCInstBuilder(X86::NOOP)};
     FunctionFiller Sink(*MF, {X86::EAX});
-    const auto Fill =
-        Repetitor->Repeat(Instructions, kMinInstructions, kLoopBodySize);
+    const auto Fill = Repetitor->Repeat(Instructions, kMinInstructions);
     Fill(Sink);
   }
 
   static constexpr const unsigned kMinInstructions = 3;
-  static constexpr const unsigned kLoopBodySize = 5;
 
   std::unique_ptr<LLVMTargetMachine> TM;
   std::unique_ptr<LLVMContext> Context;
@@ -71,7 +69,7 @@ TEST_F(X86SnippetRepetitorTest, Duplicate) {
   ASSERT_EQ(MF->getNumBlockIDs(), 1u);
   EXPECT_THAT(MF->getBlockNumbered(0)->instrs(),
               ElementsAre(HasOpcode(X86::NOOP), HasOpcode(X86::NOOP),
-                          HasOpcode(X86::NOOP), HasOpcode(X86::RET64)));
+                          HasOpcode(X86::NOOP), HasOpcode(X86::RETQ)));
 }
 
 TEST_F(X86SnippetRepetitorTest, Loop) {
@@ -80,9 +78,7 @@ TEST_F(X86SnippetRepetitorTest, Loop) {
   ASSERT_EQ(MF->getNumBlockIDs(), 3u);
   const auto &LoopBlock = *MF->getBlockNumbered(1);
   EXPECT_THAT(LoopBlock.instrs(),
-              ElementsAre(HasOpcode(X86::NOOP), HasOpcode(X86::NOOP),
-                          HasOpcode(X86::NOOP), HasOpcode(X86::NOOP),
-                          HasOpcode(X86::NOOP), HasOpcode(X86::ADD64ri8),
+              ElementsAre(HasOpcode(X86::NOOP), HasOpcode(X86::ADD64ri8),
                           HasOpcode(X86::JCC_1)));
   EXPECT_THAT(LoopBlock.liveins(),
               UnorderedElementsAre(
@@ -90,7 +86,7 @@ TEST_F(X86SnippetRepetitorTest, Loop) {
                   LiveReg(State.getExegesisTarget().getLoopCounterRegister(
                       State.getTargetMachine().getTargetTriple()))));
   EXPECT_THAT(MF->getBlockNumbered(2)->instrs(),
-              ElementsAre(HasOpcode(X86::RET64)));
+              ElementsAre(HasOpcode(X86::RETQ)));
 }
 
 } // namespace

@@ -2,13 +2,10 @@
 // memcpy/memmove calls. It builds the binary with TSan and check's
 // its objdump.
 
-// This could fail if using a static libunwind because that static libunwind
-// could be uninstrumented and contain memcpy/memmove calls not intercepted by
-// tsan.
-// REQUIRES: shared_unwind
-
 // RUN: %clang_tsan -O1 %s -o %t
-// RUN: llvm-objdump -d -l %t | FileCheck %s
+// RUN: llvm-objdump -d %t | FileCheck %s
+
+// REQUIRES: compiler-rt-optimized
 
 int main() {
   return 0;

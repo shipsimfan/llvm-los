@@ -24,7 +24,7 @@
 using namespace lldb;
 using namespace lldb_private;
 
-CommandObjectExpression::CommandOptions::CommandOptions() {}
+CommandObjectExpression::CommandOptions::CommandOptions() : OptionGroup() {}
 
 CommandObjectExpression::CommandOptions::~CommandOptions() = default;
 
@@ -200,10 +200,10 @@ CommandObjectExpression::CommandObjectExpression(
                        "",
                        eCommandProcessMustBePaused | eCommandTryTargetAPILock),
       IOHandlerDelegate(IOHandlerDelegate::Completion::Expression),
-      m_format_options(eFormatDefault),
+      m_option_group(), m_format_options(eFormatDefault),
       m_repl_option(LLDB_OPT_SET_1, false, "repl", 'r', "Drop into REPL", false,
                     true),
-      m_command_options(), m_expr_line_count(0) {
+      m_command_options(), m_expr_line_count(0), m_expr_lines() {
   SetHelpLong(
       R"(
 Single and multi-line expressions:
@@ -411,6 +411,7 @@ bool CommandObjectExpression::EvaluateExpression(llvm::StringRef expr,
   if (m_command_options.top_level && !m_command_options.allow_jit) {
     result.AppendErrorWithFormat(
         "Can't disable JIT compilation for top-level expressions.\n");
+    result.SetStatus(eReturnStatusFailed);
     return false;
   }
 
@@ -421,8 +422,9 @@ bool CommandObjectExpression::EvaluateExpression(llvm::StringRef expr,
   // We only tell you about the FixIt if we applied it.  The compiler errors
   // will suggest the FixIt if it parsed.
   if (!m_fixed_expression.empty() && target.GetEnableNotifyAboutFixIts()) {
-    error_stream.Printf("  Fix-it applied, fixed expression was: \n    %s\n",
-                        m_fixed_expression.c_str());
+    if (success == eExpressionCompleted)
+      error_stream.Printf("  Fix-it applied, fixed expression was: \n    %s\n",
+                          m_fixed_expression.c_str());
   }
 
   if (result_valobj_sp) {
@@ -439,6 +441,7 @@ bool CommandObjectExpression::EvaluateExpression(llvm::StringRef expr,
             result.AppendErrorWithFormat(
                 "expression cannot be used with --element-count %s\n",
                 error.AsCString(""));
+            result.SetStatus(eReturnStatusFailed);
             return false;
           }
         }
@@ -659,8 +662,13 @@ bool CommandObjectExpression::DoExecute(llvm::StringRef command,
         fixed_command.append(m_fixed_expression);
       history.AppendString(fixed_command);
     }
+    // Increment statistics to record this expression evaluation success.
+    target.IncrementStats(StatisticKind::ExpressionSuccessful);
     return true;
   }
+
+  // Increment statistics to record this expression evaluation failure.
+  target.IncrementStats(StatisticKind::ExpressionFailure);
   result.SetStatus(eReturnStatusFailed);
   return false;
 }

@@ -43,7 +43,7 @@ public:
   AbstractDependenceGraphBuilder(GraphType &G, DependenceInfo &D,
                                  const BasicBlockListType &BBs)
       : Graph(G), DI(D), BBList(BBs) {}
-  virtual ~AbstractDependenceGraphBuilder() = default;
+  virtual ~AbstractDependenceGraphBuilder() {}
 
   /// The main entry to the graph construction algorithm. It starts by
   /// creating nodes in increasing order of granularity and then

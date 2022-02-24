@@ -136,11 +136,11 @@ private:
   const CHAR *cursor_{}; // current location in format_
   const CHAR *laCursor_{}; // lookahead cursor
   Token token_{}; // current token
-  TokenKind previousTokenKind_{TokenKind::None};
   int64_t integerValue_{-1}; // value of UnsignedInteger token
   Token knrToken_{}; // k, n, or r UnsignedInteger token
   int64_t knrValue_{-1}; // -1 ==> not present
   int64_t wValue_{-1};
+  bool previousTokenWasInt_{false};
   char argString_[3]{}; // 1-2 character msg arg; usually edit descriptor name
   bool formatHasErrors_{false};
   bool unterminatedFormatError_{false};
@@ -149,20 +149,9 @@ private:
   int maxNesting_{0}; // max level of nested parentheses
 };
 
-template <typename CHAR> static inline bool IsWhite(CHAR c) {
-  // White space.  ' ' is standard.  Other characters are extensions.
-  // Extension candidates:
-  //   '\t' (horizontal tab)
-  //   '\n' (new line)
-  //   '\v' (vertical tab)
-  //   '\f' (form feed)
-  //   '\r' (carriage ret)
-  return c == ' ' || c == '\t' || c == '\v';
-}
-
 template <typename CHAR> CHAR FormatValidator<CHAR>::NextChar() {
   for (++cursor_; cursor_ < end_; ++cursor_) {
-    if (!IsWhite(*cursor_)) {
+    if (*cursor_ != ' ') {
       return toupper(*cursor_);
     }
   }
@@ -172,7 +161,7 @@ template <typename CHAR> CHAR FormatValidator<CHAR>::NextChar() {
 
 template <typename CHAR> CHAR FormatValidator<CHAR>::LookAheadChar() {
   for (laCursor_ = cursor_ + 1; laCursor_ < end_; ++laCursor_) {
-    if (!IsWhite(*cursor_)) {
+    if (*laCursor_ != ' ') {
       return toupper(*laCursor_);
     }
   }
@@ -190,7 +179,7 @@ template <typename CHAR> void FormatValidator<CHAR>::NextToken() {
   // At entry, cursor_ points before the start of the next token.
   // At exit, cursor_ points to last CHAR of token_.
 
-  previousTokenKind_ = token_.kind();
+  previousTokenWasInt_ = token_.kind() == TokenKind::UnsignedInteger;
   CHAR c{NextChar()};
   token_.set_kind(TokenKind::None);
   token_.set_offset(cursor_ - format_);
@@ -427,8 +416,7 @@ template <typename CHAR> void FormatValidator<CHAR>::NextToken() {
       }
     }
     SetLength();
-    if (stmt_ == IoStmtKind::Read &&
-        previousTokenKind_ != TokenKind::DT) { // 13.3.2p6
+    if (stmt_ == IoStmtKind::Read) { // 13.3.2p6
       ReportError("String edit descriptor in READ format expression");
     } else if (token_.kind() != TokenKind::String) {
       ReportError("Unterminated string");
@@ -617,8 +605,8 @@ template <typename CHAR> bool FormatValidator<CHAR>::Check() {
             check_e();
           }
         } else if (token_.kind() == TokenKind::Point && check_d() &&
-            token_.kind() == TokenKind::E) { // C1308
-          ReportError("A 'G0' edit descriptor must not have an 'e' value");
+            token_.kind() == TokenKind::E) {
+          ReportError("Unexpected 'e' in 'G0' edit descriptor"); // C1308
           NextToken();
           if (token_.kind() == TokenKind::UnsignedInteger) {
             NextToken();
@@ -841,8 +829,7 @@ template <typename CHAR> bool FormatValidator<CHAR>::Check() {
       // Possible first token of the next format item; token not yet processed.
       if (commaRequired) {
         const char *s{"Expected ',' or ')' in format expression"}; // C1302
-        if (previousTokenKind_ == TokenKind::UnsignedInteger &&
-            itemsWithLeadingInts_.test(token_.kind())) {
+        if (previousTokenWasInt_ && itemsWithLeadingInts_.test(token_.kind())) {
           ReportError(s);
         } else {
           ReportWarning(s);

@@ -1,3 +1,4 @@
+; RUN: opt < %s -scalarizer -S -o - | FileCheck %s
 ; RUN: opt < %s -passes='function(scalarizer)' -S | FileCheck %s
 
 @a = dso_local global i16 0, align 1

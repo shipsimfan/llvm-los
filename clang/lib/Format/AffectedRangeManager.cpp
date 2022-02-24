@@ -27,7 +27,6 @@ bool AffectedRangeManager::computeAffectedLines(
   const AnnotatedLine *PreviousLine = nullptr;
   while (I != E) {
     AnnotatedLine *Line = *I;
-    assert(Line->First);
     Line->LeadingEmptyLinesAffected = affectsLeadingEmptyLines(*Line->First);
 
     // If a line is part of a preprocessor directive, it needs to be formatted
@@ -60,10 +59,13 @@ bool AffectedRangeManager::computeAffectedLines(
 
 bool AffectedRangeManager::affectsCharSourceRange(
     const CharSourceRange &Range) {
-  for (const CharSourceRange &R : Ranges)
-    if (!SourceMgr.isBeforeInTranslationUnit(Range.getEnd(), R.getBegin()) &&
-        !SourceMgr.isBeforeInTranslationUnit(R.getEnd(), Range.getBegin()))
+  for (SmallVectorImpl<CharSourceRange>::const_iterator I = Ranges.begin(),
+                                                        E = Ranges.end();
+       I != E; ++I) {
+    if (!SourceMgr.isBeforeInTranslationUnit(Range.getEnd(), I->getBegin()) &&
+        !SourceMgr.isBeforeInTranslationUnit(I->getEnd(), Range.getBegin()))
       return true;
+  }
   return false;
 }
 
@@ -114,7 +116,6 @@ bool AffectedRangeManager::nonPPLineAffected(
   // affected.
   bool SomeFirstChildAffected = false;
 
-  assert(Line->First);
   for (FormatToken *Tok = Line->First; Tok; Tok = Tok->Next) {
     // Determine whether 'Tok' was affected.
     if (affectsTokenRange(*Tok, *Tok, IncludeLeadingNewlines))

@@ -188,7 +188,7 @@ public:
                printRegion(dbgs(), Rgn.Begin, Rgn.End, Sch.LIS, 2));
     Sch.BaseClass::schedule();
 
-    // Unfortunately placeDebugValues incorrectly modifies RegionEnd, restore
+    // Unfortunatelly placeDebugValues incorrectly modifies RegionEnd, restore
     Sch.RegionEnd = Rgn.End;
     //assert(Rgn.End == Sch.RegionEnd);
     Rgn.Begin = Sch.RegionBegin;
@@ -280,7 +280,7 @@ GCNIterativeScheduler::getSchedulePressure(const Region &R,
   return RPTracker.moveMaxPressure();
 }
 
-void GCNIterativeScheduler::enterRegion(MachineBasicBlock *BB, // overridden
+void GCNIterativeScheduler::enterRegion(MachineBasicBlock *BB, // overriden
                                         MachineBasicBlock::iterator Begin,
                                         MachineBasicBlock::iterator End,
                                         unsigned NumRegionInstrs) {
@@ -293,7 +293,7 @@ void GCNIterativeScheduler::enterRegion(MachineBasicBlock *BB, // overridden
   }
 }
 
-void GCNIterativeScheduler::schedule() { // overridden
+void GCNIterativeScheduler::schedule() { // overriden
   // do nothing
   LLVM_DEBUG(printLivenessInfo(dbgs(), RegionBegin, RegionEnd, LIS);
              if (!Regions.empty() && Regions.back()->Begin == RegionBegin) {
@@ -304,7 +304,7 @@ void GCNIterativeScheduler::schedule() { // overridden
              << '\n';);
 }
 
-void GCNIterativeScheduler::finalizeSchedule() { // overridden
+void GCNIterativeScheduler::finalizeSchedule() { // overriden
   if (Regions.empty())
     return;
   switch (Strategy) {
@@ -391,8 +391,8 @@ void GCNIterativeScheduler::scheduleRegion(Region &R, Range &&Schedule,
   // and already interleaved with debug values
   if (!std::is_same<decltype(*Schedule.begin()), MachineInstr*>::value) {
     placeDebugValues();
-    // Unfortunately placeDebugValues incorrectly modifies RegionEnd, restore
-    // assert(R.End == RegionEnd);
+    // Unfortunatelly placeDebugValues incorrectly modifies RegionEnd, restore
+    //assert(R.End == RegionEnd);
     RegionEnd = R.End;
   }
 

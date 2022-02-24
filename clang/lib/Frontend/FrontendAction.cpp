@@ -27,7 +27,6 @@
 #include "clang/Serialization/ASTDeserializationListener.h"
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Serialization/GlobalModuleIndex.h"
-#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/BuryPointer.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
@@ -144,7 +143,7 @@ void FrontendAction::setCurrentInput(const FrontendInputFile &CurrentInput,
 Module *FrontendAction::getCurrentModule() const {
   CompilerInstance &CI = getCompilerInstance();
   return CI.getPreprocessor().getHeaderSearchInfo().lookupModule(
-      CI.getLangOpts().CurrentModule, SourceLocation(), /*AllowSearch*/false);
+      CI.getLangOpts().CurrentModule, /*AllowSearch*/false);
 }
 
 std::unique_ptr<ASTConsumer>
@@ -187,19 +186,14 @@ FrontendAction::CreateWrappedASTConsumer(CompilerInstance &CI,
        FrontendPluginRegistry::entries()) {
     std::unique_ptr<PluginASTAction> P = Plugin.instantiate();
     PluginASTAction::ActionType ActionType = P->getActionType();
-    if (ActionType == PluginASTAction::CmdlineAfterMainAction ||
-        ActionType == PluginASTAction::CmdlineBeforeMainAction) {
+    if (ActionType == PluginASTAction::Cmdline) {
       // This is O(|plugins| * |add_plugins|), but since both numbers are
       // way below 50 in practice, that's ok.
       if (llvm::any_of(CI.getFrontendOpts().AddPluginActions,
                        [&](const std::string &PluginAction) {
                          return PluginAction == Plugin.getName();
-                       })) {
-        if (ActionType == PluginASTAction::CmdlineBeforeMainAction)
-          ActionType = PluginASTAction::AddBeforeMainAction;
-        else
-          ActionType = PluginASTAction::AddAfterMainAction;
-      }
+                       }))
+        ActionType = PluginASTAction::AddAfterMainAction;
     }
     if ((ActionType == PluginASTAction::AddBeforeMainAction ||
          ActionType == PluginASTAction::AddAfterMainAction) &&
@@ -217,13 +211,8 @@ FrontendAction::CreateWrappedASTConsumer(CompilerInstance &CI,
 
   // Add to Consumers the main consumer, then all the plugins that go after it
   Consumers.push_back(std::move(Consumer));
-  if (!AfterConsumers.empty()) {
-    // If we have plugins after the main consumer, which may be the codegen
-    // action, they likely will need the ASTContext, so don't clear it in the
-    // codegen action.
-    CI.getCodeGenOpts().ClearASTBeforeBackend = false;
-    for (auto &C : AfterConsumers)
-      Consumers.push_back(std::move(C));
+  for (auto &C : AfterConsumers) {
+    Consumers.push_back(std::move(C));
   }
 
   return std::make_unique<MultiplexConsumer>(std::move(Consumers));
@@ -353,8 +342,7 @@ static std::error_code collectModuleHeaderIncludes(
       // file relative to the module build directory (the directory containing
       // the module map file) so this will find the same file that we found
       // while parsing the module map.
-      addHeaderInclude(H.PathRelativeToRootModuleDirectory, Includes, LangOpts,
-                       Module->IsExternC);
+      addHeaderInclude(H.NameAsWritten, Includes, LangOpts, Module->IsExternC);
     }
   }
   // Note that Module->PrivateHeaders will not be a TopHeader.
@@ -363,8 +351,8 @@ static std::error_code collectModuleHeaderIncludes(
     Module->addTopHeader(UmbrellaHeader.Entry);
     if (Module->Parent)
       // Include the umbrella header for submodules.
-      addHeaderInclude(UmbrellaHeader.PathRelativeToRootModuleDirectory,
-                       Includes, LangOpts, Module->IsExternC);
+      addHeaderInclude(UmbrellaHeader.NameAsWritten, Includes, LangOpts,
+                       Module->IsExternC);
   } else if (Module::DirectoryName UmbrellaDir = Module->getUmbrellaDir()) {
     // Add all of the headers we find in this subdirectory.
     std::error_code EC;
@@ -398,8 +386,7 @@ static std::error_code collectModuleHeaderIncludes(
       auto PathIt = llvm::sys::path::rbegin(Dir->path());
       for (int I = 0; I != Dir.level() + 1; ++I, ++PathIt)
         Components.push_back(*PathIt);
-      SmallString<128> RelativeHeader(
-          UmbrellaDir.PathRelativeToRootModuleDirectory);
+      SmallString<128> RelativeHeader(UmbrellaDir.NameAsWritten);
       for (auto It = Components.rbegin(), End = Components.rend(); It != End;
            ++It)
         llvm::sys::path::append(RelativeHeader, *It);
@@ -465,15 +452,6 @@ static bool loadModuleMapForModuleBuild(CompilerInstance &CI, bool IsSystem,
   if (SrcMgr.getBufferOrFake(ModuleMapID).getBufferSize() == Offset)
     Offset = 0;
 
-  // Infer framework module if possible.
-  if (HS.getModuleMap().canInferFrameworkModule(ModuleMap->getDir())) {
-    SmallString<128> InferredFrameworkPath = ModuleMap->getDir()->getName();
-    llvm::sys::path::append(InferredFrameworkPath,
-                            CI.getLangOpts().ModuleName + ".framework");
-    if (auto Dir = CI.getFileManager().getDirectory(InferredFrameworkPath))
-      (void)HS.getModuleMap().inferFrameworkModule(*Dir, IsSystem, nullptr);
-  }
-
   return false;
 }
 
@@ -491,8 +469,8 @@ static Module *prepareToBuildModule(CompilerInstance &CI,
 
   // Dig out the module definition.
   HeaderSearch &HS = CI.getPreprocessor().getHeaderSearchInfo();
-  Module *M = HS.lookupModule(CI.getLangOpts().CurrentModule, SourceLocation(),
-                              /*AllowSearch=*/true);
+  Module *M = HS.lookupModule(CI.getLangOpts().CurrentModule,
+                              /*AllowSearch=*/false);
   if (!M) {
     CI.getDiagnostics().Report(diag::err_missing_module)
       << CI.getLangOpts().CurrentModule << ModuleMapFilename;
@@ -550,8 +528,8 @@ getInputBufferForModule(CompilerInstance &CI, Module *M) {
   SmallString<256> HeaderContents;
   std::error_code Err = std::error_code();
   if (Module::Header UmbrellaHeader = M->getUmbrellaHeader())
-    addHeaderInclude(UmbrellaHeader.PathRelativeToRootModuleDirectory,
-                     HeaderContents, CI.getLangOpts(), M->IsExternC);
+    addHeaderInclude(UmbrellaHeader.NameAsWritten, HeaderContents,
+                     CI.getLangOpts(), M->IsExternC);
   Err = collectModuleHeaderIncludes(
       CI.getLangOpts(), FileMgr, CI.getDiagnostics(),
       CI.getPreprocessor().getHeaderSearchInfo().getModuleMap(), M,
@@ -578,20 +556,8 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
   bool HasBegunSourceFile = false;
   bool ReplayASTFile = Input.getKind().getFormat() == InputKind::Precompiled &&
                        usesPreprocessorOnly();
-
-  // If we fail, reset state since the client will not end up calling the
-  // matching EndSourceFile(). All paths that return true should release this.
-  auto FailureCleanup = llvm::make_scope_exit([&]() {
-    if (HasBegunSourceFile)
-      CI.getDiagnosticClient().EndSourceFile();
-    CI.clearOutputFiles(/*EraseFiles=*/true);
-    CI.getLangOpts().setCompilingModule(LangOptions::CMK_None);
-    setCurrentInput(FrontendInputFile());
-    setCompilerInstance(nullptr);
-  });
-
   if (!BeginInvocation(CI))
-    return false;
+    goto failure;
 
   // If we're replaying the build of an AST file, import it and set up
   // the initial state from its build.
@@ -612,7 +578,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
         ASTUnit::LoadPreprocessorOnly, ASTDiags, CI.getFileSystemOpts(),
         CI.getCodeGenOpts().DebugTypeExtRefs);
     if (!AST)
-      return false;
+      goto failure;
 
     // Options relating to how we treat the input (but not what we do with it)
     // are inherited from the AST unit.
@@ -649,8 +615,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
     if (Kind.getFormat() == InputKind::ModuleMap) {
       Module *ASTModule =
           AST->getPreprocessor().getHeaderSearchInfo().lookupModule(
-              AST->getLangOpts().CurrentModule, SourceLocation(),
-              /*AllowSearch*/ false);
+              AST->getLangOpts().CurrentModule, /*AllowSearch*/ false);
       assert(ASTModule && "module file does not define its own module");
       Input = FrontendInputFile(ASTModule->PresumedModuleMapFile, Kind);
     } else {
@@ -682,7 +647,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
         CI.getCodeGenOpts().DebugTypeExtRefs);
 
     if (!AST)
-      return false;
+      goto failure;
 
     // Inform the diagnostic client we are processing a source file.
     CI.getDiagnosticClient().BeginSourceFile(CI.getLangOpts(), nullptr);
@@ -702,21 +667,20 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 
     // Initialize the action.
     if (!BeginSourceFileAction(CI))
-      return false;
+      goto failure;
 
     // Create the AST consumer.
     CI.setASTConsumer(CreateWrappedASTConsumer(CI, InputFile));
     if (!CI.hasASTConsumer())
-      return false;
+      goto failure;
 
-    FailureCleanup.release();
     return true;
   }
 
   // Set up the file and source managers, if needed.
   if (!CI.hasFileManager()) {
     if (!CI.createFileManager()) {
-      return false;
+      goto failure;
     }
   }
   if (!CI.hasSourceManager())
@@ -744,13 +708,12 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 
     // Initialize the action.
     if (!BeginSourceFileAction(CI))
-      return false;
+      goto failure;
 
     // Initialize the main file entry.
     if (!CI.InitializeSourceManager(CurrentInput))
-      return false;
+      goto failure;
 
-    FailureCleanup.release();
     return true;
   }
 
@@ -783,7 +746,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 
       if (!Found) {
         CI.getDiagnostics().Report(diag::err_fe_no_pch_in_dir) << PCHInclude;
-        return false;
+        goto failure;
       }
     }
   }
@@ -800,7 +763,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 
   // Initialize the main file entry.
   if (!CI.InitializeSourceManager(Input))
-    return false;
+    goto failure;
 
   // For module map files, we first parse the module map and synthesize a
   // "<module-includes>" buffer before more conventional processing.
@@ -812,11 +775,11 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
     if (loadModuleMapForModuleBuild(CI, Input.isSystem(),
                                     Input.isPreprocessed(),
                                     PresumedModuleMapFile, OffsetToContents))
-      return false;
+      goto failure;
 
     auto *CurrentModule = prepareToBuildModule(CI, Input.getFile());
     if (!CurrentModule)
-      return false;
+      goto failure;
 
     CurrentModule->PresumedModuleMapFile = PresumedModuleMapFile;
 
@@ -827,7 +790,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
       // Otherwise, convert the module description to a suitable input buffer.
       auto Buffer = getInputBufferForModule(CI, CurrentModule);
       if (!Buffer)
-        return false;
+        goto failure;
 
       // Reinitialize the main file entry to refer to the new input.
       auto Kind = CurrentModule->IsSystem ? SrcMgr::C_System : SrcMgr::C_User;
@@ -840,7 +803,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 
   // Initialize the action.
   if (!BeginSourceFileAction(CI))
-    return false;
+    goto failure;
 
   // If we were asked to load any module map files, do so now.
   for (const auto &Filename : CI.getFrontendOpts().ModuleMapFiles) {
@@ -874,7 +837,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
     std::unique_ptr<ASTConsumer> Consumer =
         CreateWrappedASTConsumer(CI, PresumedInputFile);
     if (!Consumer)
-      return false;
+      goto failure;
 
     // FIXME: should not overwrite ASTMutationListener when parsing model files?
     if (!isModelParsingAction())
@@ -885,7 +848,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
       IntrusiveRefCntPtr<ExternalSemaSource> source, FinalReader;
       source = createChainedIncludesSource(CI, FinalReader);
       if (!source)
-        return false;
+        goto failure;
       CI.setASTReader(static_cast<ASTReader *>(FinalReader.get()));
       CI.getASTContext().setExternalSource(source);
     } else if (CI.getLangOpts().Modules ||
@@ -914,7 +877,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
             CI.getPreprocessorOpts().AllowPCHWithCompilerErrors,
             DeserialListener, DeleteDeserialListener);
         if (!CI.getASTContext().getExternalSource())
-          return false;
+          goto failure;
       }
       // If modules are enabled, create the AST reader before creating
       // any builtins, so that all declarations know that they might be
@@ -929,7 +892,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
 
     CI.setASTConsumer(std::move(Consumer));
     if (!CI.hasASTConsumer())
-      return false;
+      goto failure;
   }
 
   // Initialize built-in info as long as we aren't using an external AST
@@ -950,7 +913,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
   // If we were asked to load any module files, do so now.
   for (const auto &ModuleFile : CI.getFrontendOpts().ModuleFiles)
     if (!CI.loadModuleFile(ModuleFile))
-      return false;
+      goto failure;
 
   // If there is a layout overrides file, attach an external AST source that
   // provides the layouts from that file.
@@ -962,8 +925,18 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
     CI.getASTContext().setExternalSource(Override);
   }
 
-  FailureCleanup.release();
   return true;
+
+  // If we failed, reset state since the client will not end up calling the
+  // matching EndSourceFile().
+failure:
+  if (HasBegunSourceFile)
+    CI.getDiagnosticClient().EndSourceFile();
+  CI.clearOutputFiles(/*EraseFiles=*/true);
+  CI.getLangOpts().setCompilingModule(LangOptions::CMK_None);
+  setCurrentInput(FrontendInputFile());
+  setCompilerInstance(nullptr);
+  return false;
 }
 
 llvm::Error FrontendAction::Execute() {
@@ -1114,7 +1087,6 @@ bool WrapperFrontendAction::BeginSourceFileAction(CompilerInstance &CI) {
 void WrapperFrontendAction::ExecuteAction() {
   WrappedAction->ExecuteAction();
 }
-void WrapperFrontendAction::EndSourceFile() { WrappedAction->EndSourceFile(); }
 void WrapperFrontendAction::EndSourceFileAction() {
   WrappedAction->EndSourceFileAction();
 }

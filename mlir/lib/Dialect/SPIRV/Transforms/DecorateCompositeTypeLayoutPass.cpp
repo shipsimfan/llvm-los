@@ -44,8 +44,9 @@ public:
 
     // Save all named attributes except "type" attribute.
     for (const auto &attr : op->getAttrs()) {
-      if (attr.getName() == "type")
+      if (attr.first == "type") {
         continue;
+      }
       globalVarAttrs.push_back(attr);
     }
 
@@ -63,25 +64,11 @@ public:
   LogicalResult matchAndRewrite(spirv::AddressOfOp op,
                                 PatternRewriter &rewriter) const override {
     auto spirvModule = op->getParentOfType<spirv::ModuleOp>();
-    auto varName = op.variableAttr();
+    auto varName = op.variable();
     auto varOp = spirvModule.lookupSymbol<spirv::GlobalVariableOp>(varName);
 
     rewriter.replaceOpWithNewOp<spirv::AddressOfOp>(
-        op, varOp.type(), SymbolRefAttr::get(varName.getAttr()));
-    return success();
-  }
-};
-
-template <typename OpT>
-class SPIRVPassThroughConversion : public OpConversionPattern<OpT> {
-public:
-  using OpConversionPattern<OpT>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(OpT op, typename OpT::Adaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.updateRootInPlace(op,
-                               [&] { op->setOperands(adaptor.getOperands()); });
+        op, varOp.type(), rewriter.getSymbolRefAttr(varName));
     return success();
   }
 };
@@ -89,11 +76,7 @@ public:
 
 static void populateSPIRVLayoutInfoPatterns(RewritePatternSet &patterns) {
   patterns.add<SPIRVGlobalVariableOpLayoutInfoDecoration,
-               SPIRVAddressOfOpLayoutInfoDecoration,
-               SPIRVPassThroughConversion<spirv::AccessChainOp>,
-               SPIRVPassThroughConversion<spirv::LoadOp>,
-               SPIRVPassThroughConversion<spirv::StoreOp>>(
-      patterns.getContext());
+               SPIRVAddressOfOpLayoutInfoDecoration>(patterns.getContext());
 }
 
 namespace {
@@ -121,17 +104,8 @@ void DecorateSPIRVCompositeTypeLayoutPass::runOnOperation() {
     return VulkanLayoutUtils::isLegalType(op.pointer().getType());
   });
 
-  // Change the type for the indirect users.
-  target.addDynamicallyLegalOp<spirv::AccessChainOp, spirv::LoadOp,
-                               spirv::StoreOp>([&](Operation *op) {
-    for (Value operand : op->getOperands()) {
-      auto addrOp = operand.getDefiningOp<spirv::AddressOfOp>();
-      if (addrOp && !VulkanLayoutUtils::isLegalType(addrOp.pointer().getType()))
-        return false;
-    }
-    return true;
-  });
-
+  // TODO: Change the type for the indirect users such as spv.Load, spv.Store,
+  // spv.FunctionCall and so on.
   FrozenRewritePatternSet frozenPatterns(std::move(patterns));
   for (auto spirvModule : module.getOps<spirv::ModuleOp>())
     if (failed(applyFullConversion(spirvModule, target, frozenPatterns)))

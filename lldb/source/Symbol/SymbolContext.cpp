@@ -11,6 +11,7 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Host/Host.h"
+#include "lldb/Host/StringConvert.h"
 #include "lldb/Symbol/Block.h"
 #include "lldb/Symbol/CompileUnit.h"
 #include "lldb/Symbol/ObjectFile.h"
@@ -19,14 +20,15 @@
 #include "lldb/Symbol/SymbolVendor.h"
 #include "lldb/Symbol/Variable.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/StreamString.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
-SymbolContext::SymbolContext() : target_sp(), module_sp(), line_entry() {}
+SymbolContext::SymbolContext()
+    : target_sp(), module_sp(), comp_unit(nullptr), function(nullptr),
+      block(nullptr), line_entry(), symbol(nullptr), variable(nullptr) {}
 
 SymbolContext::SymbolContext(const ModuleSP &m, CompileUnit *cu, Function *f,
                              Block *b, LineEntry *le, Symbol *s)
@@ -51,7 +53,7 @@ SymbolContext::SymbolContext(SymbolContextScope *sc_scope)
   sc_scope->CalculateSymbolContext(this);
 }
 
-SymbolContext::~SymbolContext() = default;
+SymbolContext::~SymbolContext() {}
 
 void SymbolContext::Clear(bool clear_target) {
   if (clear_target)
@@ -478,7 +480,7 @@ bool SymbolContext::GetParentOfInlinedScope(const Address &curr_frame_pc,
             curr_inlined_block_inlined_info->GetCallSite().GetColumn();
         return true;
       } else {
-        Log *log = GetLog(LLDBLog::Symbols);
+        Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_SYMBOLS));
 
         if (log) {
           LLDB_LOGF(
@@ -926,7 +928,7 @@ SymbolContextSpecifier::SymbolContextSpecifier(const TargetSP &target_sp)
       m_start_line(0), m_end_line(0), m_function_spec(), m_class_name(),
       m_address_range_up(), m_type(eNothingSpecified) {}
 
-SymbolContextSpecifier::~SymbolContextSpecifier() = default;
+SymbolContextSpecifier::~SymbolContextSpecifier() {}
 
 bool SymbolContextSpecifier::AddLineSpecification(uint32_t line_no,
                                                   SpecificationType type) {
@@ -977,11 +979,13 @@ bool SymbolContextSpecifier::AddSpecification(const char *spec_string,
     m_type |= eFileSpecified;
     break;
   case eLineStartSpecified:
-    if ((return_value = llvm::to_integer(spec_string, m_start_line)))
+    m_start_line = StringConvert::ToSInt32(spec_string, 0, 0, &return_value);
+    if (return_value)
       m_type |= eLineStartSpecified;
     break;
   case eLineEndSpecified:
-    if ((return_value = llvm::to_integer(spec_string, m_end_line)))
+    m_end_line = StringConvert::ToSInt32(spec_string, 0, 0, &return_value);
+    if (return_value)
       m_type |= eLineEndSpecified;
     break;
   case eFunctionSpecified:
@@ -1184,7 +1188,7 @@ void SymbolContextSpecifier::GetDescription(
 
 SymbolContextList::SymbolContextList() : m_symbol_contexts() {}
 
-SymbolContextList::~SymbolContextList() = default;
+SymbolContextList::~SymbolContextList() {}
 
 void SymbolContextList::Append(const SymbolContext &sc) {
   m_symbol_contexts.push_back(sc);

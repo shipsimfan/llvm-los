@@ -6,6 +6,9 @@ add_entrypoint_object(
     __assert_fail.h
     assert.h
   DEPENDS
-    libc.src.__support.OSUtil.osutil
+    # These two dependencies are temporary and should be replaced by fprintf
+    # later.
+    libc.config.linux.linux_syscall_h
+    libc.include.sys_syscall
     libc.src.stdlib.abort
 )

@@ -25,63 +25,59 @@ int main(int, char**)
     {
         std::istringstream in(" abc\n  def\n   ghij");
         std::string s("initial text");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.good());
         assert(s == " abc");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.good());
         assert(s == "  def");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.eof());
         assert(s == "   ghij");
     }
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     {
         std::wistringstream in(L" abc\n  def\n   ghij");
         std::wstring s(L"initial text");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.good());
         assert(s == L" abc");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.good());
         assert(s == L"  def");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.eof());
         assert(s == L"   ghij");
     }
-#endif
 #if TEST_STD_VER >= 11
     {
         typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
         std::istringstream in(" abc\n  def\n   ghij");
         S s("initial text");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.good());
         assert(s == " abc");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.good());
         assert(s == "  def");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.eof());
         assert(s == "   ghij");
     }
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     {
         typedef std::basic_string<wchar_t, std::char_traits<wchar_t>, min_allocator<wchar_t>> S;
         std::wistringstream in(L" abc\n  def\n   ghij");
         S s(L"initial text");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.good());
         assert(s == L" abc");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.good());
         assert(s == L"  def");
-        std::getline(in, s);
+        getline(in, s);
         assert(in.eof());
         assert(s == L"   ghij");
     }
-#endif // TEST_HAS_NO_WIDE_CHARACTERS
-#endif // TEST_STD_VER >= 11
+#endif
 #ifndef TEST_HAS_NO_EXCEPTIONS
     {
         std::basic_stringbuf<char> sb("hello");
@@ -102,7 +98,6 @@ int main(int, char**)
         assert(threw);
         assert(s == "hello");
     }
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     {
         std::basic_stringbuf<wchar_t> sb(L"hello");
         std::basic_istream<wchar_t> is(&sb);
@@ -122,7 +117,6 @@ int main(int, char**)
         assert(threw);
         assert(s == L"hello");
     }
-#endif
 
     {
         std::basic_stringbuf<char> sb;
@@ -143,7 +137,6 @@ int main(int, char**)
         assert(threw);
         assert(s == "");
     }
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     {
         std::basic_stringbuf<wchar_t> sb;
         std::basic_istream<wchar_t> is(&sb);
@@ -163,7 +156,6 @@ int main(int, char**)
         assert(threw);
         assert(s == L"");
     }
-#endif
 #endif // TEST_HAS_NO_EXCEPTIONS
 
     return 0;

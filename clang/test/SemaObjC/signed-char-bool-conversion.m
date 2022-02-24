@@ -13,7 +13,7 @@ float fl;
 int i;
 int *ptr;
 
-void t1(void) {
+void t1() {
   b = boolean;
   b = fl; // expected-warning {{implicit conversion from floating-point type 'float' to 'BOOL'}}
   b = i; // expected-warning {{implicit conversion from integral type 'int' to 'BOOL'}}

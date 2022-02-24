@@ -38,7 +38,8 @@
 ; kernel function.
 ; KERNEL-IR: define ptx_kernel void @FUNC_checkPrivatization_SCOP_0_KERNEL_0
 ; KERNEL-IR-SAME: (i8 addrspace(1)* %MemRef_A, i32 %tmp,
-; KERNEL-IR-SAME: i32 %tmp2, i32 %polly.access.begin.load)
+; KERNEL-IR-SAME: i32 %tmp2, i32 %polly.access.begin.load,
+; KERNEL-IR-SAME: i32 %polly.access.end.load)
 
 
 ; void checkScalarPointerOffload(int A[], int *begin, int *end) {

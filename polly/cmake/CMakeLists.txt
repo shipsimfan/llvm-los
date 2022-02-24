@@ -1,8 +1,5 @@
 # Keep this in sync with llvm/cmake/CMakeLists.txt!
 
-include(ExtendPath)
-include(FindPrefixFromConfig)
-
 set(LLVM_INSTALL_PACKAGE_DIR "lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm")
 set(POLLY_INSTALL_PACKAGE_DIR "lib${LLVM_LIBDIR_SUFFIX}/cmake/polly")
 if (CMAKE_CONFIGURATION_TYPES)
@@ -49,7 +46,6 @@ endif()")
 endif()
 
 # Generate PollyConfig.cmake for the build tree.
-set(POLLY_CONFIG_CODE "")
 set(POLLY_CONFIG_CMAKE_DIR "${CMAKE_BINARY_DIR}/${POLLY_INSTALL_PACKAGE_DIR}")
 set(POLLY_CONFIG_INCLUDE_DIRS
   ${POLLY_SOURCE_DIR}/include
@@ -83,46 +79,39 @@ file(GENERATE
 
 # Generate PollyConfig.cmake for the install tree.
 unset(POLLY_EXPORTS)
-find_prefix_from_config(POLLY_CONFIG_CODE POLLY_INSTALL_PREFIX "${POLLY_INSTALL_PACKAGE_DIR}")
-extend_path(POLLY_CONFIG_LLVM_CMAKE_DIR "\${POLLY_INSTALL_PREFIX}" "${LLVM_INSTALL_PACKAGE_DIR}")
-extend_path(POLLY_CONFIG_CMAKE_DIR "\${POLLY_INSTALL_PREFIX}" "${POLLY_INSTALL_PACKAGE_DIR}")
-extend_path(POLLY_CONFIG_LIBRARY_DIRS "\${POLLY_INSTALL_PREFIX}" "lib${LLVM_LIBDIR_SUFFIX}")
-extend_path(base_includedir "\${POLLY_INSTALL_PREFIX}" "${CMAKE_INSTALL_INCLUDEDIR}")
+set(POLLY_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
+set(POLLY_CONFIG_LLVM_CMAKE_DIR "${LLVM_BINARY_DIR}/${LLVM_INSTALL_PACKAGE_DIR}")
+set(POLLY_CONFIG_CMAKE_DIR "${POLLY_INSTALL_PREFIX}/${POLLY_INSTALL_PACKAGE_DIR}")
+set(POLLY_CONFIG_LIBRARY_DIRS "${POLLY_INSTALL_PREFIX}/lib${LLVM_LIBDIR_SUFFIX}")
 if (POLLY_BUNDLED_ISL)
   set(POLLY_CONFIG_INCLUDE_DIRS
-    "${base_includedir}"
-    "${base_includedir}/polly"
+    "${POLLY_INSTALL_PREFIX}/include"
+    "${POLLY_INSTALL_PREFIX}/include/polly"
     )
 else()
   set(POLLY_CONFIG_INCLUDE_DIRS
-    "${base_includedir}"
+    "${POLLY_INSTALL_PREFIX}/include"
     ${ISL_INCLUDE_DIRS}
     )
 endif()
 
-# Set locations for imported targets. The path is constructed to be relative to
-# the config file.
-#
-# Include the config code of PollyConfig.cmake to define POLLY_INSTALL_PREFIX
-# anew in case the export file is included alone rather than from that file.
-set(POLLY_EXPORTS
-"${POLLY_CONFIG_CODE}
-
-")
+# set locations for imported targets. The path is constructed to be relative to
+# the config file
 foreach(tgt IN LISTS POLLY_CONFIG_EXPORTED_TARGETS)
   get_target_property(tgt_type ${tgt} TYPE)
   if (tgt_type STREQUAL "EXECUTABLE")
-    set(tgt_prefix "${CMAKE_INSTALL_BINDIR}")
+    set(tgt_prefix "bin/")
   else()
-    set(tgt_prefix "${CMAKE_INSTALL_LIBDIR}")
+    set(tgt_prefix "lib/")
   endif()
 
-  extend_path(tgt_path "\${POLLY_INSTALL_PREFIX}" "${tgt_prefix}/$<TARGET_FILE_NAME:${tgt}>")
+  set(tgt_path "${CMAKE_INSTALL_PREFIX}/${tgt_prefix}$<TARGET_FILE_NAME:${tgt}>")
+  file(RELATIVE_PATH tgt_path ${POLLY_CONFIG_CMAKE_DIR} ${tgt_path})
 
   if (NOT tgt_type STREQUAL "INTERFACE_LIBRARY")
     set(POLLY_EXPORTS
 "set_target_properties(${tgt} PROPERTIES
-        IMPORTED_LOCATION$<$<NOT:$<CONFIG:>>:_$<UPPER_CASE:$<CONFIG>>> \"${tgt_path}\")
+        IMPORTED_LOCATION$<$<NOT:$<CONFIG:>>:_$<UPPER_CASE:$<CONFIG>>> \${CMAKE_CURRENT_LIST_DIR}/${tgt_path})
 ${POLLY_EXPORTS}")
   endif()
 endforeach(tgt)

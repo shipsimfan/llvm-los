@@ -130,7 +130,7 @@ Status NativeRegisterContextLinux::DoReadRegisterValue(uint32_t offset,
                                                        const char *reg_name,
                                                        uint32_t size,
                                                        RegisterValue &value) {
-  Log *log = GetLog(POSIXLog::Registers);
+  Log *log(ProcessPOSIXLog::GetLogIfAllCategoriesSet(POSIX_LOG_REGISTERS));
 
   long data;
   Status error = NativeProcessLinux::PtraceWrapper(
@@ -147,7 +147,7 @@ Status NativeRegisterContextLinux::DoReadRegisterValue(uint32_t offset,
 
 Status NativeRegisterContextLinux::DoWriteRegisterValue(
     uint32_t offset, const char *reg_name, const RegisterValue &value) {
-  Log *log = GetLog(POSIXLog::Registers);
+  Log *log(ProcessPOSIXLog::GetLogIfAllCategoriesSet(POSIX_LOG_REGISTERS));
 
   void *buf = reinterpret_cast<void *>(value.GetAsUInt64());
   LLDB_LOG(log, "{0}: {1}", reg_name, buf);

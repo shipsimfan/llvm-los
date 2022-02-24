@@ -78,7 +78,7 @@ struct SemiNCAInfo {
   using UpdateT = typename DomTreeT::UpdateType;
   using UpdateKind = typename DomTreeT::UpdateKind;
   struct BatchUpdateInfo {
-    // Note: Updates inside PreViewCFG are already legalized.
+    // Note: Updates inside PreViewCFG are aleady legalized.
     BatchUpdateInfo(GraphDiffT &PreViewCFG, GraphDiffT *PostViewCFG = nullptr)
         : PreViewCFG(PreViewCFG), PostViewCFG(PostViewCFG),
           NumLegalized(PreViewCFG.getNumLegalizedUpdates()) {}
@@ -430,6 +430,7 @@ struct SemiNCAInfo {
       // is unreachable. This is because we are still going to only visit each
       // unreachable node once, we may just visit it in two directions,
       // depending on how lucky we get.
+      SmallPtrSet<NodePtr, 4> ConnectToExitBlock;
       for (const NodePtr I : nodes(DT.Parent)) {
         if (SNCA.NodeToInfo.count(I) == 0) {
           LLVM_DEBUG(dbgs()
@@ -456,6 +457,7 @@ struct SemiNCAInfo {
           LLVM_DEBUG(dbgs() << "\t\t\tFound a new furthest away node "
                             << "(non-trivial root): "
                             << BlockNamePrinter(FurthestAway) << "\n");
+          ConnectToExitBlock.insert(FurthestAway);
           Roots.push_back(FurthestAway);
           LLVM_DEBUG(dbgs() << "\t\t\tPrev DFSNum: " << Num << ", new DFSNum: "
                             << NewNum << "\n\t\t\tRemoving DFS info\n");
@@ -641,7 +643,7 @@ struct SemiNCAInfo {
         Bucket;
     SmallDenseSet<TreeNodePtr, 8> Visited;
     SmallVector<TreeNodePtr, 8> Affected;
-#ifdef LLVM_ENABLE_ABI_BREAKING_CHECKS
+#ifndef NDEBUG
     SmallVector<TreeNodePtr, 8> VisitedUnaffected;
 #endif
   };
@@ -850,7 +852,7 @@ struct SemiNCAInfo {
       TN->setIDom(NCD);
     }
 
-#if defined(LLVM_ENABLE_ABI_BREAKING_CHECKS) && !defined(NDEBUG)
+#ifndef NDEBUG
     for (const TreeNodePtr TN : II.VisitedUnaffected)
       assert(TN->getLevel() == TN->getIDom()->getLevel() + 1 &&
              "TN should have been updated by an affected ancestor");
@@ -916,7 +918,7 @@ struct SemiNCAInfo {
     LLVM_DEBUG(dbgs() << "Deleting edge " << BlockNamePrinter(From) << " -> "
                       << BlockNamePrinter(To) << "\n");
 
-#ifdef LLVM_ENABLE_ABI_BREAKING_CHECKS
+#ifndef NDEBUG
     // Ensure that the edge was in fact deleted from the CFG before informing
     // the DomTree about it.
     // The check is O(N), so run it only in debug configuration.

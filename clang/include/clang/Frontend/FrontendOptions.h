@@ -75,9 +75,6 @@ enum ActionKind {
   /// Emit a .o file.
   EmitObj,
 
-  // Extract API information
-  ExtractAPI,
-
   /// Parse and apply any fixits to the source.
   FixIt,
 
@@ -292,9 +289,6 @@ public:
   /// Whether we are performing an implicit module build.
   unsigned BuildingImplicitModule : 1;
 
-  /// Whether to use a filesystem lock when building implicit modules.
-  unsigned BuildingImplicitModuleUsesLock : 1;
-
   /// Whether we should embed all used files into the PCM file.
   unsigned ModulesEmbedAllFiles : 1;
 
@@ -376,7 +370,7 @@ public:
                          ObjCMT_MigrateDecls | ObjCMT_PropertyDotSyntax)
   };
   unsigned ObjCMTAction = ObjCMT_None;
-  std::string ObjCMTAllowListPath;
+  std::string ObjCMTWhiteListPath;
 
   std::string MTMigrateDir;
   std::string ARCMTMigrateReportOut;
@@ -467,9 +461,9 @@ public:
         SkipFunctionBodies(false), UseGlobalModuleIndex(true),
         GenerateGlobalModuleIndex(true), ASTDumpDecls(false),
         ASTDumpLookups(false), BuildingImplicitModule(false),
-        BuildingImplicitModuleUsesLock(true), ModulesEmbedAllFiles(false),
-        IncludeTimestamps(true), UseTemporary(true),
-        AllowPCMWithCompilerErrors(false), TimeTraceGranularity(500) {}
+        ModulesEmbedAllFiles(false), IncludeTimestamps(true),
+        UseTemporary(true), AllowPCMWithCompilerErrors(false),
+        TimeTraceGranularity(500) {}
 
   /// getInputKindForExtension - Return the appropriate input kind for a file
   /// extension. For example, "c" would return Language::C.

@@ -21,7 +21,7 @@ namespace llvm {
 class SourceMgr;
 class SMDiagnostic;
 class StringRef;
-} // namespace llvm
+} // end namespace llvm
 
 namespace mlir {
 class AsmParserState;
@@ -67,11 +67,11 @@ inline OwningOpRef<ContainerOpT> constructContainerOpForParserIfNecessary(
 
   // After splicing, verify just this operation to ensure it can properly
   // contain the operations inside of it.
-  if (failed(op.verifyInvariants()))
+  if (failed(op.verify()))
     return OwningOpRef<ContainerOpT>();
   return opRef;
 }
-} // namespace detail
+} // end namespace detail
 
 /// This parses the file specified by the indicated SourceMgr and appends parsed
 /// operations to the given block. If the block is non-empty, the operations are
@@ -206,21 +206,21 @@ inline OwningOpRef<ContainerOpT> parseSourceString(llvm::StringRef sourceStr,
 
 /// TODO: These methods are deprecated in favor of the above template versions.
 /// They should be removed when usages have been updated.
-inline OwningOpRef<ModuleOp> parseSourceFile(const llvm::SourceMgr &sourceMgr,
-                                             MLIRContext *context) {
+inline OwningModuleRef parseSourceFile(const llvm::SourceMgr &sourceMgr,
+                                       MLIRContext *context) {
   return parseSourceFile<ModuleOp>(sourceMgr, context);
 }
-inline OwningOpRef<ModuleOp> parseSourceFile(llvm::StringRef filename,
-                                             MLIRContext *context) {
+inline OwningModuleRef parseSourceFile(llvm::StringRef filename,
+                                       MLIRContext *context) {
   return parseSourceFile<ModuleOp>(filename, context);
 }
-inline OwningOpRef<ModuleOp> parseSourceFile(llvm::StringRef filename,
-                                             llvm::SourceMgr &sourceMgr,
-                                             MLIRContext *context) {
+inline OwningModuleRef parseSourceFile(llvm::StringRef filename,
+                                       llvm::SourceMgr &sourceMgr,
+                                       MLIRContext *context) {
   return parseSourceFile<ModuleOp>(filename, sourceMgr, context);
 }
-inline OwningOpRef<ModuleOp> parseSourceString(llvm::StringRef moduleStr,
-                                               MLIRContext *context) {
+inline OwningModuleRef parseSourceString(llvm::StringRef moduleStr,
+                                         MLIRContext *context) {
   return parseSourceString<ModuleOp>(moduleStr, context);
 }
 
@@ -256,16 +256,6 @@ Type parseType(llvm::StringRef typeStr, MLIRContext *context);
 /// `typeStr`. The number of characters of `typeStr` parsed in the process is
 /// returned in `numRead`.
 Type parseType(llvm::StringRef typeStr, MLIRContext *context, size_t &numRead);
-
-/// This parses a single IntegerSet to an MLIR context if it was valid. If not,
-/// an error message is emitted through a new SourceMgrDiagnosticHandler
-/// constructed from a new SourceMgr with a single MemoryBuffer wrapping
-/// `str`. If the passed `str` has additional tokens that were not part of the
-/// IntegerSet, a failure is returned. Diagnostics are printed on failure if
-/// `printDiagnosticInfo` is true.
-IntegerSet parseIntegerSet(llvm::StringRef str, MLIRContext *context,
-                           bool printDiagnosticInfo = true);
-
-} // namespace mlir
+} // end namespace mlir
 
 #endif // MLIR_PARSER_H

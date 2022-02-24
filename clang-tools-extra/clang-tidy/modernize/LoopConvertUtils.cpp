@@ -152,21 +152,20 @@ bool DeclFinderASTVisitor::VisitTypeLoc(TypeLoc TL) {
   return true;
 }
 
-/// Look through conversion/copy constructors and member functions to find the
-/// explicit initialization expression, returning it is found.
+/// Look through conversion/copy constructors to find the explicit
+/// initialization expression, returning it is found.
 ///
 /// The main idea is that given
 ///   vector<int> v;
 /// we consider either of these initializations
 ///   vector<int>::iterator it = v.begin();
 ///   vector<int>::iterator it(v.begin());
-///   vector<int>::const_iterator it(v.begin());
 /// and retrieve `v.begin()` as the expression used to initialize `it` but do
 /// not include
 ///   vector<int>::iterator it;
 ///   vector<int>::iterator it(v.begin(), 0); // if this constructor existed
 /// as being initialized from `v.begin()`
-const Expr *digThroughConstructorsConversions(const Expr *E) {
+const Expr *digThroughConstructors(const Expr *E) {
   if (!E)
     return nullptr;
   E = E->IgnoreImplicit();
@@ -179,13 +178,8 @@ const Expr *digThroughConstructorsConversions(const Expr *E) {
     E = ConstructExpr->getArg(0);
     if (const auto *Temp = dyn_cast<MaterializeTemporaryExpr>(E))
       E = Temp->getSubExpr();
-    return digThroughConstructorsConversions(E);
+    return digThroughConstructors(E);
   }
-  // If this is a conversion (as iterators commonly convert into their const
-  // iterator counterparts), dig through that as well.
-  if (const auto *ME = dyn_cast<CXXMemberCallExpr>(E))
-    if (isa<CXXConversionDecl>(ME->getMethodDecl()))
-      return digThroughConstructorsConversions(ME->getImplicitObjectArgument());
   return E;
 }
 
@@ -363,7 +357,7 @@ static bool isAliasDecl(ASTContext *Context, const Decl *TheDecl,
   bool OnlyCasts = true;
   const Expr *Init = VDecl->getInit()->IgnoreParenImpCasts();
   if (isa_and_nonnull<CXXConstructExpr>(Init)) {
-    Init = digThroughConstructorsConversions(Init);
+    Init = digThroughConstructors(Init);
     OnlyCasts = false;
   }
   if (!Init)
@@ -398,8 +392,8 @@ static bool isAliasDecl(ASTContext *Context, const Decl *TheDecl,
     if (OpCall->getOperator() == OO_Star)
       return isDereferenceOfOpCall(OpCall, IndexVar);
     if (OpCall->getOperator() == OO_Subscript) {
-      return OpCall->getNumArgs() == 2 &&
-             isIndexInSubscriptExpr(OpCall->getArg(1), IndexVar);
+      assert(OpCall->getNumArgs() == 2);
+      return isIndexInSubscriptExpr(OpCall->getArg(1), IndexVar);
     }
     break;
   }

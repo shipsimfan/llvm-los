@@ -20,6 +20,7 @@
 
 namespace llvm {
 
+class MCContext;
 class MemoryBuffer;
 class Module;
 class ObjectCache;

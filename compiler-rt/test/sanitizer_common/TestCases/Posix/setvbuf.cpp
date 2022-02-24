@@ -34,9 +34,7 @@ void test_setbuffer() {
 
   print_something();
 
-  // Ensure that interceptor reads correct size
-  // (not BUFSIZ as by default, hence BUFSIZ/2).
-  setbuffer(stdout, buf, BUFSIZ / 2);
+  setbuffer(stdout, buf, BUFSIZ);
 
   print_something();
 

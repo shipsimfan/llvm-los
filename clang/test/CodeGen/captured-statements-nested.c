@@ -94,7 +94,7 @@ void test_nest_captured_stmt(int param, int size, int param_arr[size]) {
   }
 }
 
-void test_nest_block(void) {
+void test_nest_block() {
   __block int x;
   int y;
   ^{

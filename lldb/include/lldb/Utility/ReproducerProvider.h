@@ -222,7 +222,8 @@ public:
 /// Provider for mapping UUIDs to symbol and executable files.
 class SymbolFileProvider : public Provider<SymbolFileProvider> {
 public:
-  SymbolFileProvider(const FileSpec &directory) : Provider(directory) {}
+  SymbolFileProvider(const FileSpec &directory)
+      : Provider(directory), m_symbol_files() {}
 
   void AddSymbolFile(const UUID *uuid, const FileSpec &module_path,
                      const FileSpec &symbol_path);

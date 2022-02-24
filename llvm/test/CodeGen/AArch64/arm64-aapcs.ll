@@ -33,6 +33,7 @@ define dso_local void @test_stack_slots([8 x i64], i1 %bool, i8 %char, i16 %shor
 ; CHECK-DAG: ldrb w[[ext3:[0-9]+]], [sp, #8]
 ; CHECK-DAG: ldr x[[ext4:[0-9]+]], [sp, #32]
 ; CHECK-DAG: ldrb w[[ext5:[0-9]+]], [sp]
+; CHECK-DAG: and x[[ext5]], x[[ext5]], #0x1
 
   %ext_bool = zext i1 %bool to i64
   store volatile i64 %ext_bool, i64* @var64, align 8
@@ -123,7 +124,7 @@ entry:
 ; Check that f16 can be passed and returned (ACLE 2.0 extension)
 define half @test_half(float, half %arg) {
 ; CHECK-LABEL: test_half:
-; CHECK: fmov s0, s1
+; CHECK: mov v0.16b, v1.16b
   ret half %arg;
 }
 
@@ -137,7 +138,7 @@ define half @test_half_const() {
 ; Check that v4f16 can be passed and returned in registers
 define dso_local <4 x half> @test_v4_half_register(float, <4 x half> %arg) {
 ; CHECK-LABEL: test_v4_half_register:
-; CHECK: fmov d0, d1
+; CHECK: mov v0.16b, v1.16b
   ret <4 x half> %arg;
 }
 

@@ -15,13 +15,14 @@
 
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/Pass.h"
 #include <list>
 
 namespace llvm {
 class CallGraph;
-class Function;
 
 /// An alias analysis result set for globals.
 ///

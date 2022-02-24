@@ -10,7 +10,9 @@ WebAssembly in descending order of completeness. Internally, LLD consists of
 several different linkers. The ELF port is the one that will be described in
 this document. The PE/COFF port is complete, including
 Windows debug info (PDB) support. The WebAssembly port is still a work in
-progress (See :doc:`WebAssembly`).
+progress (See :doc:`WebAssembly`).  The Mach-O port is built based on a
+different architecture than the others. For the details about Mach-O, please
+read :doc:`AtomLLD`.
 
 Features
 --------
@@ -168,6 +170,7 @@ document soon.
    :maxdepth: 1
 
    NewLLD
+   AtomLLD
    WebAssembly
    windows_support
    missingkeyfunction
@@ -175,5 +178,4 @@ document soon.
    Partitions
    ReleaseNotes
    ELF/linker_script
-   ELF/start-stop-gc
    ELF/warn_backrefs

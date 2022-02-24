@@ -49,9 +49,6 @@ class CrashLogPatcher:
                     self.data = self.data.replace(
                         "@{}@".format(symbol), str(representation(patch_addr)))
 
-    def remove_metadata(self):
-        self.data= self.data[self.data.index('\n') + 1:]
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Crashlog Patcher')
@@ -59,7 +56,6 @@ if __name__ == '__main__':
     parser.add_argument('--crashlog', required=True)
     parser.add_argument('--offsets', required=True)
     parser.add_argument('--json', default=False, action='store_true')
-    parser.add_argument('--no-metadata', default=False, action='store_true')
     args = parser.parse_args()
 
     offsets = json.loads(args.offsets)
@@ -71,9 +67,6 @@ if __name__ == '__main__':
     p.patch_executable()
     p.patch_uuid()
     p.patch_addresses()
-
-    if args.no_metadata:
-        p.remove_metadata()
 
     with open(args.crashlog, 'w') as file:
         file.write(p.data)

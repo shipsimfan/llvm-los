@@ -22,6 +22,8 @@ class raw_pwrite_stream;
 namespace clang {
 
 class ASTConsumer;
+class CodeGenOptions;
+class DiagnosticsEngine;
 class CompilerInstance;
 
 struct PCHBuffer {

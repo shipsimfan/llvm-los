@@ -37,9 +37,9 @@ public:
 
   static void Terminate();
 
-  static llvm::StringRef GetPluginNameStatic() { return "minidump"; }
+  static ConstString GetPluginNameStatic();
 
-  static llvm::StringRef GetPluginDescriptionStatic();
+  static const char *GetPluginDescriptionStatic();
 
   ProcessMinidump(lldb::TargetSP target_sp, lldb::ListenerSP listener_sp,
                   const FileSpec &core_file, lldb::DataBufferSP code_data);
@@ -55,7 +55,9 @@ public:
 
   DynamicLoader *GetDynamicLoader() override { return nullptr; }
 
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  ConstString GetPluginName() override;
+
+  uint32_t GetPluginVersion() override;
 
   SystemRuntime *GetSystemRuntime() override { return nullptr; }
 
@@ -75,6 +77,9 @@ public:
 
   ArchSpec GetArchitecture();
 
+  Status GetMemoryRegionInfo(lldb::addr_t load_addr,
+                             MemoryRegionInfo &range_info) override;
+
   Status GetMemoryRegions(
       lldb_private::MemoryRegionInfos &region_list) override;
 
@@ -82,8 +87,9 @@ public:
 
   Status WillResume() override {
     Status error;
-    error.SetErrorStringWithFormatv(
-        "error: {0} does not support resuming processes", GetPluginName());
+    error.SetErrorStringWithFormat(
+        "error: %s does not support resuming processes",
+        GetPluginName().GetCString());
     return error;
   }
 
@@ -94,9 +100,6 @@ protected:
 
   bool DoUpdateThreadList(ThreadList &old_thread_list,
                           ThreadList &new_thread_list) override;
-
-  Status DoGetMemoryRegionInfo(lldb::addr_t load_addr,
-                               MemoryRegionInfo &range_info) override;
 
   void ReadModuleList();
 

@@ -108,10 +108,10 @@ struct CompileAndExecuteConfig {
       runtimeSymbolMap;
 };
 
-} // namespace
+} // end anonymous namespace
 
-static OwningOpRef<ModuleOp> parseMLIRInput(StringRef inputFilename,
-                                            MLIRContext *context) {
+static OwningModuleRef parseMLIRInput(StringRef inputFilename,
+                                      MLIRContext *context) {
   // Set up the input file.
   std::string errorMessage;
   auto file = openInputFile(inputFilename, &errorMessage);
@@ -121,11 +121,11 @@ static OwningOpRef<ModuleOp> parseMLIRInput(StringRef inputFilename,
   }
 
   llvm::SourceMgr sourceMgr;
-  sourceMgr.AddNewSourceBuffer(std::move(file), SMLoc());
-  return OwningOpRef<ModuleOp>(parseSourceFile(sourceMgr, context));
+  sourceMgr.AddNewSourceBuffer(std::move(file), llvm::SMLoc());
+  return OwningModuleRef(parseSourceFile(sourceMgr, context));
 }
 
-static inline Error makeStringError(const Twine &message) {
+static inline Error make_string_error(const Twine &message) {
   return llvm::make_error<llvm::StringError>(message.str(),
                                              llvm::inconvertibleErrorCode());
 }
@@ -207,19 +207,16 @@ static Error compileAndExecute(Options &options, ModuleOp module,
     return symbolMap;
   };
 
-  mlir::ExecutionEngineOptions engineOptions;
-  engineOptions.llvmModuleBuilder = config.llvmModuleBuilder;
-  engineOptions.transformer = config.transformer;
-  engineOptions.jitCodeGenOptLevel = jitCodeGenOptLevel;
-  engineOptions.sharedLibPaths = executionEngineLibs;
-  auto expectedEngine = mlir::ExecutionEngine::create(module, engineOptions);
+  auto expectedEngine = mlir::ExecutionEngine::create(
+      module, config.llvmModuleBuilder, config.transformer, jitCodeGenOptLevel,
+      executionEngineLibs);
   if (!expectedEngine)
     return expectedEngine.takeError();
 
   auto engine = std::move(*expectedEngine);
   engine->registerSymbols(runtimeSymbolMap);
 
-  auto expectedFPtr = engine->lookupPacked(entryPoint);
+  auto expectedFPtr = engine->lookup(entryPoint);
   if (!expectedFPtr)
     return expectedFPtr.takeError();
 
@@ -242,7 +239,7 @@ static Error compileAndExecuteVoidFunction(Options &options, ModuleOp module,
                                            CompileAndExecuteConfig config) {
   auto mainFunction = module.lookupSymbol<LLVM::LLVMFuncOp>(entryPoint);
   if (!mainFunction || mainFunction.empty())
-    return makeStringError("entry point not found");
+    return make_string_error("entry point not found");
   void *empty = nullptr;
   return compileAndExecute(options, module, entryPoint, config, &empty);
 }
@@ -256,7 +253,7 @@ Error checkCompatibleReturnType<int32_t>(LLVM::LLVMFuncOp mainFunction) {
                         .getReturnType()
                         .dyn_cast<IntegerType>();
   if (!resultType || resultType.getWidth() != 32)
-    return makeStringError("only single i32 function result supported");
+    return make_string_error("only single i32 function result supported");
   return Error::success();
 }
 template <>
@@ -266,7 +263,7 @@ Error checkCompatibleReturnType<int64_t>(LLVM::LLVMFuncOp mainFunction) {
                         .getReturnType()
                         .dyn_cast<IntegerType>();
   if (!resultType || resultType.getWidth() != 64)
-    return makeStringError("only single i64 function result supported");
+    return make_string_error("only single i64 function result supported");
   return Error::success();
 }
 template <>
@@ -275,7 +272,7 @@ Error checkCompatibleReturnType<float>(LLVM::LLVMFuncOp mainFunction) {
            .cast<LLVM::LLVMFunctionType>()
            .getReturnType()
            .isa<Float32Type>())
-    return makeStringError("only single f32 function result supported");
+    return make_string_error("only single f32 function result supported");
   return Error::success();
 }
 template <typename Type>
@@ -284,10 +281,10 @@ Error compileAndExecuteSingleReturnFunction(Options &options, ModuleOp module,
                                             CompileAndExecuteConfig config) {
   auto mainFunction = module.lookupSymbol<LLVM::LLVMFuncOp>(entryPoint);
   if (!mainFunction || mainFunction.isExternal())
-    return makeStringError("entry point not found");
+    return make_string_error("entry point not found");
 
   if (mainFunction.getType().cast<LLVM::LLVMFunctionType>().getNumParams() != 0)
-    return makeStringError("function inputs not supported");
+    return make_string_error("function inputs not supported");
 
   if (Error error = checkCompatibleReturnType<Type>(mainFunction))
     return error;
@@ -387,7 +384,7 @@ int mlir::JitRunnerMain(int argc, char **argv, const DialectRegistry &registry,
                     ? compileAndExecuteFn(options, m.get(),
                                           options.mainFuncName.getValue(),
                                           compileAndExecuteConfig)
-                    : makeStringError("unsupported function type");
+                    : make_string_error("unsupported function type");
 
   int exitCode = EXIT_SUCCESS;
   llvm::handleAllErrors(std::move(error),

@@ -121,7 +121,9 @@ static bool hasFeature(StringRef Feature, const LangOptions &LangOpts,
                         .Default(Target.hasFeature(Feature) ||
                                  isPlatformEnvironment(Target, Feature));
   if (!HasFeature)
-    HasFeature = llvm::is_contained(LangOpts.ModuleFeatures, Feature);
+    HasFeature = std::find(LangOpts.ModuleFeatures.begin(),
+                           LangOpts.ModuleFeatures.end(),
+                           Feature) != LangOpts.ModuleFeatures.end();
   return HasFeature;
 }
 
@@ -201,7 +203,7 @@ static void printModuleId(raw_ostream &OS, InputIter Begin, InputIter End,
       OS << ".";
 
     StringRef Name = getModuleNameFromComponent(*It);
-    if (!AllowStringLiterals || isValidAsciiIdentifier(Name))
+    if (!AllowStringLiterals || isValidIdentifier(Name))
       OS << Name;
     else {
       OS << '"';
@@ -243,10 +245,9 @@ bool Module::fullModuleNameIs(ArrayRef<StringRef> nameParts) const {
 
 Module::DirectoryName Module::getUmbrellaDir() const {
   if (Header U = getUmbrellaHeader())
-    return {"", "", U.Entry->getDir()};
+    return {"", U.Entry->getDir()};
 
-  return {UmbrellaAsWritten, UmbrellaRelativeToRootModuleDirectory,
-          Umbrella.dyn_cast<const DirectoryEntry *>()};
+  return {UmbrellaAsWritten, Umbrella.dyn_cast<const DirectoryEntry *>()};
 }
 
 void Module::addTopHeader(const FileEntry *File) {

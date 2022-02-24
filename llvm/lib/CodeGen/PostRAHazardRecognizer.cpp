@@ -76,7 +76,6 @@ bool PostRAHazardRecognizer::runOnMachineFunction(MachineFunction &Fn) {
     return false;
 
   // Loop over all of the basic blocks
-  bool Changed = false;
   for (auto &MBB : Fn) {
     // We do not call HazardRec->reset() here to make sure we are handling noop
     // hazards at the start of basic blocks.
@@ -86,8 +85,6 @@ bool PostRAHazardRecognizer::runOnMachineFunction(MachineFunction &Fn) {
       HazardRec->EmitNoops(NumPreNoops);
       TII->insertNoops(MBB, MachineBasicBlock::iterator(MI), NumPreNoops);
       NumNoops += NumPreNoops;
-      if (NumPreNoops)
-        Changed = true;
 
       HazardRec->EmitInstruction(&MI);
       if (HazardRec->atIssueLimit()) {
@@ -95,5 +92,5 @@ bool PostRAHazardRecognizer::runOnMachineFunction(MachineFunction &Fn) {
       }
     }
   }
-  return Changed;
+  return true;
 }

@@ -18,7 +18,7 @@
 #include "lldb/lldb-types.h"
 #include "llvm/Support/ErrorHandling.h"
 
-#include <cassert>
+#include <assert.h>
 #include <memory>
 
 namespace lldb_private {
@@ -106,7 +106,7 @@ ValueObjectMemory::ValueObjectMemory(ExecutionContextScope *exe_scope,
   }
 }
 
-ValueObjectMemory::~ValueObjectMemory() = default;
+ValueObjectMemory::~ValueObjectMemory() {}
 
 CompilerType ValueObjectMemory::GetCompilerTypeImpl() {
   if (m_type_sp)

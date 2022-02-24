@@ -21,6 +21,7 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/FunctionLoweringInfo.h"
 #include "llvm/CodeGen/GCMetadata.h"
+#include "llvm/CodeGen/GCStrategy.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -32,7 +33,6 @@
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/GCStrategy.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
@@ -71,6 +71,10 @@ cl::opt<bool> UseRegistersForGCPointersInLandingPad(
 cl::opt<unsigned> MaxRegistersForGCPointers(
     "max-registers-for-gc-values", cl::Hidden, cl::init(0),
     cl::desc("Max number of VRegs allowed to pass GC pointer meta args in"));
+
+cl::opt<bool> AlwaysSpillBase("statepoint-always-spill-base", cl::Hidden,
+                              cl::init(true),
+                              cl::desc("Force spilling of base GC pointers"));
 
 typedef FunctionLoweringInfo::StatepointRelocationRecord RecordType;
 
@@ -990,24 +994,6 @@ SDValue SelectionDAGBuilder::LowerAsSTATEPOINT(
   return ReturnVal;
 }
 
-/// Return two gc.results if present.  First result is a block local
-/// gc.result, second result is a non-block local gc.result.  Corresponding
-/// entry will be nullptr if not present.
-static std::pair<const GCResultInst*, const GCResultInst*>
-getGCResultLocality(const GCStatepointInst &S) {
-  std::pair<const GCResultInst *, const GCResultInst*> Res(nullptr, nullptr);
-  for (auto *U : S.users()) {
-    auto *GRI = dyn_cast<GCResultInst>(U);
-    if (!GRI)
-      continue;
-    if (GRI->getParent() == S.getParent())
-      Res.first = GRI;
-    else
-      Res.second = GRI;
-  }
-  return Res;
-}
-
 void
 SelectionDAGBuilder::LowerStatepoint(const GCStatepointInst &I,
                                      const BasicBlock *EHPadBB /*= nullptr*/) {
@@ -1093,11 +1079,12 @@ SelectionDAGBuilder::LowerStatepoint(const GCStatepointInst &I,
   SDValue ReturnValue = LowerAsSTATEPOINT(SI);
 
   // Export the result value if needed
-  const auto GCResultLocality = getGCResultLocality(I);
+  const std::pair<bool, bool> GCResultLocality = I.getGCResultLocality();
+  Type *RetTy = I.getActualReturnType();
 
-  if (!GCResultLocality.first && !GCResultLocality.second) {
-    // The return value is not needed, just generate a poison value.
-    // Note: This covers the void return case.
+  if (RetTy->isVoidTy() ||
+      (!GCResultLocality.first && !GCResultLocality.second)) {
+    // The return value is not needed, just generate a poison value. 
     setValue(&I, DAG.getIntPtrConstant(-1, getCurSDLoc()));
     return;
   }
@@ -1119,7 +1106,6 @@ SelectionDAGBuilder::LowerStatepoint(const GCStatepointInst &I,
   // manually.
   // TODO: To eliminate this problem we can remove gc.result intrinsics
   //       completely and make statepoint call to return a tuple.
-  Type *RetTy = GCResultLocality.second->getType();
   unsigned Reg = FuncInfo.CreateRegs(RetTy);
   RegsForValue RFV(*DAG.getContext(), DAG.getTargetLoweringInfo(),
                    DAG.getDataLayout(), Reg, RetTy,
@@ -1137,7 +1123,7 @@ void SelectionDAGBuilder::LowerCallSiteWithDeoptBundleImpl(
   StatepointLoweringInfo SI(DAG);
   unsigned ArgBeginIndex = Call->arg_begin() - Call->op_begin();
   populateCallLoweringInfo(
-      SI.CLI, Call, ArgBeginIndex, Call->arg_size(), Callee,
+      SI.CLI, Call, ArgBeginIndex, Call->getNumArgOperands(), Callee,
       ForceVoidReturnTy ? Type::getVoidTy(*DAG.getContext()) : Call->getType(),
       false);
   if (!VarArgDisallowed)
@@ -1186,7 +1172,7 @@ void SelectionDAGBuilder::visitGCResult(const GCResultInst &CI) {
   // register because statepoint and actual call return types can be
   // different, and getValue() will use CopyFromReg of the wrong type,
   // which is always i32 in our case.
-  Type *RetTy = CI.getType();
+  Type *RetTy = SI->getActualReturnType();
   SDValue CopyFromReg = getCopyFromRegs(SI, RetTy);
   
   assert(CopyFromReg.getNode());

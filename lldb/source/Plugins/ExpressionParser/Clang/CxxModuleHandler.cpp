@@ -9,7 +9,6 @@
 #include "Plugins/ExpressionParser/Clang/CxxModuleHandler.h"
 #include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "clang/Sema/Lookup.h"
 #include "llvm/Support/Error.h"
@@ -139,7 +138,7 @@ getEqualLocalDeclContext(Sema &sema, DeclContext *foreign_ctxt) {
 
   // We currently only support building namespaces.
   if (foreign_ctxt->isNamespace()) {
-    NamedDecl *ns = llvm::cast<NamedDecl>(foreign_ctxt);
+    NamedDecl *ns = llvm::dyn_cast<NamedDecl>(foreign_ctxt);
     llvm::StringRef ns_name = ns->getName();
 
     auto lookup_result = emulateLookupInCtxt(sema, ns_name, *parent);
@@ -181,7 +180,7 @@ T *createDecl(ASTImporter &importer, Decl *from_d, Args &&... args) {
 }
 
 llvm::Optional<Decl *> CxxModuleHandler::tryInstantiateStdTemplate(Decl *d) {
-  Log *log = GetLog(LLDBLog::Expressions);
+  Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS);
 
   // If we don't have a template to instiantiate, then there is nothing to do.
   auto td = dyn_cast<ClassTemplateSpecializationDecl>(d);

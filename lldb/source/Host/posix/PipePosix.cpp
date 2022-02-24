@@ -15,9 +15,9 @@
 #include <functional>
 #include <thread>
 
-#include <cerrno>
-#include <climits>
+#include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -38,10 +38,12 @@ enum PIPES { READ, WRITE }; // Constants 0 and 1 for READ and WRITE
 #define PIPE2_SUPPORTED 0
 #endif
 
-static constexpr auto OPEN_WRITER_SLEEP_TIMEOUT_MSECS = 100;
+namespace {
+
+constexpr auto OPEN_WRITER_SLEEP_TIMEOUT_MSECS = 100;
 
 #if defined(FD_CLOEXEC) && !PIPE2_SUPPORTED
-static bool SetCloexecFlag(int fd) {
+bool SetCloexecFlag(int fd) {
   int flags = ::fcntl(fd, F_GETFD);
   if (flags == -1)
     return false;
@@ -49,9 +51,10 @@ static bool SetCloexecFlag(int fd) {
 }
 #endif
 
-static std::chrono::time_point<std::chrono::steady_clock> Now() {
+std::chrono::time_point<std::chrono::steady_clock> Now() {
   return std::chrono::steady_clock::now();
 }
+} // namespace
 
 PipePosix::PipePosix()
     : m_fds{PipePosix::kInvalidDescriptor, PipePosix::kInvalidDescriptor} {}

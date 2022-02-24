@@ -59,7 +59,7 @@ OptionGroupFileList::OptionGroupFileList(
   m_option_definition.usage_text = usage_text;
 }
 
-OptionGroupFileList::~OptionGroupFileList() = default;
+OptionGroupFileList::~OptionGroupFileList() {}
 
 Status
 OptionGroupFileList::SetOptionValue(uint32_t option_idx,

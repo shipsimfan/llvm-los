@@ -32,7 +32,7 @@ class DynamicValueTestCase(TestBase):
     @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24663")
     def test_get_dynamic_vals(self):
         """Test fetching C++ dynamic values from pointers & references."""
-        self.build()
+        self.build(dictionary=self.getBuildFlags())
         exe = self.getBuildArtifact("a.out")
 
         # Create a target from the debugger.

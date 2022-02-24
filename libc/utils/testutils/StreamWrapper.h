@@ -17,10 +17,10 @@ namespace testutils {
 // expose the system libc headers.
 class StreamWrapper {
 protected:
-  void *os;
+  void *OS;
 
 public:
-  StreamWrapper(void *OS) : os(OS) {}
+  StreamWrapper(void *OS) : OS(OS) {}
 
   template <typename T> StreamWrapper &operator<<(T t);
 };

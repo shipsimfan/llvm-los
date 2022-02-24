@@ -1,4 +1,3 @@
-// UNSUPPORTED: -zos, -aix
 // REQUIRES: asserts
 
 // Modules:

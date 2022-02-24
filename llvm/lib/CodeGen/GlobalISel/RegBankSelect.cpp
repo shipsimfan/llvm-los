@@ -626,8 +626,7 @@ bool RegBankSelect::assignInstr(MachineInstr &MI) {
   unsigned Opc = MI.getOpcode();
   if (isPreISelGenericOptimizationHint(Opc)) {
     assert((Opc == TargetOpcode::G_ASSERT_ZEXT ||
-            Opc == TargetOpcode::G_ASSERT_SEXT ||
-            Opc == TargetOpcode::G_ASSERT_ALIGN) &&
+            Opc == TargetOpcode::G_ASSERT_SEXT) &&
            "Unexpected hint opcode!");
     // The only correct mapping for these is to always use the source register
     // bank.
@@ -700,11 +699,11 @@ bool RegBankSelect::runOnMachineFunction(MachineFunction &MF) {
     // Set a sensible insertion point so that subsequent calls to
     // MIRBuilder.
     MIRBuilder.setMBB(*MBB);
-    SmallVector<MachineInstr *> WorkList(
-        make_pointer_range(reverse(MBB->instrs())));
-
-    while (!WorkList.empty()) {
-      MachineInstr &MI = *WorkList.pop_back_val();
+    for (MachineBasicBlock::iterator MII = MBB->begin(), End = MBB->end();
+         MII != End;) {
+      // MI might be invalidated by the assignment, so move the
+      // iterator before hand.
+      MachineInstr &MI = *MII++;
 
       // Ignore target-specific post-isel instructions: they should use proper
       // regclasses.
@@ -728,6 +727,18 @@ bool RegBankSelect::runOnMachineFunction(MachineFunction &MF) {
         reportGISelFailure(MF, *TPC, *MORE, "gisel-regbankselect",
                            "unable to map instruction", MI);
         return false;
+      }
+
+      // It's possible the mapping changed control flow, and moved the following
+      // instruction to a new block, so figure out the new parent.
+      if (MII != End) {
+        MachineBasicBlock *NextInstBB = MII->getParent();
+        if (NextInstBB != MBB) {
+          LLVM_DEBUG(dbgs() << "Instruction mapping changed control flow\n");
+          MBB = NextInstBB;
+          MIRBuilder.setMBB(*MBB);
+          End = MBB->end();
+        }
       }
     }
   }
@@ -857,7 +868,7 @@ void RegBankSelect::RepairingPlacement::addInsertPoint(
 
 RegBankSelect::InstrInsertPoint::InstrInsertPoint(MachineInstr &Instr,
                                                   bool Before)
-    : Instr(Instr), Before(Before) {
+    : InsertPoint(), Instr(Instr), Before(Before) {
   // Since we do not support splitting, we do not need to update
   // liveness and such, so do not do anything with P.
   assert((!Before || !Instr.isPHI()) &&

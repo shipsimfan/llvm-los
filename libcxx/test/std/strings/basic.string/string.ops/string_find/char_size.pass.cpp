@@ -17,7 +17,7 @@
 #include "min_allocator.h"
 
 template <class S>
-TEST_CONSTEXPR_CXX20 void
+void
 test(const S& s, typename S::value_type c, typename S::size_type pos,
      typename S::size_type x)
 {
@@ -28,7 +28,7 @@ test(const S& s, typename S::value_type c, typename S::size_type pos,
 }
 
 template <class S>
-TEST_CONSTEXPR_CXX20 void
+void
 test(const S& s, typename S::value_type c, typename S::size_type x)
 {
     LIBCPP_ASSERT_NOEXCEPT(s.find(c));
@@ -37,8 +37,9 @@ test(const S& s, typename S::value_type c, typename S::size_type x)
         assert(0 <= x && x + 1 <= s.size());
 }
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     typedef std::string S;
     test(S(""), 'c', 0, S::npos);
     test(S(""), 'c', 1, S::npos);
@@ -65,9 +66,9 @@ bool test() {
     test(S("abcde"), 'c', 2);
     test(S("abcdeabcde"), 'c', 2);
     test(S("abcdeabcdeabcdeabcde"), 'c', 2);
-  }
+    }
 #if TEST_STD_VER >= 11
-  {
+    {
     typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
     test(S(""), 'c', 0, S::npos);
     test(S(""), 'c', 1, S::npos);
@@ -94,17 +95,7 @@ bool test() {
     test(S("abcde"), 'c', 2);
     test(S("abcdeabcde"), 'c', 2);
     test(S("abcdeabcdeabcdeabcde"), 'c', 2);
-  }
-#endif
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
+    }
 #endif
 
   return 0;

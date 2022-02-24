@@ -28,28 +28,17 @@ VEToolChain::VEToolChain(const Driver &D, const llvm::Triple &Triple,
   getProgramPaths().push_back("/opt/nec/ve/bin");
   // ProgramPaths are found via 'PATH' environment variable.
 
-  // Default library paths are following:
-  //   ${RESOURCEDIR}/lib/ve-unknown-linux-gnu,
-  // These are OK.
-
-  // Default file paths are following:
-  //   ${RESOURCEDIR}/lib/linux/ve, (== getArchSpecificLibPath)
-  //   /lib/../lib64,
-  //   /usr/lib/../lib64,
-  //   ${BINPATH}/../lib,
-  //   /lib,
-  //   /usr/lib,
-  // These are OK for host, but no go for VE.
-
-  // Define file paths from scratch here.
+  // default file paths are:
+  //   ${RESOURCEDIR}/lib/linux/ve (== getArchSpecificLibPath)
+  //   /lib/../lib64
+  //   /usr/lib/../lib64
+  //   ${BINPATH}/../lib
+  //   /lib
+  //   /usr/lib
+  //
+  // These are OK for host, but no go for VE.  So, defines them all
+  // from scratch here.
   getFilePaths().clear();
-
-  // Add library directories:
-  //   ${BINPATH}/../lib/ve-unknown-linux-gnu, (== getStdlibPath)
-  //   ${RESOURCEDIR}/lib/linux/ve, (== getArchSpecificLibPath)
-  //   ${SYSROOT}/opt/nec/ve/lib,
-  for (auto &Path : getStdlibPaths())
-    getFilePaths().push_back(std::move(Path));
   getFilePaths().push_back(getArchSpecificLibPath());
   getFilePaths().push_back(computeSysRoot() + "/opt/nec/ve/lib");
 }
@@ -64,9 +53,7 @@ Tool *VEToolChain::buildLinker() const {
 
 bool VEToolChain::isPICDefault() const { return false; }
 
-bool VEToolChain::isPIEDefault(const llvm::opt::ArgList &Args) const {
-  return false;
-}
+bool VEToolChain::isPIEDefault() const { return false; }
 
 bool VEToolChain::isPICDefaultForced() const { return false; }
 
@@ -126,10 +113,9 @@ void VEToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
     ArrayRef<StringRef> DirVec(Dirs);
     addSystemIncludes(DriverArgs, CC1Args, DirVec);
   } else {
-    // Add following paths for multiple target installation.
-    //   ${INSTALLDIR}/include/ve-unknown-linux-gnu/c++/v1,
-    //   ${INSTALLDIR}/include/c++/v1,
-    addLibCxxIncludePaths(DriverArgs, CC1Args);
+    SmallString<128> P(getDriver().ResourceDir);
+    llvm::sys::path::append(P, "include/c++/v1");
+    addSystemInclude(DriverArgs, CC1Args, P);
   }
 }
 

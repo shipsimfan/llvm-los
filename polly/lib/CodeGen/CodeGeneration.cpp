@@ -166,9 +166,8 @@ static void removeLifetimeMarkers(Region *R) {
   }
 }
 
-static bool generateCode(Scop &S, IslAstInfo &AI, LoopInfo &LI,
-                         DominatorTree &DT, ScalarEvolution &SE,
-                         RegionInfo &RI) {
+static bool CodeGen(Scop &S, IslAstInfo &AI, LoopInfo &LI, DominatorTree &DT,
+                    ScalarEvolution &SE, RegionInfo &RI) {
   // Check whether IslAstInfo uses the same isl_ctx. Since -polly-codegen
   // reports itself to preserve DependenceInfo and IslAstInfo, we might get
   // those analysis that were computed by a different ScopInfo for a different
@@ -334,7 +333,7 @@ public:
     SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
     DL = &S.getFunction().getParent()->getDataLayout();
     RI = &getAnalysis<RegionInfoPass>().getRegionInfo();
-    return generateCode(S, *AI, *LI, *DT, *SE, *RI);
+    return CodeGen(S, *AI, *LI, *DT, *SE, *RI);
   }
 
   /// Register all analyses and transformation required.
@@ -362,7 +361,7 @@ PreservedAnalyses CodeGenerationPass::run(Scop &S, ScopAnalysisManager &SAM,
                                           ScopStandardAnalysisResults &AR,
                                           SPMUpdater &U) {
   auto &AI = SAM.getResult<IslAstAnalysis>(S, AR);
-  if (generateCode(S, AI, AR.LI, AR.DT, AR.SE, AR.RI)) {
+  if (CodeGen(S, AI, AR.LI, AR.DT, AR.SE, AR.RI)) {
     U.invalidateScop(S);
     return PreservedAnalyses::none();
   }

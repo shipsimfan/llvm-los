@@ -339,7 +339,7 @@ if __name__ == '__main__':
     # Prevent infinite loop if called with absolute path.
     arguments_a[0] = os.path.basename(arguments_a[0])
 
-    # Basic correctness check
+    # Sanity check
     enabled_checks = [check_name
                       for check_name in checks
                       if config.getboolean('Checks', check_name)]

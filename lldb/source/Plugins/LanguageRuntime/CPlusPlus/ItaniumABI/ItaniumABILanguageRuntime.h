@@ -35,7 +35,7 @@ public:
   static lldb_private::LanguageRuntime *
   CreateInstance(Process *process, lldb::LanguageType language);
 
-  static llvm::StringRef GetPluginNameStatic() { return "itanium"; }
+  static lldb_private::ConstString GetPluginNameStatic();
 
   static char ID;
 
@@ -76,7 +76,9 @@ public:
       lldb::ThreadSP thread_sp) override;
 
   // PluginInterface protocol
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  lldb_private::ConstString GetPluginName() override;
+
+  uint32_t GetPluginVersion() override;
 
 protected:
   lldb::BreakpointResolverSP

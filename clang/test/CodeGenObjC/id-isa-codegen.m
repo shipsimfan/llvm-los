@@ -44,7 +44,7 @@ Class Test(const void *inObject1) {
 +(id)method;
 @end
 
-id Test2(void) {
+id Test2() {
     if([Foo method]->isa)
       return (*[Foo method]).isa;
     return [Foo method]->isa;

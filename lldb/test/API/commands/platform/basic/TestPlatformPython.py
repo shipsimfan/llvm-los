@@ -94,5 +94,5 @@ class PlatformPythonTestCase(TestBase):
         self.build()
         sh_cmd.SetShell(self.getBuildArtifact('a.out'))
         err = platform.Run(sh_cmd)
-        self.assertSuccess(err)
+        self.assertTrue(err.Success())
         self.assertIn("SUCCESS", sh_cmd.GetOutput())

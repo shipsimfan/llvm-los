@@ -193,7 +193,6 @@ protected:
 public:
   friend class ASTDeclReader;
   friend class ASTDeclWriter;
-  friend class IncrementalParser;
 
   Redeclarable(const ASTContext &Ctx)
       : RedeclLink(LatestDeclLink(Ctx)),
@@ -258,8 +257,7 @@ public:
 
     redecl_iterator& operator++() {
       assert(Current && "Advancing while iterator has reached end");
-      // Make sure we don't infinitely loop on an invalid redecl chain. This
-      // should never happen.
+      // Sanity check to avoid infinite loop on invalid redecl chain.
       if (Current->isFirstDecl()) {
         if (PassedFirst) {
           assert(0 && "Passed first decl twice, invalid redecl chain!");

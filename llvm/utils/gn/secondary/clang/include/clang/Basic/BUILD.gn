@@ -63,17 +63,29 @@ clang_tablegen("DiagnosticIndexName") {
 # Attributes
 
 clang_tablegen("AttrList") {
-  args = [ "-gen-clang-attr-list" ]
+  args = [
+    "-gen-clang-attr-list",
+    "-I",
+    rebase_path("../..", root_out_dir),
+  ]
   td_file = "Attr.td"
 }
 
 clang_tablegen("AttrSubMatchRulesList") {
-  args = [ "-gen-clang-attr-subject-match-rule-list" ]
+  args = [
+    "-gen-clang-attr-subject-match-rule-list",
+    "-I",
+    rebase_path("../..", root_out_dir),
+  ]
   td_file = "Attr.td"
 }
 
 clang_tablegen("AttrHasAttributeImpl") {
-  args = [ "-gen-clang-attr-has-attribute-impl" ]
+  args = [
+    "-gen-clang-attr-has-attribute-impl",
+    "-I",
+    rebase_path("../..", root_out_dir),
+  ]
   td_file = "Attr.td"
 }
 

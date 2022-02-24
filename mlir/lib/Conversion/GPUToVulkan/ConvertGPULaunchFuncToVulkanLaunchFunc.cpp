@@ -74,7 +74,7 @@ private:
   static constexpr unsigned kVulkanLaunchNumConfigOperands = 3;
 };
 
-} // namespace
+} // anonymous namespace
 
 void ConvertGpuLaunchFuncToVulkanLaunchFunc::runOnOperation() {
   bool done = false;
@@ -171,17 +171,18 @@ void ConvertGpuLaunchFuncToVulkanLaunchFunc::convertGpuLaunchFunc(
 
   // Create vulkan launch call op.
   auto vulkanLaunchCallOp = builder.create<CallOp>(
-      loc, TypeRange{}, SymbolRefAttr::get(builder.getContext(), kVulkanLaunch),
+      loc, TypeRange{}, builder.getSymbolRefAttr(kVulkanLaunch),
       vulkanLaunchOperands);
 
   // Set SPIR-V binary shader data as an attribute.
   vulkanLaunchCallOp->setAttr(
       kSPIRVBlobAttrName,
-      builder.getStringAttr(StringRef(binary.data(), binary.size())));
+      StringAttr::get(loc->getContext(), {binary.data(), binary.size()}));
 
   // Set entry point name as an attribute.
-  vulkanLaunchCallOp->setAttr(kSPIRVEntryPointAttrName,
-                              launchOp.getKernelName());
+  vulkanLaunchCallOp->setAttr(
+      kSPIRVEntryPointAttrName,
+      StringAttr::get(loc->getContext(), launchOp.getKernelName()));
 
   launchOp.erase();
 }

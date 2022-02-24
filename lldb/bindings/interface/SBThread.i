@@ -405,12 +405,6 @@ public:
     bool
     SafeToCallFunctions ();
 
-    %feature("autodoc","
-    Retruns a SBValue object representing the siginfo for the current signal.
-    ") GetSiginfo;
-    lldb::SBValue
-    GetSiginfo();
-
     STRING_EXTENSION(SBThread)
 
 #ifdef SWIGPYTHON

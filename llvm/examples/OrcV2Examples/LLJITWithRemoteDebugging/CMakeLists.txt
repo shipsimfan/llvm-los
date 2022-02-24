@@ -10,12 +10,10 @@ set(LLVM_LINK_COMPONENTS
   nativecodegen
   )
 
-if (LLVM_INCLUDE_UTILS)
-  add_llvm_example(LLJITWithRemoteDebugging
-    LLJITWithRemoteDebugging.cpp
-    RemoteJITUtils.cpp
+add_llvm_example(LLJITWithRemoteDebugging
+  LLJITWithRemoteDebugging.cpp
+  RemoteJITUtils.cpp
 
-    DEPENDS
-      llvm-jitlink-executor
+  DEPENDS
+    llvm-jitlink-executor
   )
-endif()

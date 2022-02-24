@@ -785,8 +785,9 @@ void WalkAST::checkDeprecatedOrUnsafeBufferHandling(const CallExpr *CE,
     // real flow analysis.
     auto FormatString =
         dyn_cast<StringLiteral>(CE->getArg(ArgIndex)->IgnoreParenImpCasts());
-    if (FormatString && !FormatString->getString().contains("%s") &&
-        !FormatString->getString().contains("%["))
+    if (FormatString &&
+        FormatString->getString().find("%s") == StringRef::npos &&
+        FormatString->getString().find("%[") == StringRef::npos)
       BoundsProvided = true;
   }
 

@@ -1,4 +1,4 @@
-//===----------------------------------------------------------------------===//
+//===-------------------------- cxa_demangle.cpp --------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -342,21 +342,21 @@ __cxa_demangle(const char *MangledName, char *Buf, size_t *N, int *Status) {
 
   int InternalStatus = demangle_success;
   Demangler Parser(MangledName, MangledName + std::strlen(MangledName));
-  OutputBuffer O;
+  OutputStream S;
 
   Node *AST = Parser.parse();
 
   if (AST == nullptr)
     InternalStatus = demangle_invalid_mangled_name;
-  else if (!initializeOutputBuffer(Buf, N, O, 1024))
+  else if (!initializeOutputStream(Buf, N, S, 1024))
     InternalStatus = demangle_memory_alloc_failure;
   else {
     assert(Parser.ForwardTemplateRefs.empty());
-    AST->print(O);
-    O += '\0';
+    AST->print(S);
+    S += '\0';
     if (N != nullptr)
-      *N = O.getCurrentPosition();
-    Buf = O.getBuffer();
+      *N = S.getCurrentPosition();
+    Buf = S.getBuffer();
   }
 
   if (Status)

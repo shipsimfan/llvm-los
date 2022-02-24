@@ -1,4 +1,4 @@
-; RUN: opt < %s -passes=instcombine -S
+; RUN: opt < %s -instcombine -S
 
 ; Make sure that we don't crash when optimizing the vectors of pointers.
 

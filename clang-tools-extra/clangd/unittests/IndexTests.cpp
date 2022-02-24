@@ -22,6 +22,7 @@
 
 using ::testing::_;
 using ::testing::AllOf;
+using ::testing::AnyOf;
 using ::testing::ElementsAre;
 using ::testing::IsEmpty;
 using ::testing::Pair;
@@ -32,14 +33,14 @@ namespace clang {
 namespace clangd {
 namespace {
 
-MATCHER_P(named, N, "") { return arg.Name == N; }
-MATCHER_P(refRange, Range, "") {
+MATCHER_P(Named, N, "") { return arg.Name == N; }
+MATCHER_P(RefRange, Range, "") {
   return std::make_tuple(arg.Location.Start.line(), arg.Location.Start.column(),
                          arg.Location.End.line(), arg.Location.End.column()) ==
          std::make_tuple(Range.start.line, Range.start.character,
                          Range.end.line, Range.end.character);
 }
-MATCHER_P(fileURI, F, "") { return StringRef(arg.Location.FileURI) == F; }
+MATCHER_P(FileURI, F, "") { return StringRef(arg.Location.FileURI) == F; }
 
 TEST(SymbolLocation, Position) {
   using Position = SymbolLocation::Position;
@@ -68,13 +69,13 @@ TEST(SymbolSlab, FindAndIterate) {
   B.insert(symbol("X"));
   EXPECT_EQ(nullptr, B.find(SymbolID("W")));
   for (const char *Sym : {"X", "Y", "Z"})
-    EXPECT_THAT(B.find(SymbolID(Sym)), Pointee(named(Sym)));
+    EXPECT_THAT(B.find(SymbolID(Sym)), Pointee(Named(Sym)));
 
   SymbolSlab S = std::move(B).build();
-  EXPECT_THAT(S, UnorderedElementsAre(named("X"), named("Y"), named("Z")));
+  EXPECT_THAT(S, UnorderedElementsAre(Named("X"), Named("Y"), Named("Z")));
   EXPECT_EQ(S.end(), S.find(SymbolID("W")));
   for (const char *Sym : {"X", "Y", "Z"})
-    EXPECT_THAT(*S.find(SymbolID(Sym)), named(Sym));
+    EXPECT_THAT(*S.find(SymbolID(Sym)), Named(Sym));
 }
 
 TEST(RelationSlab, Lookup) {
@@ -392,7 +393,7 @@ TEST(MergeTest, Merge) {
   L.Signature = "()";                   // present in left only
   R.CompletionSnippetSuffix = "{$1:0}"; // present in right only
   R.Documentation = "--doc--";
-  L.Origin = SymbolOrigin::Preamble;
+  L.Origin = SymbolOrigin::Dynamic;
   R.Origin = SymbolOrigin::Static;
   R.Type = "expectedType";
 
@@ -404,8 +405,8 @@ TEST(MergeTest, Merge) {
   EXPECT_EQ(M.CompletionSnippetSuffix, "{$1:0}");
   EXPECT_EQ(M.Documentation, "--doc--");
   EXPECT_EQ(M.Type, "expectedType");
-  EXPECT_EQ(M.Origin, SymbolOrigin::Preamble | SymbolOrigin::Static |
-                          SymbolOrigin::Merge);
+  EXPECT_EQ(M.Origin,
+            SymbolOrigin::Dynamic | SymbolOrigin::Static | SymbolOrigin::Merge);
 }
 
 TEST(MergeTest, PreferSymbolWithDefn) {
@@ -488,10 +489,10 @@ TEST(MergeIndexTest, Refs) {
   EXPECT_THAT(
       std::move(Results).build(),
       ElementsAre(Pair(
-          _, UnorderedElementsAre(AllOf(refRange(Test1Code.range("Foo")),
-                                        fileURI("unittest:///test.cc")),
-                                  AllOf(refRange(Test2Code.range("Foo")),
-                                        fileURI("unittest:///test2.cc"))))));
+          _, UnorderedElementsAre(AllOf(RefRange(Test1Code.range("Foo")),
+                                        FileURI("unittest:///test.cc")),
+                                  AllOf(RefRange(Test2Code.range("Foo")),
+                                        FileURI("unittest:///test2.cc"))))));
 
   Request.Limit = 1;
   RefSlab::Builder Results2;
@@ -510,8 +511,8 @@ TEST(MergeIndexTest, Refs) {
       Merge.refs(Request, [&](const Ref &O) { Results3.insert(Foo.ID, O); }));
   EXPECT_THAT(std::move(Results3).build(),
               ElementsAre(Pair(_, UnorderedElementsAre(AllOf(
-                                      refRange(Test2Code.range("Foo")),
-                                      fileURI("unittest:///test2.cc"))))));
+                                      RefRange(Test2Code.range("Foo")),
+                                      FileURI("unittest:///test2.cc"))))));
 }
 
 TEST(MergeIndexTest, IndexedFiles) {

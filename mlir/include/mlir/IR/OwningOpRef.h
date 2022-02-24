@@ -62,6 +62,6 @@ private:
   OpTy op;
 };
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // MLIR_IR_OWNINGOPREF_H

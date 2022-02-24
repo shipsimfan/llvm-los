@@ -64,9 +64,6 @@ public:
   Block &back() { return blocks.back(); }
   Block &front() { return blocks.front(); }
 
-  /// Return true if this region has exactly one block.
-  bool hasOneBlock() { return !empty() && std::next(begin()) == end(); }
-
   /// getSublistAccess() - Returns pointer to member of region.
   static BlockListType Region::*getSublistAccess(Block *) {
     return &Region::blocks;
@@ -82,7 +79,6 @@ public:
     return empty() ? BlockArgListType() : front().getArguments();
   }
 
-  /// Returns the argument types of the first block within the region.
   ValueTypeRange<BlockArgListType> getArgumentTypes();
 
   using args_iterator = BlockArgListType::iterator;
@@ -95,26 +91,21 @@ public:
   bool args_empty() { return getArguments().empty(); }
 
   /// Add one value to the argument list.
-  BlockArgument addArgument(Type type, Location loc) {
-    return front().addArgument(type, loc);
-  }
+  BlockArgument addArgument(Type type) { return front().addArgument(type); }
 
   /// Insert one value to the position in the argument list indicated by the
   /// given iterator. The existing arguments are shifted. The block is expected
   /// not to have predecessors.
-  BlockArgument insertArgument(args_iterator it, Type type, Location loc) {
-    return front().insertArgument(it, type, loc);
+  BlockArgument insertArgument(args_iterator it, Type type) {
+    return front().insertArgument(it, type);
   }
 
   /// Add one argument to the argument list for each type specified in the list.
-  /// `locs` contains the locations for each of the new arguments, and must be
-  /// of equal size to `types`.
-  iterator_range<args_iterator> addArguments(TypeRange types,
-                                             ArrayRef<Location> locs);
+  iterator_range<args_iterator> addArguments(TypeRange types);
 
   /// Add one value to the argument list at the specified position.
-  BlockArgument insertArgument(unsigned index, Type type, Location loc) {
-    return front().insertArgument(index, type, loc);
+  BlockArgument insertArgument(unsigned index, Type type) {
+    return front().insertArgument(index, type);
   }
 
   /// Erase the argument at 'index' and remove it from the argument list.
@@ -173,16 +164,13 @@ public:
 
   /// Return iterators that walk operations of type 'T' nested directly within
   /// this region.
-  template <typename OpT>
-  op_iterator<OpT> op_begin() {
+  template <typename OpT> op_iterator<OpT> op_begin() {
     return detail::op_filter_iterator<OpT, OpIterator>(op_begin(), op_end());
   }
-  template <typename OpT>
-  op_iterator<OpT> op_end() {
+  template <typename OpT> op_iterator<OpT> op_end() {
     return detail::op_filter_iterator<OpT, OpIterator>(op_end(), op_end());
   }
-  template <typename OpT>
-  iterator_range<op_iterator<OpT>> getOps() {
+  template <typename OpT> iterator_range<op_iterator<OpT>> getOps() {
     auto endIt = op_end();
     return {detail::op_filter_iterator<OpT, OpIterator>(op_begin(), endIt),
             detail::op_filter_iterator<OpT, OpIterator>(endIt, endIt)};
@@ -197,12 +185,11 @@ public:
   Region *getParentRegion();
 
   /// Return the parent operation this region is attached to.
-  Operation *getParentOp() { return container; }
+  Operation *getParentOp();
 
   /// Find the first parent operation of the given type, or nullptr if there is
   /// no ancestor operation.
-  template <typename ParentT>
-  ParentT getParentOfType() {
+  template <typename ParentT> ParentT getParentOfType() {
     auto *region = this;
     do {
       if (auto parent = dyn_cast_or_null<ParentT>(region->container))
@@ -239,15 +226,16 @@ public:
     blocks.splice(blocks.end(), other.getBlocks());
   }
 
+  /// Check that this does not use any value defined outside it.
+  /// Emit errors if `noteLoc` is provided; this location is used to point
+  /// to the operation containing the region, the actual error is reported at
+  /// the operation with an offending use.
+  bool isIsolatedFromAbove(Optional<Location> noteLoc = llvm::None);
+
   /// Returns 'block' if 'block' lies in this region, or otherwise finds the
   /// ancestor of 'block' that lies in this region. Returns nullptr if the
   /// latter fails.
   Block *findAncestorBlockInRegion(Block &block);
-
-  /// Returns 'op' if 'op' lies in this region, or otherwise finds the
-  /// ancestor of 'op' that lies in this region. Returns nullptr if the
-  /// latter fails.
-  Operation *findAncestorOpInRegion(Operation &op);
 
   /// Drop all operand uses from operations within this region, which is
   /// an essential step in breaking cyclic dependences between references when
@@ -302,7 +290,7 @@ public:
 
   /// Displays the CFG in a window. This is for use from the debugger and
   /// depends on Graphviz to generate the graph.
-  /// This function is defined in ViewOpGraph.cpp and only works with that
+  /// This function is defined in ViewRegionGraph and only works with that
   /// target linked.
   void viewGraph(const Twine &regionName);
   void viewGraph();
@@ -350,6 +338,6 @@ private:
   friend RangeBaseT;
 };
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // MLIR_IR_REGION_H

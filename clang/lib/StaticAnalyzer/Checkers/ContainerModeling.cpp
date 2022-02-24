@@ -10,12 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/Driver/DriverDiagnostic.h"
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/CallDescription.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicType.h"
@@ -72,27 +71,42 @@ public:
                                                    SVal) const;
 
   CallDescriptionMap<NoItParamFn> NoIterParamFunctions = {
-      {{"clear", 0}, &ContainerModeling::handleClear},
-      {{"assign", 2}, &ContainerModeling::handleAssign},
-      {{"push_back", 1}, &ContainerModeling::handlePushBack},
-      {{"emplace_back", 1}, &ContainerModeling::handlePushBack},
-      {{"pop_back", 0}, &ContainerModeling::handlePopBack},
-      {{"push_front", 1}, &ContainerModeling::handlePushFront},
-      {{"emplace_front", 1}, &ContainerModeling::handlePushFront},
-      {{"pop_front", 0}, &ContainerModeling::handlePopFront},
+    {{0, "clear", 0},
+     &ContainerModeling::handleClear},
+    {{0, "assign", 2},
+     &ContainerModeling::handleAssign},
+    {{0, "push_back", 1},
+     &ContainerModeling::handlePushBack},
+    {{0, "emplace_back", 1},
+     &ContainerModeling::handlePushBack},
+    {{0, "pop_back", 0},
+     &ContainerModeling::handlePopBack},
+    {{0, "push_front", 1},
+     &ContainerModeling::handlePushFront},
+    {{0, "emplace_front", 1},
+     &ContainerModeling::handlePushFront},
+    {{0, "pop_front", 0},
+     &ContainerModeling::handlePopFront},
   };
-
+                                                          
   CallDescriptionMap<OneItParamFn> OneIterParamFunctions = {
-      {{"insert", 2}, &ContainerModeling::handleInsert},
-      {{"emplace", 2}, &ContainerModeling::handleInsert},
-      {{"erase", 1}, &ContainerModeling::handleErase},
-      {{"erase_after", 1}, &ContainerModeling::handleEraseAfter},
+    {{0, "insert", 2},
+     &ContainerModeling::handleInsert},
+    {{0, "emplace", 2},
+     &ContainerModeling::handleInsert},
+    {{0, "erase", 1},
+     &ContainerModeling::handleErase},
+    {{0, "erase_after", 1},
+     &ContainerModeling::handleEraseAfter},
   };
-
+                                                          
   CallDescriptionMap<TwoItParamFn> TwoIterParamFunctions = {
-      {{"erase", 2}, &ContainerModeling::handleErase},
-      {{"erase_after", 2}, &ContainerModeling::handleEraseAfter},
+    {{0, "erase", 2},
+     &ContainerModeling::handleErase},
+    {{0, "erase_after", 2},
+     &ContainerModeling::handleEraseAfter},
   };
+                                                          
 };
 
 bool isBeginCall(const FunctionDecl *Func);
@@ -749,14 +763,14 @@ bool isBeginCall(const FunctionDecl *Func) {
   const auto *IdInfo = Func->getIdentifier();
   if (!IdInfo)
     return false;
-  return IdInfo->getName().endswith_insensitive("begin");
+  return IdInfo->getName().endswith_lower("begin");
 }
 
 bool isEndCall(const FunctionDecl *Func) {
   const auto *IdInfo = Func->getIdentifier();
   if (!IdInfo)
     return false;
-  return IdInfo->getName().endswith_insensitive("end");
+  return IdInfo->getName().endswith_lower("end");
 }
 
 const CXXRecordDecl *getCXXRecordDecl(ProgramStateRef State,

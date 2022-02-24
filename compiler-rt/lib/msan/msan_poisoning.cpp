@@ -14,7 +14,6 @@
 
 #include "interception/interception.h"
 #include "msan_origin.h"
-#include "msan_thread.h"
 #include "sanitizer_common/sanitizer_common.h"
 
 DECLARE_REAL(void *, memset, void *dest, int c, uptr n)
@@ -242,9 +241,6 @@ void PoisonMemory(const void *dst, uptr size, StackTrace *stack) {
   SetShadow(dst, size, (u8)-1);
 
   if (__msan_get_track_origins()) {
-    MsanThread *t = GetCurrentThread();
-    if (t && t->InSignalHandler())
-      return;
     Origin o = Origin::CreateHeapOrigin(stack);
     SetOrigin(dst, size, o.raw_id());
   }

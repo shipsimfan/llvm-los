@@ -1,4 +1,7 @@
 ; XFAIL: *
+; RUN: opt < %s -newgvn -o /dev/null  -pass-remarks-output=%t -S -pass-remarks=gvn \
+; RUN:     2>&1 | FileCheck %s
+; RUN: cat %t | FileCheck -check-prefix=YAML %s
 ; RUN: opt < %s -passes=newgvn -o /dev/null  -pass-remarks-output=%t -S -pass-remarks=gvn \
 ; RUN:     2>&1 | FileCheck %s
 ; RUN: cat %t | FileCheck -check-prefix=YAML %s

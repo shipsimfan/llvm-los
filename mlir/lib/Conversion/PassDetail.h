@@ -11,8 +11,6 @@
 
 #include "mlir/Pass/Pass.h"
 
-#include "mlir/Conversion/GPUToROCDL/Runtimes.h"
-
 namespace mlir {
 class AffineDialect;
 class StandardOpsDialect;
@@ -21,82 +19,66 @@ class StandardOpsDialect;
 template <typename ConcreteDialect>
 void registerDialect(DialectRegistry &registry);
 
-namespace acc {
-class OpenACCDialect;
-} // namespace acc
-
-namespace arith {
-class ArithmeticDialect;
-} // namespace arith
-
-namespace cf {
-class ControlFlowDialect;
-} // namespace cf
-
 namespace complex {
 class ComplexDialect;
-} // namespace complex
+} // end namespace complex
 
 namespace gpu {
 class GPUDialect;
 class GPUModuleOp;
-} // namespace gpu
+} // end namespace gpu
 
 namespace LLVM {
 class LLVMDialect;
-} // namespace LLVM
+} // end namespace LLVM
 
 namespace NVVM {
 class NVVMDialect;
-} // namespace NVVM
+} // end namespace NVVM
 
 namespace math {
 class MathDialect;
-} // namespace math
+} // end namespace math
 
 namespace memref {
 class MemRefDialect;
-} // namespace memref
+} // end namespace memref
 
 namespace omp {
 class OpenMPDialect;
-} // namespace omp
+} // end namespace omp
 
 namespace pdl_interp {
 class PDLInterpDialect;
-} // namespace pdl_interp
+} // end namespace pdl_interp
 
 namespace ROCDL {
 class ROCDLDialect;
-} // namespace ROCDL
+} // end namespace ROCDL
 
 namespace scf {
 class SCFDialect;
-} // namespace scf
+} // end namespace scf
 
 namespace spirv {
 class SPIRVDialect;
-} // namespace spirv
+} // end namespace spirv
 
 namespace tensor {
 class TensorDialect;
-} // namespace tensor
+} // end namespace tensor
 
 namespace tosa {
 class TosaDialect;
-} // namespace tosa
+} // end namespace tosa
 
 namespace vector {
 class VectorDialect;
-} // namespace vector
-
-namespace arm_neon {
-class ArmNeonDialect;
-} // namespace arm_neon
+} // end namespace vector
 
 #define GEN_PASS_CLASSES
 #include "mlir/Conversion/Passes.h.inc"
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // CONVERSION_PASSDETAIL_H_

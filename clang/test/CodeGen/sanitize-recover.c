@@ -4,7 +4,7 @@
 
 // RECOVER: @test
 // ABORT: @test
-void test(void) {
+void test() {
   extern volatile unsigned x, y, z;
 
   // RECOVER: uadd.with.overflow.i32{{.*}}, !nosanitize
@@ -16,7 +16,7 @@ void test(void) {
   x = y + z;
 }
 
-void foo(void) {
+void foo() {
   union { int i; } u;
   u.i=1;
   // PARTIAL:      %[[SIZE:.*]] = call i64 @llvm.objectsize.i64.p0i8(i8* {{.*}}, i1 false, i1 false)

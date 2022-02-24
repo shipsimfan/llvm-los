@@ -241,12 +241,12 @@ Valid v;
 @end
 @interface Interface5 <T : I1 *> {
 @public
-  T<P1> y;
+  T<P1> x;
 }
 @end
 @interface Interface6 <T1 : I1 *, T2 : I2 *> {
 @public
-  T1 z;
+  T1 x;
 }
 @end
 #elif defined(SECOND)
@@ -257,21 +257,14 @@ Valid v;
 @end
 @interface Interface5 <T : I1 *> {
 @public
-  T<P1, P2> y;
+  T<P1, P2> x;
 }
 @end
 @interface Interface6 <T1 : I1 *, T2 : I2 *> {
 @public
-  T2 z;
+  T2 x;
 }
 @end
-#else
-// expected-error@first.h:* {{'Interface4::x' from module 'FirstModule' is not present in definition of 'Interface4' in module 'SecondModule'}}
-// expected-note@second.h:* {{declaration of 'x' does not match}}
-// expected-error@first.h:* {{'Interface5::y' from module 'FirstModule' is not present in definition of 'Interface5' in module 'SecondModule'}}
-// expected-note@second.h:* {{declaration of 'y' does not match}}
-// expected-error@first.h:* {{'Interface6::z' from module 'FirstModule' is not present in definition of 'Interface6' in module 'SecondModule'}}
-// expected-note@second.h:* {{declaration of 'z' does not match}}
 #endif
 
 namespace Types {
@@ -283,22 +276,22 @@ struct Invalid1 {
 };
 struct Invalid2 {
   Interface5 *I;
-  decltype(I->y) y;
+  decltype(I->x) x;
 };
 struct Invalid3 {
   Interface6 *I;
-  decltype(I->z) z;
+  decltype(I->x) x;
 };
 #else
 Invalid1 i1;
 // expected-error@first.h:* {{'Types::ObjCTypeParam::Invalid1::x' from module 'FirstModule' is not present in definition of 'Types::ObjCTypeParam::Invalid1' in module 'SecondModule'}}
 // expected-note@second.h:* {{declaration of 'x' does not match}}
 Invalid2 i2;
-// expected-error@first.h:* {{'Types::ObjCTypeParam::Invalid2::y' from module 'FirstModule' is not present in definition of 'Types::ObjCTypeParam::Invalid2' in module 'SecondModule'}}
-// expected-note@second.h:* {{declaration of 'y' does not match}}
+// expected-error@first.h:* {{'Types::ObjCTypeParam::Invalid2::x' from module 'FirstModule' is not present in definition of 'Types::ObjCTypeParam::Invalid2' in module 'SecondModule'}}
+// expected-note@second.h:* {{declaration of 'x' does not match}}
 Invalid3 i3;
-// expected-error@first.h:* {{'Types::ObjCTypeParam::Invalid3::z' from module 'FirstModule' is not present in definition of 'Types::ObjCTypeParam::Invalid3' in module 'SecondModule'}}
-// expected-note@second.h:* {{declaration of 'z' does not match}}
+// expected-error@first.h:* {{'Types::ObjCTypeParam::Invalid3::x' from module 'FirstModule' is not present in definition of 'Types::ObjCTypeParam::Invalid3' in module 'SecondModule'}}
+// expected-note@second.h:* {{declaration of 'x' does not match}}
 #endif
 
 }  // namespace ObjCTypeParam

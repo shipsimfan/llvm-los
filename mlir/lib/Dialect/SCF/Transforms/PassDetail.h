@@ -18,25 +18,13 @@ void registerDialect(DialectRegistry &registry);
 
 class AffineDialect;
 
-namespace arith {
-class ArithmeticDialect;
-} // namespace arith
-
-namespace bufferization {
-class BufferizationDialect;
-} // namespace bufferization
-
 namespace memref {
 class MemRefDialect;
-} // namespace memref
-
-namespace tensor {
-class TensorDialect;
-} // namespace tensor
+} // end namespace memref
 
 #define GEN_PASS_CLASSES
 #include "mlir/Dialect/SCF/Passes.h.inc"
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // DIALECT_LOOPOPS_TRANSFORMS_PASSDETAIL_H_

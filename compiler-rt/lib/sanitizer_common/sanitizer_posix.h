@@ -20,7 +20,10 @@
 #include "sanitizer_platform_limits_posix.h"
 #include "sanitizer_platform_limits_solaris.h"
 
-#if SANITIZER_POSIX
+#if !SANITIZER_POSIX
+// Make it hard to accidentally use any of functions declared in this file:
+#error This file should only be included on POSIX
+#endif
 
 namespace __sanitizer {
 
@@ -122,7 +125,5 @@ void DecorateMapping(uptr addr, uptr size, const char *name);
 
 
 }  // namespace __sanitizer
-
-#endif  // SANITIZER_POSIX
 
 #endif  // SANITIZER_POSIX_H

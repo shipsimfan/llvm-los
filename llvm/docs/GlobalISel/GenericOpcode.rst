@@ -186,18 +186,10 @@ Extract a register of the specified size, starting from the block given by
 index. This will almost certainly be mapped to sub-register COPYs after
 register banks have been selected.
 
-.. code-block:: none
-
-  %3:_(s32) = G_EXTRACT %2:_(s64), 32
-
 G_INSERT
 ^^^^^^^^
 
 Insert a smaller register into a larger one at the specified bit-index.
-
-.. code-block:: none
-
-  %2:_(s64) = G_INSERT %0:(_s64), %1:_(s32), 0
 
 G_MERGE_VALUES
 ^^^^^^^^^^^^^^
@@ -252,12 +244,6 @@ The source operands are registers as follows:
 - The least-significant bit for the extraction
 - The width of the extraction
 
-The least-significant bit (lsb) and width operands are in the range:
-
-::
-
-      0 <= lsb < lsb + width <= source bitwidth, where all values are unsigned
-
 G_SBFX sign-extends the result, while G_UBFX zero-extends the result.
 
 .. code-block:: none
@@ -290,9 +276,7 @@ These each perform their respective integer arithmetic on a scalar.
 
 .. code-block:: none
 
-  %dst:_(s32) = G_ADD %src0:_(s32), %src1:_(s32)
-
-The above example adds %src1 to %src0 and stores the result in %dst.
+  %2:_(s32) = G_ADD %0:_(s32), %1:_(s32)
 
 G_SDIVREM, G_UDIVREM
 ^^^^^^^^^^^^^^^^^^^^
@@ -573,19 +557,6 @@ G_INTRINSIC_ROUND
 
 Returns the operand rounded to the nearest integer.
 
-G_LROUND, G_LLROUND
-^^^^^^^^^^^^^^^^^^^
-
-Returns the source operand rounded to the nearest integer with ties away from
-zero.
-
-See the LLVM LangRef entry on '``llvm.lround.*'`` for details on behaviour.
-
-.. code-block:: none
-
-  %rounded_32:_(s32) = G_LROUND %round_me:_(s64)
-  %rounded_64:_(s64) = G_LLROUND %round_me:_(s64)
-
 Vector Specific Operations
 --------------------------
 
@@ -730,36 +701,6 @@ G_FENCE
 
   I couldn't find any documentation on this at the time of writing.
 
-G_MEMCPY
-^^^^^^^^
-
-Generic memcpy. Expects two MachineMemOperands covering the store and load
-respectively, in addition to explicit operands.
-
-G_MEMCPY_INLINE
-^^^^^^^^^^^^^^^
-
-Generic inlined memcpy. Like G_MEMCPY, but it is guaranteed that this version
-will not be lowered as a call to an external function. Currently the size
-operand is required to evaluate as a constant (not an immediate), though that is
-expected to change when llvm.memcpy.inline is taught to support dynamic sizes.
-
-G_MEMMOVE
-^^^^^^^^^
-
-Generic memmove. Similar to G_MEMCPY, but the source and destination memory
-ranges are allowed to overlap.
-
-G_MEMSET
-^^^^^^^^
-
-Generic memset. Expects a MachineMemOperand in addition to explicit operands.
-
-G_BZERO
-^^^^^^^
-
-Generic bzero. Expects a MachineMemOperand in addition to explicit operands.
-
 Control Flow
 ------------
 
@@ -770,58 +711,34 @@ Implement the φ node in the SSA graph representing the function.
 
 .. code-block:: none
 
-  %dst(s8) = G_PHI %src1(s8), %bb.<id1>, %src2(s8), %bb.<id2>
+  %1(s8) = G_PHI %7(s8), %bb.0, %3(s8), %bb.1
 
 G_BR
 ^^^^
 
 Unconditional branch
 
-.. code-block:: none
-
-  G_BR %bb.<id>
-
 G_BRCOND
 ^^^^^^^^
 
 Conditional branch
-
-.. code-block:: none
-
-  G_BRCOND %condition, %basicblock.<id>
 
 G_BRINDIRECT
 ^^^^^^^^^^^^
 
 Indirect branch
 
-.. code-block:: none
-
-  G_BRINDIRECT %src(p0)
-
 G_BRJT
 ^^^^^^
 
 Indirect branch to jump table entry
 
-.. code-block:: none
-
-  G_BRJT %ptr(p0), %jti, %idx(s64)
-
 G_JUMP_TABLE
 ^^^^^^^^^^^^
 
-Generates a pointer to the address of the jump table specified by the source
-operand. The source operand is a jump table index.
-G_JUMP_TABLE can be used in conjunction with G_BRJT to support jump table
-codegen with GlobalISel.
+.. caution::
 
-.. code-block:: none
-
-  %dst:_(p0) = G_JUMP_TABLE %jump-table.0
-
-The above example generates a pointer to the source jump table index.
-
+  I found no documentation for this instruction at the time of writing.
 
 G_INTRINSIC, G_INTRINSIC_W_SIDE_EFFECTS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

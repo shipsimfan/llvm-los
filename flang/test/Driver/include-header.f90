@@ -26,32 +26,35 @@
 !---------------------------------------------
 ! EXPECTED OUTPUT FOR A SINGLE INCLUDED FOLDER
 !--------------------------------------------
-! SINGLEINCLUDE:program MainDirectoryOne
-! SINGLEINCLUDE-NOT:program X
-! SINGLEINCLUDE-NOT:program B
-! SINGLEINCLUDE:program MainDirectoryTwo
-! SINGLEINCLUDE-NOT:program Y
-! SINGLEINCLUDE-NOT:program C
+! SINGLEINCLUDE:program maindirectoryone
+! SINGLEINCLUDE-NOT:program x
+! SINGLEINCLUDE-NOT:program b
+! SINGLEINCLUDE-NEXT:end
+! SINGLEINCLUDE-NEXT:program maindirectorytwo
+! SINGLEINCLUDE-NOT:program y
+! SINGLEINCLUDE-NOT:program c
 
 !-------------------------------------------------------
 ! EXPECTED OUTPUT FOR Inputs/ DIRECTORY SPECIFIED FIRST
 !-------------------------------------------------------
-! MAINDIRECTORY:program MainDirectoryOne
-! MAINDIRECTORY-NOT:program SubDirectoryOne
-! MAINDIRECTORY-NOT:program B
-! MAINDIRECTORY:program MainDirectoryTwo
-! MAINDIRECTORY-NOT:program SubDirectoryTwo
-! MAINDIRECTORY-NOT:program C
+! MAINDIRECTORY:program maindirectoryone
+! MAINDIRECTORY-NOT:program subdirectoryone
+! MAINDIRECTORY-NOT:program b
+! MAINDIRECTORY-NEXT:end
+! MAINDIRECTORY-NEXT:program maindirectorytwo
+! MAINDIRECTORY-NOT:program subdirectorytwo
+! MAINDIRECTORY-NOT:program c
 
 !------------------------------------------------------------------
 ! EXPECTED OUTPUT FOR Inputs/header-dir/ DIRECTORY SPECIFIED FIRST
 !------------------------------------------------------------------
-! SUBDIRECTORY:program SubDirectoryOne
-! SUBDIRECTORY-NOT:program MainDirectoryOne
-! SUBDIRECTORY-NOT:program B
-! SUBDIRECTORY:program SubDirectoryTwo
-! SUBDIRECTORY-NOT:program MainDirectoryTwo
-! SUBDIRECTORY-NOT:program C
+! SUBDIRECTORY:program subdirectoryone
+! SUBDIRECTORY-NOT:program maindirectoryone
+! SUBDIRECTORY-NOT:program b
+! SUBDIRECTORY-NEXT:end
+! SUBDIRECTORY-NEXT:program subdirectorytwo
+! SUBDIRECTORY-NOT:program maindirectorytwo
+! SUBDIRECTORY-NOT:program c
 
 ! include-test-one.f90
 #include <basic-header-one.h>

@@ -58,7 +58,7 @@ int f4(int *p) {
   return *q; // expected-warning{{Dereference of null pointer (loaded from variable 'q')}}
 }
 
-int f4_b(void) {
+int f4_b() {
   short array[2];
   uintptr_t x = array; // expected-warning{{incompatible pointer to integer conversion}}
   short *p = x; // expected-warning{{incompatible integer to pointer conversion}}
@@ -79,7 +79,7 @@ int f4_b(void) {
   return 0;
 }
 
-int f5(void) {
+int f5() {
   
   char *s = "hello world";
   return s[0]; // no-warning
@@ -275,7 +275,7 @@ void f12(HF12ITEM i, char *q) {
 }
 
 // Test handling of translating between integer "pointers" and back.
-void f13(void) {
+void f13() {
   int *x = 0;
   if (((((int) x) << 2) + 1) >> 1) *x = 1;
 }
@@ -284,7 +284,7 @@ void f13(void) {
 // handling pointer values that were undefined.
 void pr4759_aux(int *p) __attribute__((nonnull));
 
-void pr4759(void) {
+void pr4759() {
   int *p;
   pr4759_aux(p); // expected-warning{{1st function call argument is an uninitialized value}}
 }
@@ -323,7 +323,7 @@ void test_address_space_condition(int AS_ATTRIBUTE *cpu_data) {
   }
 }
 struct X { int member; };
-int test_address_space_member(void) {
+int test_address_space_member() {
   struct X AS_ATTRIBUTE *data = (struct X AS_ATTRIBUTE *)0UL;
   int ret;
   ret = data->member; // no-warning

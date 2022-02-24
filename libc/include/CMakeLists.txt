@@ -1,10 +1,20 @@
-add_subdirectory(llvm-libc-macros)
-add_subdirectory(llvm-libc-types)
 
 add_header(
   llvm_libc_common_h
   HDR
     __llvm-libc-common.h
+)
+
+add_header(
+  libc_posix_types
+  HDR
+    __posix-types.h
+)
+
+add_header(
+  stdc_types
+  HDR
+    __llvm-libc-stdc-types.h
 )
 
 add_gen_header(
@@ -16,32 +26,11 @@ add_gen_header(
 )
 
 add_gen_header(
-  fcntl
-  DEF_FILE fcntl.h.def
-  GEN_HDR fcntl.h
-  DEPENDS
-    .llvm_libc_common_h
-    .llvm-libc-macros.fcntl_macros
-    .llvm-libc-types.mode_t
-)
-
-add_gen_header(
   fenv
   DEF_FILE fenv.h.def
   GEN_HDR fenv.h
   DEPENDS
     .llvm_libc_common_h
-    .llvm-libc-types.fenv_t
-    .llvm-libc-types.fexcept_t
-)
-
-add_gen_header(
-  inttypes
-  DEF_FILE inttypes.h.def
-  GEN_HDR inttypes.h
-  DEPENDS
-    .llvm_libc_common_h
-    .llvm-libc-types.imaxdiv_t
 )
 
 add_gen_header(
@@ -50,8 +39,7 @@ add_gen_header(
   GEN_HDR math.h
   DEPENDS
     .llvm_libc_common_h
-    .llvm-libc-types.double_t
-    .llvm-libc-types.float_t
+    .stdc_types
 )
 
 add_gen_header(
@@ -68,7 +56,6 @@ add_gen_header(
   GEN_HDR string.h
   DEPENDS
     .llvm_libc_common_h
-    .llvm-libc-types.size_t
 )
 
 add_gen_header(
@@ -77,22 +64,18 @@ add_gen_header(
   GEN_HDR time.h
   DEPENDS
     .llvm_libc_common_h
-    .llvm-libc-types.time_t
-    .llvm-libc-types.struct_tm
 )
 
 add_gen_header(
   threads
   DEF_FILE threads.h.def
   GEN_HDR threads.h
+  PARAMS
+    platform_threads=../config/${LIBC_TARGET_OS}/threads.h.in
   DEPENDS
     .llvm_libc_common_h
-    .llvm-libc-types.__call_once_func_t
-    .llvm-libc-types.cnd_t
-    .llvm-libc-types.mtx_t
-    .llvm-libc-types.once_flag
-    .llvm-libc-types.thrd_start_t
-    .llvm-libc-types.thrd_t
+  DATA_FILES
+    ../config/${LIBC_TARGET_OS}/threads.h.in
 )
 
 add_gen_header(
@@ -113,9 +96,6 @@ add_gen_header(
   GEN_HDR signal.h
   DATA_FILES
     ../config/${LIBC_TARGET_OS}/signal.h.in
-  DEPENDS
-    .llvm-libc-types.struct_sigaction
-    .llvm-libc-types.__sighandler_t
 )
 
 add_gen_header(
@@ -124,9 +104,6 @@ add_gen_header(
   GEN_HDR stdio.h
   DEPENDS
     .llvm_libc_common_h
-    .llvm-libc-macros.stdio_macros
-    .llvm-libc-types.FILE
-    .llvm-libc-types.size_t
 )
 
 add_gen_header(
@@ -135,13 +112,6 @@ add_gen_header(
   GEN_HDR stdlib.h
   DEPENDS
     .llvm_libc_common_h
-    .llvm-libc-types.__bsearchcompare_t
-    .llvm-libc-types.__qsortcompare_t
-    .llvm-libc-types.div_t
-    .llvm-libc-types.ldiv_t
-    .llvm-libc-types.lldiv_t
-    .llvm-libc-types.size_t
-    .llvm-libc-types.__atexithandler_t
 )
 
 add_gen_header(
@@ -149,9 +119,8 @@ add_gen_header(
   DEF_FILE unistd.h.def
   GEN_HDR unistd.h
   DEPENDS
+    .libc_posix_types
     .llvm_libc_common_h
-    .llvm-libc-types.size_t
-    .llvm-libc-types.ssize_t
 )
 
 # TODO: Not all platforms will have a include/sys directory. Add the sys
@@ -164,18 +133,8 @@ add_gen_header(
   DEF_FILE sys/mman.h.def
   GEN_HDR sys/mman.h
   DEPENDS
+    .libc_posix_types
     .llvm_libc_common_h
-    .llvm-libc-types.off_t
-    .llvm-libc-types.ssize_t
-)
-
-add_gen_header(
-  sys_stat
-  DEF_FILE sys/stat.h.def
-  GEN_HDR sys/stat.h
-  DEPENDS
-    .llvm_libc_common_h
-    .llvm-libc-types.mode_t
 )
 
 add_gen_header(

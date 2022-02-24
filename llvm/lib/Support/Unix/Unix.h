@@ -67,10 +67,11 @@ static inline bool MakeErrMsg(
 }
 
 // Include StrError(errnum) in a fatal error message.
-[[noreturn]] static inline void ReportErrnumFatal(const char *Msg, int errnum) {
+LLVM_ATTRIBUTE_NORETURN static inline void ReportErrnumFatal(const char *Msg,
+                                                             int errnum) {
   std::string ErrMsg;
   MakeErrMsg(&ErrMsg, Msg, errnum);
-  llvm::report_fatal_error(llvm::Twine(ErrMsg));
+  llvm::report_fatal_error(ErrMsg);
 }
 
 namespace llvm {

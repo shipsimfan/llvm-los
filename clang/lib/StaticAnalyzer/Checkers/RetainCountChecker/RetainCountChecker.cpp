@@ -290,7 +290,7 @@ void RetainCountChecker::checkPostStmt(const ObjCIvarRefExpr *IRE,
 
   ProgramStateRef State = C.getState();
   SymbolRef Sym = State->getSVal(*IVarLoc).getAsSymbol();
-  if (!Sym || !isa_and_nonnull<ObjCIvarRegion>(Sym->getOriginRegion()))
+  if (!Sym || !dyn_cast_or_null<ObjCIvarRegion>(Sym->getOriginRegion()))
     return;
 
   // Accessing an ivar directly is unusual. If we've done that, be more
@@ -1188,14 +1188,14 @@ ProgramStateRef RetainCountChecker::checkRegionChanges(
   if (!invalidated)
     return state;
 
-  llvm::SmallPtrSet<SymbolRef, 8> AllowedSymbols;
+  llvm::SmallPtrSet<SymbolRef, 8> WhitelistedSymbols;
 
   for (const MemRegion *I : ExplicitRegions)
     if (const SymbolicRegion *SR = I->StripCasts()->getAs<SymbolicRegion>())
-      AllowedSymbols.insert(SR->getSymbol());
+      WhitelistedSymbols.insert(SR->getSymbol());
 
   for (SymbolRef sym : *invalidated) {
-    if (AllowedSymbols.count(sym))
+    if (WhitelistedSymbols.count(sym))
       continue;
     // Remove any existing reference-count binding.
     state = removeRefBinding(state, sym);

@@ -286,7 +286,3 @@ void test() {
   f([](int I) { return; });
 }
 } // namespace lambda
-
-// Do not warn on naked functions.
-[[gnu::naked]] int nakedFunction(int a, float b, const char *c) { ; }
-__attribute__((naked)) void nakedFunction(int a, int b) { ; }

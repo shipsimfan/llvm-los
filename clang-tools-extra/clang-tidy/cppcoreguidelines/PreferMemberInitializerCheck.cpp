@@ -83,7 +83,7 @@ static bool isSafeAssignment(const FieldDecl *Field, const Expr *Init,
       .empty();
 }
 
-static std::pair<const FieldDecl *, const Expr *>
+static const std::pair<const FieldDecl *, const Expr *>
 isAssignmentToMemberOf(const CXXRecordDecl *Rec, const Stmt *S,
                        const CXXConstructorDecl *Ctor) {
   if (const auto *BO = dyn_cast<BinaryOperator>(S)) {
@@ -159,7 +159,7 @@ void PreferMemberInitializerCheck::check(
     if (S->getBeginLoc().isMacroID()) {
       StringRef MacroName = Lexer::getImmediateMacroName(
           S->getBeginLoc(), *Result.SourceManager, getLangOpts());
-      if (MacroName.contains_insensitive("assert"))
+      if (MacroName.contains_lower("assert"))
         return;
     }
     if (isControlStatement(S))

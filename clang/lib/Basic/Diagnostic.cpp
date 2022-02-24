@@ -374,12 +374,6 @@ void DiagnosticsEngine::setSeverity(diag::kind Diag, diag::Severity Map,
   DiagnosticMapping Mapping = makeUserMapping(Map, L);
   Mapping.setUpgradedFromWarning(WasUpgradedFromWarning);
 
-  // Make sure we propagate the NoWarningAsError flag from an existing
-  // mapping (which may be the default mapping).
-  DiagnosticMapping &Info = GetCurDiagState()->getOrAddMapping(Diag);
-  Mapping.setNoWarningAsError(Info.hasNoWarningAsError() ||
-                              Mapping.hasNoWarningAsError());
-
   // Common case; setting all the diagnostics of a group in one place.
   if ((L.isInvalid() || L == DiagStatesByLoc.getCurDiagStateLoc()) &&
       DiagStatesByLoc.getCurDiagState()) {
@@ -412,14 +406,6 @@ bool DiagnosticsEngine::setSeverityForGroup(diag::Flavor Flavor,
     setSeverity(Diag, Map, Loc);
 
   return false;
-}
-
-bool DiagnosticsEngine::setSeverityForGroup(diag::Flavor Flavor,
-                                            diag::Group Group,
-                                            diag::Severity Map,
-                                            SourceLocation Loc) {
-  return setSeverityForGroup(Flavor, Diags->getWarningOptionForGroup(Group),
-                             Map, Loc);
 }
 
 bool DiagnosticsEngine::setDiagnosticGroupWarningAsError(StringRef Group,
@@ -938,7 +924,7 @@ FormatDiagnostic(const char *DiagStr, const char *DiagEnd,
     }
     // ---- INTEGERS ----
     case DiagnosticsEngine::ak_sint: {
-      int64_t Val = getArgSInt(ArgNo);
+      int Val = getArgSInt(ArgNo);
 
       if (ModifierIs(Modifier, ModifierLen, "select")) {
         HandleSelectModifier(*this, (unsigned)Val, Argument, ArgumentLen,
@@ -957,7 +943,7 @@ FormatDiagnostic(const char *DiagStr, const char *DiagEnd,
       break;
     }
     case DiagnosticsEngine::ak_uint: {
-      uint64_t Val = getArgUInt(ArgNo);
+      unsigned Val = getArgUInt(ArgNo);
 
       if (ModifierIs(Modifier, ModifierLen, "select")) {
         HandleSelectModifier(*this, Val, Argument, ArgumentLen, OutStr);

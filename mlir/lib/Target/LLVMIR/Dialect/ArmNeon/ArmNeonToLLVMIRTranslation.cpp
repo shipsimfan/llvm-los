@@ -41,7 +41,7 @@ public:
     return failure();
   }
 };
-} // namespace
+} // end namespace
 
 void mlir::registerArmNeonDialectTranslation(DialectRegistry &registry) {
   registry.insert<arm_neon::ArmNeonDialect>();

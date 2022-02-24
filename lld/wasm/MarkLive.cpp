@@ -162,9 +162,9 @@ void markLive() {
       for (InputGlobal *g : obj->globals)
         if (!g->live)
           message("removing unused section " + toString(g));
-      for (InputTag *t : obj->tags)
-        if (!t->live)
-          message("removing unused section " + toString(t));
+      for (InputEvent *e : obj->events)
+        if (!e->live)
+          message("removing unused section " + toString(e));
       for (InputTable *t : obj->tables)
         if (!t->live)
           message("removing unused section " + toString(t));

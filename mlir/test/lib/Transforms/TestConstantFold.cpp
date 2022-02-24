@@ -6,26 +6,27 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/FoldUtils.h"
+#include "mlir/Transforms/Passes.h"
+#include "mlir/Transforms/Utils.h"
 
 using namespace mlir;
 
 namespace {
 /// Simple constant folding pass.
-struct TestConstantFold
-    : public PassWrapper<TestConstantFold, OperationPass<FuncOp>> {
-  StringRef getArgument() const final { return "test-constant-fold"; }
-  StringRef getDescription() const final {
-    return "Test operation constant folding";
-  }
+struct TestConstantFold : public PassWrapper<TestConstantFold, FunctionPass> {
   // All constants in the function post folding.
   SmallVector<Operation *, 8> existingConstants;
 
   void foldOperation(Operation *op, OperationFolder &helper);
-  void runOnOperation() override;
+  void runOnFunction() override;
 };
-} // namespace
+} // end anonymous namespace
 
 void TestConstantFold::foldOperation(Operation *op, OperationFolder &helper) {
   auto processGeneratedConstants = [this](Operation *op) {
@@ -40,12 +41,12 @@ void TestConstantFold::foldOperation(Operation *op, OperationFolder &helper) {
 // For now, we do a simple top-down pass over a function folding constants.  We
 // don't handle conditional control flow, block arguments, folding conditional
 // branches, or anything else fancy.
-void TestConstantFold::runOnOperation() {
+void TestConstantFold::runOnFunction() {
   existingConstants.clear();
 
   // Collect and fold the operations within the function.
   SmallVector<Operation *, 8> ops;
-  getOperation().walk([&](Operation *op) { ops.push_back(op); });
+  getFunction().walk([&](Operation *op) { ops.push_back(op); });
 
   // Fold the constants in reverse so that the last generated constants from
   // folding are at the beginning. This creates somewhat of a linear ordering to
@@ -65,6 +66,9 @@ void TestConstantFold::runOnOperation() {
 
 namespace mlir {
 namespace test {
-void registerTestConstantFold() { PassRegistration<TestConstantFold>(); }
+void registerTestConstantFold() {
+  PassRegistration<TestConstantFold>("test-constant-fold",
+                                     "Test operation constant folding");
+}
 } // namespace test
 } // namespace mlir

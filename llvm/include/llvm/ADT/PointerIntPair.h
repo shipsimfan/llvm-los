@@ -5,10 +5,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// This file defines the PointerIntPair class.
-///
+//
+// This file defines the PointerIntPair class.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_POINTERINTPAIR_H
@@ -23,7 +22,7 @@
 
 namespace llvm {
 
-template <typename T, typename Enable> struct DenseMapInfo;
+template <typename T> struct DenseMapInfo;
 template <typename PointerT, unsigned IntBits, typename PtrTraits>
 struct PointerIntPairInfo;
 
@@ -61,19 +60,19 @@ public:
 
   IntType getInt() const { return (IntType)Info::getInt(Value); }
 
-  void setPointer(PointerTy PtrVal) & {
+  void setPointer(PointerTy PtrVal) LLVM_LVALUE_FUNCTION {
     Value = Info::updatePointer(Value, PtrVal);
   }
 
-  void setInt(IntType IntVal) & {
+  void setInt(IntType IntVal) LLVM_LVALUE_FUNCTION {
     Value = Info::updateInt(Value, static_cast<intptr_t>(IntVal));
   }
 
-  void initWithPointer(PointerTy PtrVal) & {
+  void initWithPointer(PointerTy PtrVal) LLVM_LVALUE_FUNCTION {
     Value = Info::updatePointer(0, PtrVal);
   }
 
-  void setPointerAndInt(PointerTy PtrVal, IntType IntVal) & {
+  void setPointerAndInt(PointerTy PtrVal, IntType IntVal) LLVM_LVALUE_FUNCTION {
     Value = Info::updateInt(Info::updatePointer(0, PtrVal),
                             static_cast<intptr_t>(IntVal));
   }
@@ -91,7 +90,7 @@ public:
 
   void *getOpaqueValue() const { return reinterpret_cast<void *>(Value); }
 
-  void setFromOpaqueValue(void *Val) & {
+  void setFromOpaqueValue(void *Val) LLVM_LVALUE_FUNCTION {
     Value = reinterpret_cast<intptr_t>(Val);
   }
 
@@ -193,7 +192,7 @@ struct PointerIntPairInfo {
 
 // Provide specialization of DenseMapInfo for PointerIntPair.
 template <typename PointerTy, unsigned IntBits, typename IntType>
-struct DenseMapInfo<PointerIntPair<PointerTy, IntBits, IntType>, void> {
+struct DenseMapInfo<PointerIntPair<PointerTy, IntBits, IntType>> {
   using Ty = PointerIntPair<PointerTy, IntBits, IntType>;
 
   static Ty getEmptyKey() {

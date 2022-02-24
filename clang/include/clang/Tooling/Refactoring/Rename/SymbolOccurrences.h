@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_TOOLING_REFACTORING_RENAME_SYMBOLOCCURRENCES_H
-#define LLVM_CLANG_TOOLING_REFACTORING_RENAME_SYMBOLOCCURRENCES_H
+#ifndef LLVM_CLANG_TOOLING_REFACTOR_RENAME_SYMBOL_OCCURRENCES_H
+#define LLVM_CLANG_TOOLING_REFACTOR_RENAME_SYMBOL_OCCURRENCES_H
 
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
@@ -88,4 +88,4 @@ using SymbolOccurrences = std::vector<SymbolOccurrence>;
 } // end namespace tooling
 } // end namespace clang
 
-#endif // LLVM_CLANG_TOOLING_REFACTORING_RENAME_SYMBOLOCCURRENCES_H
+#endif // LLVM_CLANG_TOOLING_REFACTOR_RENAME_SYMBOL_OCCURRENCES_H

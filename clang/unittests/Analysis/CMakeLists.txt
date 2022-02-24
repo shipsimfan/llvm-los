@@ -28,5 +28,3 @@ target_link_libraries(ClangAnalysisTests
   PRIVATE
   LLVMTestingSupport
   )
-
-add_subdirectory(FlowSensitive)

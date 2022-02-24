@@ -487,18 +487,18 @@ char SIWholeQuadMode::scanInstructions(MachineFunction &MF,
   bool WQMOutputs = MF.getFunction().hasFnAttribute("amdgpu-ps-wqm-outputs");
   SmallVector<MachineInstr *, 4> SetInactiveInstrs;
   SmallVector<MachineInstr *, 4> SoftWQMInstrs;
-  bool HasImplicitDerivatives =
-      MF.getFunction().getCallingConv() == CallingConv::AMDGPU_PS;
 
   // We need to visit the basic blocks in reverse post-order so that we visit
   // defs before uses, in particular so that we don't accidentally mark an
   // instruction as needing e.g. WQM before visiting it and realizing it needs
   // WQM disabled.
   ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
-  for (MachineBasicBlock *MBB : RPOT) {
-    BlockInfo &BBI = Blocks[MBB];
+  for (auto BI = RPOT.begin(), BE = RPOT.end(); BI != BE; ++BI) {
+    MachineBasicBlock &MBB = **BI;
+    BlockInfo &BBI = Blocks[&MBB];
 
-    for (MachineInstr &MI : *MBB) {
+    for (auto II = MBB.begin(), IE = MBB.end(); II != IE; ++II) {
+      MachineInstr &MI = *II;
       InstrInfo &III = Instructions[&MI];
       unsigned Opcode = MI.getOpcode();
       char Flags = 0;
@@ -506,11 +506,6 @@ char SIWholeQuadMode::scanInstructions(MachineFunction &MF,
       if (TII->isWQM(Opcode)) {
         // If LOD is not supported WQM is not needed.
         if (!ST->hasExtendedImageInsts())
-          continue;
-        // Only generate implicit WQM if implicit derivatives are required.
-        // This avoids inserting unintended WQM if a shader type without
-        // implicit derivatives uses an image sampling instruction.
-        if (!HasImplicitDerivatives)
           continue;
         // Sampling instructions don't need to produce results for all pixels
         // in a quad, they just require all inputs of a quad to have been
@@ -560,7 +555,7 @@ char SIWholeQuadMode::scanInstructions(MachineFunction &MF,
         BBI.Needs |= StateExact;
         if (!(BBI.InNeeds & StateExact)) {
           BBI.InNeeds |= StateExact;
-          Worklist.push_back(MBB);
+          Worklist.push_back(&MBB);
         }
         GlobalFlags |= StateExact;
         III.Disabled = StateWQM | StateStrict;
@@ -861,22 +856,21 @@ MachineInstr *SIWholeQuadMode::lowerKillF32(MachineBasicBlock &MBB,
   MachineInstr *VcmpMI;
   const MachineOperand &Op0 = MI.getOperand(0);
   const MachineOperand &Op1 = MI.getOperand(1);
-
-  // VCC represents lanes killed.
-  Register VCC = ST->isWave32() ? AMDGPU::VCC_LO : AMDGPU::VCC;
-
   if (TRI->isVGPR(*MRI, Op0.getReg())) {
     Opcode = AMDGPU::getVOPe32(Opcode);
     VcmpMI = BuildMI(MBB, &MI, DL, TII->get(Opcode)).add(Op1).add(Op0);
   } else {
     VcmpMI = BuildMI(MBB, &MI, DL, TII->get(Opcode))
-                 .addReg(VCC, RegState::Define)
+                 .addReg(AMDGPU::VCC, RegState::Define)
                  .addImm(0) // src0 modifiers
                  .add(Op1)
                  .addImm(0) // src1 modifiers
                  .add(Op0)
                  .addImm(0); // omod
   }
+
+  // VCC represents lanes killed.
+  Register VCC = ST->isWave32() ? AMDGPU::VCC_LO : AMDGPU::VCC;
 
   MachineInstr *MaskUpdateMI =
       BuildMI(MBB, MI, DL, TII->get(AndN2Opc), LiveMaskReg)
@@ -929,7 +923,7 @@ MachineInstr *SIWholeQuadMode::lowerKillI1(MachineBasicBlock &MBB,
     } else {
       // Static: kill does nothing
       MachineInstr *NewTerm = nullptr;
-      if (MI.getOpcode() == AMDGPU::SI_DEMOTE_I1) {
+      if (IsDemote) {
         LIS->RemoveMachineInstrFromMaps(MI);
       } else {
         assert(MBB.succ_size() == 1);
@@ -969,7 +963,7 @@ MachineInstr *SIWholeQuadMode::lowerKillI1(MachineBasicBlock &MBB,
   MachineInstr *WQMMaskMI = nullptr;
   Register LiveMaskWQM;
   if (IsDemote) {
-    // Demote - deactivate quads with only helper lanes
+    // Demotes deactive quads with only helper lanes
     LiveMaskWQM = MRI->createVirtualRegister(TRI->getBoolRC());
     WQMMaskMI =
         BuildMI(MBB, MI, DL, TII->get(WQMOpc), LiveMaskWQM).addReg(LiveMaskReg);
@@ -977,7 +971,7 @@ MachineInstr *SIWholeQuadMode::lowerKillI1(MachineBasicBlock &MBB,
                   .addReg(Exec)
                   .addReg(LiveMaskWQM);
   } else {
-    // Kill - deactivate lanes no longer in live mask
+    // Kills deactivate lanes
     if (Op.isImm()) {
       unsigned MovOpc = ST->isWave32() ? AMDGPU::S_MOV_B32 : AMDGPU::S_MOV_B64;
       NewTerm = BuildMI(MBB, &MI, DL, TII->get(MovOpc), Exec).addImm(0);
@@ -1035,8 +1029,11 @@ void SIWholeQuadMode::lowerBlock(MachineBasicBlock &MBB) {
   SmallVector<MachineInstr *, 4> SplitPoints;
   char State = BI.InitialState;
 
-  for (MachineInstr &MI : llvm::make_early_inc_range(
-           llvm::make_range(MBB.getFirstNonPHI(), MBB.end()))) {
+  auto II = MBB.getFirstNonPHI(), IE = MBB.end();
+  while (II != IE) {
+    auto Next = std::next(II);
+    MachineInstr &MI = *II;
+
     if (StateTransition.count(&MI))
       State = StateTransition[&MI];
 
@@ -1054,6 +1051,8 @@ void SIWholeQuadMode::lowerBlock(MachineBasicBlock &MBB) {
     }
     if (SplitPoint)
       SplitPoints.push_back(SplitPoint);
+
+    II = Next;
   }
 
   // Perform splitting after instruction scan to simplify iteration.

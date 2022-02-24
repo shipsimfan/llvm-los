@@ -17,7 +17,6 @@
 #include "polly/CodeGen/RuntimeDebugBuilder.h"
 #include "polly/Options.h"
 #include "polly/ScopInfo.h"
-#include "polly/Support/ISLTools.h"
 #include "polly/Support/ScopHelper.h"
 #include "polly/Support/VirtualInstruction.h"
 #include "llvm/Analysis/LoopInfo.h"
@@ -279,8 +278,8 @@ Value *BlockGenerator::generateLocationAccessed(
     // the newly generated pointer.
     auto OldPtrTy = ExpectedType->getPointerTo();
     auto NewPtrTy = Address->getType();
-    OldPtrTy = PointerType::getWithSamePointeeType(
-        OldPtrTy, NewPtrTy->getPointerAddressSpace());
+    OldPtrTy = PointerType::get(OldPtrTy->getElementType(),
+                                NewPtrTy->getPointerAddressSpace());
 
     if (OldPtrTy != NewPtrTy)
       Address = Builder.CreateBitOrPointerCast(Address, OldPtrTy);
@@ -416,7 +415,7 @@ void BlockGenerator::removeDeadInstructions(BasicBlock *BB, ValueMapT &BBMap) {
 }
 
 void BlockGenerator::copyStmt(ScopStmt &Stmt, LoopToScevMapT &LTS,
-                              __isl_keep isl_id_to_ast_expr *NewAccesses) {
+                              isl_id_to_ast_expr *NewAccesses) {
   assert(Stmt.isBlockStmt() &&
          "Only block statements can be copied by the block generator");
 
@@ -689,11 +688,13 @@ void BlockGenerator::generateBeginStmtTrace(ScopStmt &Stmt, LoopToScevMapT &LTS,
   Values.push_back(RuntimeDebugBuilder::getPrintableString(Builder, "("));
 
   // Add the coordinate of the statement instance.
-  for (unsigned i : rangeIslSize(0, ScheduleMultiPwAff.dim(isl::dim::out))) {
+  int DomDims = ScheduleMultiPwAff.dim(isl::dim::out);
+  for (int i = 0; i < DomDims; i += 1) {
     if (i > 0)
       Values.push_back(RuntimeDebugBuilder::getPrintableString(Builder, ","));
 
-    isl::ast_expr IsInSet = RestrictedBuild.expr_from(ScheduleMultiPwAff.at(i));
+    isl::ast_expr IsInSet =
+        RestrictedBuild.expr_from(ScheduleMultiPwAff.get_pw_aff(i));
     Values.push_back(ExprBuilder->create(IsInSet.copy()));
   }
 
@@ -800,9 +801,9 @@ void BlockGenerator::generateScalarStores(
 
           // The new Val might have a different type than the old Val due to
           // ScalarEvolution looking through bitcasts.
-          Address = Builder.CreateBitOrPointerCast(
-              Address, Val->getType()->getPointerTo(
-                           Address->getType()->getPointerAddressSpace()));
+          if (Val->getType() != Address->getType()->getPointerElementType())
+            Address = Builder.CreateBitOrPointerCast(
+                Address, Val->getType()->getPointerTo());
 
           Builder.CreateStore(Val, Address);
         });
@@ -1453,7 +1454,7 @@ static BasicBlock *findExitDominator(DominatorTree &DT, Region *R) {
 }
 
 void RegionGenerator::copyStmt(ScopStmt &Stmt, LoopToScevMapT &LTS,
-                               __isl_keep isl_id_to_ast_expr *IdToAstExp) {
+                               isl_id_to_ast_expr *IdToAstExp) {
   assert(Stmt.isRegionStmt() &&
          "Only region statements can be copied by the region generator");
 

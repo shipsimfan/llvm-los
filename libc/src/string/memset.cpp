@@ -8,13 +8,13 @@
 
 #include "src/string/memset.h"
 #include "src/__support/common.h"
-#include "src/string/memory_utils/memset_implementations.h"
+#include "src/string/memory_utils/memset_utils.h"
 
 namespace __llvm_libc {
 
 LLVM_LIBC_FUNCTION(void *, memset, (void *dst, int value, size_t count)) {
-  inline_memset(reinterpret_cast<char *>(dst),
-                static_cast<unsigned char>(value), count);
+  GeneralPurposeMemset(reinterpret_cast<char *>(dst),
+                       static_cast<unsigned char>(value), count);
   return dst;
 }
 

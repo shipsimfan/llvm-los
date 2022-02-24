@@ -39,7 +39,7 @@ LSUnitBase::LSUnitBase(const MCSchedModel &SM, unsigned LQ, unsigned SQ,
   }
 }
 
-LSUnitBase::~LSUnitBase() = default;
+LSUnitBase::~LSUnitBase() {}
 
 void LSUnitBase::cycleEvent() {
   for (const std::pair<unsigned, std::unique_ptr<MemoryGroup>> &G : Groups)
@@ -68,8 +68,7 @@ void LSUnitBase::dump() const {
 
 unsigned LSUnit::dispatch(const InstRef &IR) {
   const InstrDesc &Desc = IR.getInstruction()->getDesc();
-  bool IsStoreBarrier = IR.getInstruction()->isAStoreBarrier();
-  bool IsLoadBarrier = IR.getInstruction()->isALoadBarrier();
+  unsigned IsMemBarrier = Desc.HasSideEffects;
   assert((Desc.MayLoad || Desc.MayStore) && "Not a memory operation!");
 
   if (Desc.MayLoad)
@@ -112,12 +111,12 @@ unsigned LSUnit::dispatch(const InstRef &IR) {
 
 
     CurrentStoreGroupID = NewGID;
-    if (IsStoreBarrier)
+    if (IsMemBarrier)
       CurrentStoreBarrierGroupID = NewGID;
 
     if (Desc.MayLoad) {
       CurrentLoadGroupID = NewGID;
-      if (IsLoadBarrier)
+      if (IsMemBarrier)
         CurrentLoadBarrierGroupID = NewGID;
     }
 
@@ -142,7 +141,7 @@ unsigned LSUnit::dispatch(const InstRef &IR) {
   //    However that group has already started execution, so we cannot add
   //    this load to it.
   bool ShouldCreateANewGroup =
-      IsLoadBarrier || !ImmediateLoadDominator ||
+      IsMemBarrier || !ImmediateLoadDominator ||
       CurrentLoadBarrierGroupID == ImmediateLoadDominator ||
       ImmediateLoadDominator <= CurrentStoreGroupID ||
       getGroup(ImmediateLoadDominator).isExecuting();
@@ -162,7 +161,7 @@ unsigned LSUnit::dispatch(const InstRef &IR) {
     }
 
     // A load barrier may not pass a previous load or load barrier.
-    if (IsLoadBarrier) {
+    if (IsMemBarrier) {
       if (ImmediateLoadDominator) {
         MemoryGroup &LoadGroup = getGroup(ImmediateLoadDominator);
         LLVM_DEBUG(dbgs() << "[LSUnit]: GROUP DEP: ("
@@ -182,7 +181,7 @@ unsigned LSUnit::dispatch(const InstRef &IR) {
     }
 
     CurrentLoadGroupID = NewGID;
-    if (IsLoadBarrier)
+    if (IsMemBarrier)
       CurrentLoadBarrierGroupID = NewGID;
     return NewGID;
   }

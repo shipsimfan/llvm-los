@@ -5,7 +5,7 @@
 // constant.
 
 void bar();
-void foo(void) {
+void foo() {
   // CHECK: private unnamed_addr constant
   char Blah[] = "asdlfkajsdlfkajsd;lfkajds;lfkjasd;flkajsd;lkfja;sdlkfjasd";
   bar(Blah);

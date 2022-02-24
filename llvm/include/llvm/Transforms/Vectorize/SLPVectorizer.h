@@ -94,11 +94,15 @@ private:
   bool tryToVectorizePair(Value *A, Value *B, slpvectorizer::BoUpSLP &R);
 
   /// Try to vectorize a list of operands.
-  /// \param LimitForRegisterSize Vectorize only using maximal allowed register
-  /// size.
+  /// When \p InsertUses is provided and its entries are non-zero
+  /// then users of \p VL are known to be InsertElement instructions
+  /// each associated with same VL entry index. Their cost is then
+  /// used to adjust cost of the vectorization assuming instcombine pass
+  /// then optimizes ExtractElement-InsertElement sequence.
   /// \returns true if a value was vectorized.
   bool tryToVectorizeList(ArrayRef<Value *> VL, slpvectorizer::BoUpSLP &R,
-                          bool LimitForRegisterSize = false);
+                          bool AllowReorder = false,
+                          ArrayRef<Value *> InsertUses = None);
 
   /// Try to vectorize a chain that may start at the operands of \p I.
   bool tryToVectorize(Instruction *I, slpvectorizer::BoUpSLP &R);

@@ -16,6 +16,7 @@
 
 #include "lld/Common/ErrorHandler.h"
 #include "llvm/BinaryFormat/ELF.h"
+#include "llvm/Object/ELF.h"
 #include "llvm/Support/MipsABIFlags.h"
 
 using namespace llvm;

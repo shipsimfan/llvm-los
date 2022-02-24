@@ -6,9 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
@@ -21,7 +20,7 @@
 #include "llvm/IR/ModuleSlotTracker.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
@@ -34,10 +33,8 @@ namespace {
 #include "MFCommon.inc"
 
 std::unique_ptr<MCContext> createMCContext(MCAsmInfo *AsmInfo) {
-  Triple TheTriple(/*ArchStr=*/"", /*VendorStr=*/"", /*OSStr=*/"",
-                   /*EnvironmentStr=*/"elf");
-  return std::make_unique<MCContext>(TheTriple, AsmInfo, nullptr, nullptr,
-                                     nullptr, nullptr, false);
+  return std::make_unique<MCContext>(
+      AsmInfo, nullptr, nullptr, nullptr, nullptr, false);
 }
 
 // This test makes sure that MachineInstr::isIdenticalTo handles Defs correctly
@@ -384,32 +381,6 @@ TEST(MachineInstrExtraInfo, RemoveExtraInfo) {
   ASSERT_FALSE(MI->getPreInstrSymbol());
   ASSERT_FALSE(MI->getPostInstrSymbol());
   ASSERT_FALSE(MI->getHeapAllocMarker());
-}
-
-TEST(MachineInstrDebugValue, AddDebugValueOperand) {
-  LLVMContext Ctx;
-  Module Mod("Module", Ctx);
-  auto MF = createMachineFunction(Ctx, Mod);
-
-  for (const unsigned short Opcode :
-       {TargetOpcode::DBG_VALUE, TargetOpcode::DBG_VALUE_LIST,
-        TargetOpcode::DBG_INSTR_REF, TargetOpcode::DBG_PHI,
-        TargetOpcode::DBG_LABEL}) {
-    const MCInstrDesc MCID = {
-        Opcode, 0,       0,
-        0,      0,       (1ULL << MCID::Pseudo) | (1ULL << MCID::Variadic),
-        0,      nullptr, nullptr,
-        nullptr};
-
-    auto *MI = MF->CreateMachineInstr(MCID, DebugLoc());
-    MI->addOperand(*MF, MachineOperand::CreateReg(0, /*isDef*/ false));
-
-    MI->addOperand(*MF, MachineOperand::CreateImm(0));
-    MI->getOperand(1).ChangeToRegister(0, false);
-
-    ASSERT_TRUE(MI->getOperand(0).isDebug());
-    ASSERT_TRUE(MI->getOperand(1).isDebug());
-  }
 }
 
 static_assert(std::is_trivially_copyable<MCOperand>::value,

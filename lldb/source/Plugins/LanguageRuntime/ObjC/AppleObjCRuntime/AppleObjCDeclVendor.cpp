@@ -14,7 +14,6 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 
 #include "clang/AST/ASTContext.h"
@@ -32,8 +31,8 @@ public:
   bool FindExternalVisibleDeclsByName(const clang::DeclContext *decl_ctx,
                                       clang::DeclarationName name) override {
 
-    Log *log(GetLog(
-        LLDBLog::Expressions)); // FIXME - a more appropriate log channel?
+    Log *log(GetLogIfAllCategoriesSet(
+        LIBLLDB_LOG_EXPRESSIONS)); // FIXME - a more appropriate log channel?
 
     if (log) {
       LLDB_LOGF(log,
@@ -69,8 +68,8 @@ public:
 
   void CompleteType(clang::TagDecl *tag_decl) override {
 
-    Log *log(GetLog(
-        LLDBLog::Expressions)); // FIXME - a more appropriate log channel?
+    Log *log(GetLogIfAllCategoriesSet(
+        LIBLLDB_LOG_EXPRESSIONS)); // FIXME - a more appropriate log channel?
 
     LLDB_LOGF(log,
               "AppleObjCExternalASTSource::CompleteType on "
@@ -81,12 +80,14 @@ public:
     LLDB_LOG(log, "  AOEAS::CT Before:\n{1}", ClangUtil::DumpDecl(tag_decl));
 
     LLDB_LOG(log, "  AOEAS::CT After:{1}", ClangUtil::DumpDecl(tag_decl));
+
+    return;
   }
 
   void CompleteType(clang::ObjCInterfaceDecl *interface_decl) override {
 
-    Log *log(GetLog(
-        LLDBLog::Expressions)); // FIXME - a more appropriate log channel?
+    Log *log(GetLogIfAllCategoriesSet(
+        LIBLLDB_LOG_EXPRESSIONS)); // FIXME - a more appropriate log channel?
 
     if (log) {
       LLDB_LOGF(log,
@@ -106,6 +107,7 @@ public:
       LLDB_LOGF(log, "  [CT] After:");
       LLDB_LOG(log, "    [CT] {0}", ClangUtil::DumpDecl(interface_decl));
     }
+    return;
   }
 
   bool layoutRecordType(
@@ -395,8 +397,8 @@ private:
 };
 
 bool AppleObjCDeclVendor::FinishDecl(clang::ObjCInterfaceDecl *interface_decl) {
-  Log *log(
-      GetLog(LLDBLog::Expressions)); // FIXME - a more appropriate log channel?
+  Log *log(GetLogIfAllCategoriesSet(
+      LIBLLDB_LOG_EXPRESSIONS)); // FIXME - a more appropriate log channel?
 
   ClangASTMetadata *metadata = m_ast_ctx.GetMetadata(interface_decl);
   ObjCLanguageRuntime::ObjCISA objc_isa = 0;
@@ -526,8 +528,8 @@ uint32_t AppleObjCDeclVendor::FindDecls(ConstString name, bool append,
                                         uint32_t max_matches,
                                         std::vector<CompilerDecl> &decls) {
 
-  Log *log(
-      GetLog(LLDBLog::Expressions)); // FIXME - a more appropriate log channel?
+  Log *log(GetLogIfAllCategoriesSet(
+      LIBLLDB_LOG_EXPRESSIONS)); // FIXME - a more appropriate log channel?
 
   LLDB_LOGF(log, "AppleObjCDeclVendor::FindDecls ('%s', %s, %u, )",
             (const char *)name.AsCString(), append ? "true" : "false",

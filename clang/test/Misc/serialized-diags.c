@@ -1,15 +1,15 @@
-void foo(void) {
+void foo() {
   int voodoo;
   voodoo = voodoo + 1;
 }
 
-void bar(void) {
+void bar() {
   int dragon;
   dragon = dragon + 1
 }
 
 // Test handling of FixIts that only remove text.
-int baz(void);
+int baz();
 void qux(int x) {
   if ((x == baz()))
    return;
@@ -18,7 +18,7 @@ void qux(int x) {
 // Test handling of macros.
 void taz(int x, int y);
 #define false 0
-void testMacro(void) {
+void testMacro() {
   taz(0, 0, false);
 }
 
@@ -26,7 +26,7 @@ void testMacro(void) {
 #include "serialized-diags.h"
 
 // Test handling of warnings that have empty fixits.
-void rdar11040133(void) {
+void rdar11040133() {
   unsigned x;
 }
 

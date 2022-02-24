@@ -10,6 +10,7 @@
 #define LLDB_UTILITY_LOG_H
 
 #include "lldb/Utility/Flags.h"
+#include "lldb/Utility/Logging.h"
 #include "lldb/lldb-defines.h"
 
 #include "llvm/ADT/ArrayRef.h"
@@ -47,31 +48,11 @@ namespace lldb_private {
 
 class Log final {
 public:
-  /// The underlying type of all log channel enums. Declare them as:
-  /// enum class MyLog : MaskType {
-  ///   Channel0 = Log::ChannelFlag<0>,
-  ///   Channel1 = Log::ChannelFlag<1>,
-  ///   ...,
-  ///   LLVM_MARK_AS_BITMASK_ENUM(LastChannel),
-  /// };
-  using MaskType = uint64_t;
-
-  template <MaskType Bit>
-  static constexpr MaskType ChannelFlag = MaskType(1) << Bit;
-
   // Description of a log channel category.
   struct Category {
     llvm::StringLiteral name;
     llvm::StringLiteral description;
-    MaskType flag;
-
-    template <typename Cat>
-    constexpr Category(llvm::StringLiteral name,
-                       llvm::StringLiteral description, Cat mask)
-        : name(name), description(description), flag(MaskType(mask)) {
-      static_assert(
-          std::is_same<Log::MaskType, std::underlying_type_t<Cat>>::value, "");
-    }
+    uint32_t flag;
   };
 
   // This class describes a log channel. It also encapsulates the behavior
@@ -82,22 +63,29 @@ public:
 
   public:
     const llvm::ArrayRef<Category> categories;
-    const MaskType default_flags;
+    const uint32_t default_flags;
 
-    template <typename Cat>
     constexpr Channel(llvm::ArrayRef<Log::Category> categories,
-                      Cat default_flags)
+                      uint32_t default_flags)
         : log_ptr(nullptr), categories(categories),
-          default_flags(MaskType(default_flags)) {
-      static_assert(
-          std::is_same<Log::MaskType, std::underlying_type_t<Cat>>::value, "");
+          default_flags(default_flags) {}
+
+    // This function is safe to call at any time. If the channel is disabled
+    // after (or concurrently with) this function returning a non-null Log
+    // pointer, it is still safe to attempt to write to the Log object -- the
+    // output will be discarded.
+    Log *GetLogIfAll(uint32_t mask) {
+      Log *log = log_ptr.load(std::memory_order_relaxed);
+      if (log && log->GetMask().AllSet(mask))
+        return log;
+      return nullptr;
     }
 
     // This function is safe to call at any time. If the channel is disabled
     // after (or concurrently with) this function returning a non-null Log
     // pointer, it is still safe to attempt to write to the Log object -- the
     // output will be discarded.
-    Log *GetLog(MaskType mask) {
+    Log *GetLogIfAny(uint32_t mask) {
       Log *log = log_ptr.load(std::memory_order_relaxed);
       if (log && log->GetMask().AnySet(mask))
         return log;
@@ -105,6 +93,8 @@ public:
     }
   };
 
+
+  static void Initialize();
 
   // Static accessors for logging channels
   static void Register(llvm::StringRef name, Channel &channel);
@@ -190,7 +180,7 @@ private:
 
   std::shared_ptr<llvm::raw_ostream> m_stream_sp;
   std::atomic<uint32_t> m_options{0};
-  std::atomic<MaskType> m_mask{0};
+  std::atomic<uint32_t> m_mask{0};
 
   void WriteHeader(llvm::raw_ostream &OS, llvm::StringRef file,
                    llvm::StringRef function);
@@ -221,22 +211,11 @@ private:
   static uint32_t GetFlags(llvm::raw_ostream &stream, const ChannelMap::value_type &entry,
                            llvm::ArrayRef<const char *> categories);
 
+  static void DisableLoggingChild();
+
   Log(const Log &) = delete;
   void operator=(const Log &) = delete;
 };
-
-// Must be specialized for a particular log type.
-template <typename Cat> Log::Channel &LogChannelFor() = delete;
-
-/// Retrieve the Log object for the channel associated with the given log enum.
-///
-/// Returns a valid Log object if any of the provided categories are enabled.
-/// Otherwise, returns nullptr.
-template <typename Cat> Log *GetLog(Cat mask) {
-  static_assert(std::is_same<Log::MaskType, std::underlying_type_t<Cat>>::value,
-                "");
-  return LogChannelFor<Cat>().GetLog(Log::MaskType(mask));
-}
 
 } // namespace lldb_private
 
@@ -295,5 +274,3 @@ template <typename Cat> Log *GetLog(Cat mask) {
   } while (0)
 
 #endif // LLDB_UTILITY_LOG_H
-
-// TODO: Remove this and fix includes everywhere.

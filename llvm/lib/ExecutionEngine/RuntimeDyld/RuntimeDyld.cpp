@@ -66,7 +66,7 @@ std::error_code RuntimeDyldError::convertToErrorCode() const {
 }
 
 // Empty out-of-line virtual destructor as the key function.
-RuntimeDyldImpl::~RuntimeDyldImpl() = default;
+RuntimeDyldImpl::~RuntimeDyldImpl() {}
 
 // Pin LoadedObjectInfo's vtables to this file.
 void RuntimeDyld::LoadedObjectInfo::anchor() {}
@@ -124,10 +124,8 @@ void RuntimeDyldImpl::resolveRelocations() {
   std::lock_guard<sys::Mutex> locked(lock);
 
   // Print out the sections prior to relocation.
-  LLVM_DEBUG({
-    for (SectionEntry &S : Sections)
-      dumpSectionMemory(S, "before relocations");
-  });
+  LLVM_DEBUG(for (int i = 0, e = Sections.size(); i != e; ++i)
+                 dumpSectionMemory(Sections[i], "before relocations"););
 
   // First, resolve relocations associated with external symbols.
   if (auto Err = resolveExternalSymbols()) {
@@ -138,23 +136,21 @@ void RuntimeDyldImpl::resolveRelocations() {
   resolveLocalRelocations();
 
   // Print out sections after relocation.
-  LLVM_DEBUG({
-    for (SectionEntry &S : Sections)
-      dumpSectionMemory(S, "after relocations");
-  });
+  LLVM_DEBUG(for (int i = 0, e = Sections.size(); i != e; ++i)
+                 dumpSectionMemory(Sections[i], "after relocations"););
 }
 
 void RuntimeDyldImpl::resolveLocalRelocations() {
   // Iterate over all outstanding relocations
-  for (const auto &Rel : Relocations) {
+  for (auto it = Relocations.begin(), e = Relocations.end(); it != e; ++it) {
     // The Section here (Sections[i]) refers to the section in which the
     // symbol for the relocation is located.  The SectionID in the relocation
     // entry provides the section to which the relocation will be applied.
-    unsigned Idx = Rel.first;
+    unsigned Idx = it->first;
     uint64_t Addr = getSectionLoadAddress(Idx);
     LLVM_DEBUG(dbgs() << "Resolving relocations Section #" << Idx << "\t"
                       << format("%p", (uintptr_t)Addr) << "\n");
-    resolveRelocationList(Rel.second, Addr);
+    resolveRelocationList(it->second, Addr);
   }
   Relocations.clear();
 }
@@ -461,9 +457,9 @@ static uint64_t
 computeAllocationSizeForSections(std::vector<uint64_t> &SectionSizes,
                                  uint64_t Alignment) {
   uint64_t TotalSize = 0;
-  for (uint64_t SectionSize : SectionSizes) {
+  for (size_t Idx = 0, Cnt = SectionSizes.size(); Idx < Cnt; Idx++) {
     uint64_t AlignedSize =
-        (SectionSize + Alignment - 1) / Alignment * Alignment;
+        (SectionSizes[Idx] + Alignment - 1) / Alignment * Alignment;
     TotalSize += AlignedSize;
   }
   return TotalSize;
@@ -524,13 +520,6 @@ static bool isZeroInit(const SectionRef Section) {
          SectionType == MachO::S_GB_ZEROFILL;
 }
 
-static bool isTLS(const SectionRef Section) {
-  const ObjectFile *Obj = Section.getObject();
-  if (isa<object::ELFObjectFileBase>(Obj))
-    return ELFSectionRef(Section).getFlags() & ELF::SHF_TLS;
-  return false;
-}
-
 // Compute an upper bound of the memory size that is required to load all
 // sections
 Error RuntimeDyldImpl::computeTotalAllocSize(const ObjectFile &Obj,
@@ -560,7 +549,6 @@ Error RuntimeDyldImpl::computeTotalAllocSize(const ObjectFile &Obj,
       unsigned Alignment = (unsigned)Alignment64 & 0xffffffffL;
       bool IsCode = Section.isText();
       bool IsReadOnly = isReadOnlyData(Section);
-      bool IsTLS = isTLS(Section);
 
       Expected<StringRef> NameOrErr = Section.getName();
       if (!NameOrErr)
@@ -594,7 +582,7 @@ Error RuntimeDyldImpl::computeTotalAllocSize(const ObjectFile &Obj,
       } else if (IsReadOnly) {
         RODataAlign = std::max(RODataAlign, Alignment);
         ROSectionSizes.push_back(SectionSize);
-      } else if (!IsTLS) {
+      } else {
         RWDataAlign = std::max(RWDataAlign, Alignment);
         RWSectionSizes.push_back(SectionSize);
       }
@@ -667,10 +655,6 @@ unsigned RuntimeDyldImpl::computeGOTSize(const ObjectFile &Obj) {
 // compute stub buffer size for the given section
 unsigned RuntimeDyldImpl::computeSectionStubBufSize(const ObjectFile &Obj,
                                                     const SectionRef &Section) {
-  if (!MemMgr.allowStubAllocation()) {
-    return 0;
-  }
-
   unsigned StubSize = getMaxStubSize();
   if (StubSize == 0) {
     return 0;
@@ -684,7 +668,7 @@ unsigned RuntimeDyldImpl::computeSectionStubBufSize(const ObjectFile &Obj,
 
     Expected<section_iterator> RelSecOrErr = SI->getRelocatedSection();
     if (!RelSecOrErr)
-      report_fatal_error(Twine(toString(RelSecOrErr.takeError())));
+      report_fatal_error(toString(RelSecOrErr.takeError()));
 
     section_iterator RelSecI = *RelSecOrErr;
     if (!(RelSecI == Section))
@@ -812,7 +796,6 @@ RuntimeDyldImpl::emitSection(const ObjectFile &Obj,
   bool IsVirtual = Section.isVirtual();
   bool IsZeroInit = isZeroInit(Section);
   bool IsReadOnly = isReadOnlyData(Section);
-  bool IsTLS = isTLS(Section);
   uint64_t DataSize = Section.getSize();
 
   // An alignment of 0 (at least with ELF) is identical to an alignment of 1,
@@ -836,7 +819,6 @@ RuntimeDyldImpl::emitSection(const ObjectFile &Obj,
   uintptr_t Allocate;
   unsigned SectionID = Sections.size();
   uint8_t *Addr;
-  uint64_t LoadAddress = 0;
   const char *pData = nullptr;
 
   // If this section contains any bits (i.e. isn't a virtual or bss section),
@@ -865,17 +847,10 @@ RuntimeDyldImpl::emitSection(const ObjectFile &Obj,
     Allocate = DataSize + PaddingSize + StubBufSize;
     if (!Allocate)
       Allocate = 1;
-    if (IsTLS) {
-      auto TLSSection =
-          MemMgr.allocateTLSSection(Allocate, Alignment, SectionID, Name);
-      Addr = TLSSection.InitializationImage;
-      LoadAddress = TLSSection.Offset;
-    } else if (IsCode) {
-      Addr = MemMgr.allocateCodeSection(Allocate, Alignment, SectionID, Name);
-    } else {
-      Addr = MemMgr.allocateDataSection(Allocate, Alignment, SectionID, Name,
-                                        IsReadOnly);
-    }
+    Addr = IsCode ? MemMgr.allocateCodeSection(Allocate, Alignment, SectionID,
+                                               Name)
+                  : MemMgr.allocateDataSection(Allocate, Alignment, SectionID,
+                                               Name, IsReadOnly);
     if (!Addr)
       report_fatal_error("Unable to allocate section memory!");
 
@@ -918,10 +893,6 @@ RuntimeDyldImpl::emitSection(const ObjectFile &Obj,
   Sections.push_back(
       SectionEntry(Name, Addr, DataSize, Allocate, (uintptr_t)pData));
 
-  // The load address of a TLS section is not equal to the address of its
-  // initialization image
-  if (IsTLS)
-    Sections.back().setLoadAddress(LoadAddress);
   // Debug info sections are linked as if their load address was zero
   if (!IsRequired)
     Sections.back().setLoadAddress(0);
@@ -1142,8 +1113,8 @@ void RuntimeDyldImpl::applyExternalSymbolRelocations(
       }
 
       // FIXME: Implement error handling that doesn't kill the host program!
-      if (!Addr && !Resolver.allowsZeroSymbols())
-        report_fatal_error(Twine("Program used external function '") + Name +
+      if (!Addr)
+        report_fatal_error("Program used external function '" + Name +
                            "' which could not be resolved!");
 
       // If Resolver returned UINT64_MAX, the client wants to handle this symbol
@@ -1286,14 +1257,6 @@ uint64_t RuntimeDyld::LoadedObjectInfo::getSectionLoadAddress(
   return 0;
 }
 
-RuntimeDyld::MemoryManager::TLSSection
-RuntimeDyld::MemoryManager::allocateTLSSection(uintptr_t Size,
-                                               unsigned Alignment,
-                                               unsigned SectionID,
-                                               StringRef SectionName) {
-  report_fatal_error("allocation of TLS not implemented");
-}
-
 void RuntimeDyld::MemoryManager::anchor() {}
 void JITSymbolResolver::anchor() {}
 void LegacyJITSymbolResolver::anchor() {}
@@ -1311,7 +1274,7 @@ RuntimeDyld::RuntimeDyld(RuntimeDyld::MemoryManager &MemMgr,
   ProcessAllSections = false;
 }
 
-RuntimeDyld::~RuntimeDyld() = default;
+RuntimeDyld::~RuntimeDyld() {}
 
 static std::unique_ptr<RuntimeDyldCOFF>
 createRuntimeDyldCOFF(

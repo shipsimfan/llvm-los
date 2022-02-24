@@ -113,7 +113,7 @@ MetadataStreamerV2::getAddressSpaceQualifier(
 
 ValueKind MetadataStreamerV2::getValueKind(Type *Ty, StringRef TypeQual,
                                            StringRef BaseTypeName) const {
-  if (TypeQual.contains("pipe"))
+  if (TypeQual.find("pipe") != StringRef::npos)
     return ValueKind::Pipe;
 
   return StringSwitch<ValueKind>(BaseTypeName)
@@ -201,11 +201,10 @@ MetadataStreamerV2::getHSACodeProps(const MachineFunction &MF,
   Align MaxKernArgAlign;
   HSACodeProps.mKernargSegmentSize = STM.getKernArgSegmentSize(F,
                                                                MaxKernArgAlign);
-  HSACodeProps.mKernargSegmentAlign =
-    std::max(MaxKernArgAlign, Align(4)).value();
-
   HSACodeProps.mGroupSegmentFixedSize = ProgramInfo.LDSSize;
   HSACodeProps.mPrivateSegmentFixedSize = ProgramInfo.ScratchSize;
+  HSACodeProps.mKernargSegmentAlign =
+      std::max(MaxKernArgAlign, Align(4)).value();
   HSACodeProps.mWavefrontSize = STM.getWavefrontSize();
   HSACodeProps.mNumSGPRs = ProgramInfo.NumSGPR;
   HSACodeProps.mNumVGPRs = ProgramInfo.NumVGPR;
@@ -280,12 +279,11 @@ void MetadataStreamerV2::emitKernelAttrs(const Function &Func) {
   }
 }
 
-void MetadataStreamerV2::emitKernelArgs(const Function &Func,
-                                        const GCNSubtarget &ST) {
+void MetadataStreamerV2::emitKernelArgs(const Function &Func) {
   for (auto &Arg : Func.args())
     emitKernelArg(Arg);
 
-  emitHiddenKernelArgs(Func, ST);
+  emitHiddenKernelArgs(Func);
 }
 
 void MetadataStreamerV2::emitKernelArg(const Argument &Arg) {
@@ -331,7 +329,8 @@ void MetadataStreamerV2::emitKernelArg(const Argument &Arg) {
   if (auto PtrTy = dyn_cast<PointerType>(Arg.getType())) {
     if (PtrTy->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS) {
       // FIXME: Should report this for all address spaces
-      PointeeAlign = Arg.getParamAlign().valueOrOne();
+      PointeeAlign = DL.getValueOrABITypeAlignment(Arg.getParamAlign(),
+                                                   PtrTy->getElementType());
     }
   }
 
@@ -381,9 +380,10 @@ void MetadataStreamerV2::emitKernelArg(const DataLayout &DL, Type *Ty,
   }
 }
 
-void MetadataStreamerV2::emitHiddenKernelArgs(const Function &Func,
-                                              const GCNSubtarget &ST) {
-  unsigned HiddenArgNumBytes = ST.getImplicitArgNumBytes(Func);
+void MetadataStreamerV2::emitHiddenKernelArgs(const Function &Func) {
+  int HiddenArgNumBytes =
+      getIntegerAttribute(Func, "amdgpu-implicitarg-num-bytes", 0);
+
   if (!HiddenArgNumBytes)
     return;
 
@@ -405,7 +405,7 @@ void MetadataStreamerV2::emitHiddenKernelArgs(const Function &Func,
   if (HiddenArgNumBytes >= 32) {
     if (Func.getParent()->getNamedMetadata("llvm.printf.fmts"))
       emitKernelArg(DL, Int8PtrTy, Align(8), ValueKind::HiddenPrintfBuffer);
-    else if (!Func.hasFnAttribute("amdgpu-no-hostcall-ptr")) {
+    else if (Func.getParent()->getFunction("__ockl_hostcall_internal")) {
       // The printf runtime binding pass should have ensured that hostcall and
       // printf are not used in the same module.
       assert(!Func.getParent()->getNamedMetadata("llvm.printf.fmts"));
@@ -464,12 +464,11 @@ void MetadataStreamerV2::emitKernel(const MachineFunction &MF,
   HSAMetadata.mKernels.push_back(Kernel::Metadata());
   auto &Kernel = HSAMetadata.mKernels.back();
 
-  const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   Kernel.mName = std::string(Func.getName());
   Kernel.mSymbolName = (Twine(Func.getName()) + Twine("@kd")).str();
   emitKernelLanguage(Func);
   emitKernelAttrs(Func);
-  emitKernelArgs(Func, ST);
+  emitKernelArgs(Func);
   HSAMetadata.mKernels.back().mCodeProps = CodeProps;
   HSAMetadata.mKernels.back().mDebugProps = DebugProps;
 }
@@ -534,7 +533,7 @@ MetadataStreamerV3::getAddressSpaceQualifier(unsigned AddressSpace) const {
 
 StringRef MetadataStreamerV3::getValueKind(Type *Ty, StringRef TypeQual,
                                            StringRef BaseTypeName) const {
-  if (TypeQual.contains("pipe"))
+  if (TypeQual.find("pipe") != StringRef::npos)
     return "pipe";
 
   return StringSwitch<StringRef>(BaseTypeName)
@@ -666,21 +665,16 @@ void MetadataStreamerV3::emitKernelAttrs(const Function &Func,
         Func.getFnAttribute("runtime-handle").getValueAsString().str(),
         /*Copy=*/true);
   }
-  if (Func.hasFnAttribute("device-init"))
-    Kern[".kind"] = Kern.getDocument()->getNode("init");
-  else if (Func.hasFnAttribute("device-fini"))
-    Kern[".kind"] = Kern.getDocument()->getNode("fini");
 }
 
-void MetadataStreamerV3::emitKernelArgs(const MachineFunction &MF,
+void MetadataStreamerV3::emitKernelArgs(const Function &Func,
                                         msgpack::MapDocNode Kern) {
-  auto &Func = MF.getFunction();
   unsigned Offset = 0;
   auto Args = HSAMetadataDoc->getArrayNode();
   for (auto &Arg : Func.args())
     emitKernelArg(Arg, Offset, Args);
 
-  emitHiddenKernelArgs(MF, Offset, Args);
+  emitHiddenKernelArgs(Func, Offset, Args);
 
   Kern[".args"] = Args;
 }
@@ -730,8 +724,10 @@ void MetadataStreamerV3::emitKernelArg(const Argument &Arg, unsigned &Offset,
 
   // FIXME: Need to distinguish in memory alignment from pointer alignment.
   if (auto PtrTy = dyn_cast<PointerType>(Ty)) {
-    if (PtrTy->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS)
-      PointeeAlign = Arg.getParamAlign().valueOrOne();
+    if (PtrTy->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS) {
+      PointeeAlign = DL.getValueOrABITypeAlignment(Arg.getParamAlign(),
+                                                   PtrTy->getElementType());
+    }
   }
 
   // There's no distinction between byval aggregates and raw aggregates.
@@ -789,19 +785,16 @@ void MetadataStreamerV3::emitKernelArg(
   Args.push_back(Arg);
 }
 
-void MetadataStreamerV3::emitHiddenKernelArgs(const MachineFunction &MF,
+void MetadataStreamerV3::emitHiddenKernelArgs(const Function &Func,
                                               unsigned &Offset,
                                               msgpack::ArrayDocNode Args) {
-  auto &Func = MF.getFunction();
-  const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
-  const SIMachineFunctionInfo &MFI = *MF.getInfo<SIMachineFunctionInfo>();
+  int HiddenArgNumBytes =
+      getIntegerAttribute(Func, "amdgpu-implicitarg-num-bytes", 0);
 
-  unsigned HiddenArgNumBytes = ST.getImplicitArgNumBytes(Func);
   if (!HiddenArgNumBytes)
     return;
 
-  const Module *M = Func.getParent();
-  auto &DL = M->getDataLayout();
+  auto &DL = Func.getParent()->getDataLayout();
   auto Int64Ty = Type::getInt64Ty(Func.getContext());
 
   if (HiddenArgNumBytes >= 8)
@@ -817,16 +810,16 @@ void MetadataStreamerV3::emitHiddenKernelArgs(const MachineFunction &MF,
   auto Int8PtrTy =
       Type::getInt8PtrTy(Func.getContext(), AMDGPUAS::GLOBAL_ADDRESS);
 
-  // Emit "printf buffer" argument if printf is used, emit "hostcall buffer"
-  // if "hostcall" module flag is set, otherwise emit dummy "none" argument.
+  // Emit "printf buffer" argument if printf is used, otherwise emit dummy
+  // "none" argument.
   if (HiddenArgNumBytes >= 32) {
-    if (M->getNamedMetadata("llvm.printf.fmts"))
+    if (Func.getParent()->getNamedMetadata("llvm.printf.fmts"))
       emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_printf_buffer", Offset,
                     Args);
-    else if (MFI.hasHostcallPtr()) {
+    else if (Func.getParent()->getFunction("__ockl_hostcall_internal")) {
       // The printf runtime binding pass should have ensured that hostcall and
       // printf are not used in the same module.
-      assert(!M->getNamedMetadata("llvm.printf.fmts"));
+      assert(!Func.getParent()->getNamedMetadata("llvm.printf.fmts"));
       emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_hostcall_buffer", Offset,
                     Args);
     } else
@@ -869,20 +862,12 @@ MetadataStreamerV3::getHSAKernelProps(const MachineFunction &MF,
       Kern.getDocument()->getNode(ProgramInfo.LDSSize);
   Kern[".private_segment_fixed_size"] =
       Kern.getDocument()->getNode(ProgramInfo.ScratchSize);
-
-  // FIXME: The metadata treats the minimum as 16?
   Kern[".kernarg_segment_align"] =
       Kern.getDocument()->getNode(std::max(Align(4), MaxKernArgAlign).value());
   Kern[".wavefront_size"] =
       Kern.getDocument()->getNode(STM.getWavefrontSize());
   Kern[".sgpr_count"] = Kern.getDocument()->getNode(ProgramInfo.NumSGPR);
   Kern[".vgpr_count"] = Kern.getDocument()->getNode(ProgramInfo.NumVGPR);
-
-  // Only add AGPR count to metadata for supported devices
-  if (STM.hasMAIInsts()) {
-    Kern[".agpr_count"] = Kern.getDocument()->getNode(ProgramInfo.NumAccVGPR);
-  }
-
   Kern[".max_flat_workgroup_size"] =
       Kern.getDocument()->getNode(MFI.getMaxFlatWorkGroupSize());
   Kern[".sgpr_spill_count"] =
@@ -932,7 +917,7 @@ void MetadataStreamerV3::emitKernel(const MachineFunction &MF,
         (Twine(Func.getName()) + Twine(".kd")).str(), /*Copy=*/true);
     emitKernelLanguage(Func, Kern);
     emitKernelAttrs(Func, Kern);
-    emitKernelArgs(MF, Kern);
+    emitKernelArgs(Func, Kern);
   }
 
   Kernels.push_back(Kern);
@@ -960,97 +945,6 @@ void MetadataStreamerV4::begin(const Module &Mod,
   emitTargetID(TargetID);
   emitPrintf(Mod);
   getRootMetadata("amdhsa.kernels") = HSAMetadataDoc->getArrayNode();
-}
-
-//===----------------------------------------------------------------------===//
-// HSAMetadataStreamerV5
-//===----------------------------------------------------------------------===//
-
-void MetadataStreamerV5::emitVersion() {
-  auto Version = HSAMetadataDoc->getArrayNode();
-  Version.push_back(Version.getDocument()->getNode(VersionMajorV5));
-  Version.push_back(Version.getDocument()->getNode(VersionMinorV5));
-  getRootMetadata("amdhsa.version") = Version;
-}
-
-void MetadataStreamerV5::emitHiddenKernelArgs(const MachineFunction &MF,
-                                              unsigned &Offset,
-                                              msgpack::ArrayDocNode Args) {
-  auto &Func = MF.getFunction();
-  const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
-  const Module *M = Func.getParent();
-  auto &DL = M->getDataLayout();
-  const SIMachineFunctionInfo &MFI = *MF.getInfo<SIMachineFunctionInfo>();
-
-  auto Int64Ty = Type::getInt64Ty(Func.getContext());
-  auto Int32Ty = Type::getInt32Ty(Func.getContext());
-  auto Int16Ty = Type::getInt16Ty(Func.getContext());
-
-  emitKernelArg(DL, Int32Ty, Align(4), "hidden_block_count_x", Offset, Args);
-  emitKernelArg(DL, Int32Ty, Align(4), "hidden_block_count_y", Offset, Args);
-  emitKernelArg(DL, Int32Ty, Align(4), "hidden_block_count_z", Offset, Args);
-
-  emitKernelArg(DL, Int16Ty, Align(2), "hidden_group_size_x", Offset, Args);
-  emitKernelArg(DL, Int16Ty, Align(2), "hidden_group_size_y", Offset, Args);
-  emitKernelArg(DL, Int16Ty, Align(2), "hidden_group_size_z", Offset, Args);
-
-  emitKernelArg(DL, Int16Ty, Align(2), "hidden_remainder_x", Offset, Args);
-  emitKernelArg(DL, Int16Ty, Align(2), "hidden_remainder_y", Offset, Args);
-  emitKernelArg(DL, Int16Ty, Align(2), "hidden_remainder_z", Offset, Args);
-
-  // Reserved for hidden_tool_correlation_id.
-  Offset += 8;
-
-  Offset += 8; // Reserved.
-
-  emitKernelArg(DL, Int64Ty, Align(8), "hidden_global_offset_x", Offset, Args);
-  emitKernelArg(DL, Int64Ty, Align(8), "hidden_global_offset_y", Offset, Args);
-  emitKernelArg(DL, Int64Ty, Align(8), "hidden_global_offset_z", Offset, Args);
-
-  emitKernelArg(DL, Int16Ty, Align(2), "hidden_grid_dims", Offset, Args);
-
-  Offset += 6; // Reserved.
-  auto Int8PtrTy =
-      Type::getInt8PtrTy(Func.getContext(), AMDGPUAS::GLOBAL_ADDRESS);
-
-  if (M->getNamedMetadata("llvm.printf.fmts")) {
-    emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_printf_buffer", Offset,
-                  Args);
-  } else
-    Offset += 8; // Skipped.
-
-  if (MFI.hasHostcallPtr()) {
-    emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_hostcall_buffer", Offset,
-                  Args);
-  } else
-    Offset += 8; // Skipped.
-
-  emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_multigrid_sync_arg", Offset,
-                Args);
-
-  // Ignore temporarily until it is implemented.
-  // emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_heap_v1", Offset, Args);
-  Offset += 8;
-
-  if (Func.hasFnAttribute("calls-enqueue-kernel")) {
-    emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_default_queue", Offset,
-                  Args);
-    emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_completion_action", Offset,
-                  Args);
-  } else
-    Offset += 16; // Skipped.
-
-  Offset += 72; // Reserved.
-
-  // hidden_private_base and hidden_shared_base are only used by GFX8.
-  if (ST.getGeneration() == AMDGPUSubtarget::VOLCANIC_ISLANDS) {
-    emitKernelArg(DL, Int32Ty, Align(4), "hidden_private_base", Offset, Args);
-    emitKernelArg(DL, Int32Ty, Align(4), "hidden_shared_base", Offset, Args);
-  } else
-    Offset += 8; // Skipped.
-
-  if (MFI.hasQueuePtr())
-    emitKernelArg(DL, Int8PtrTy, Align(8), "hidden_queue_ptr", Offset, Args);
 }
 
 } // end namespace HSAMD

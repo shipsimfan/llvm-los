@@ -14,6 +14,7 @@
 #define LLVM_IR_ARGUMENT_H
 
 #include "llvm/ADT/Twine.h"
+#include "llvm/ADT/ilist_node.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Value.h"
 
@@ -96,7 +97,7 @@ public:
   /// If this is a byval or inalloca argument, return its alignment.
   /// FIXME: Remove this function once transition to Align is over.
   /// Use getParamAlign() instead.
-  uint64_t getParamAlignment() const;
+  unsigned getParamAlignment() const;
 
   /// If this is a byval or inalloca argument, return its alignment.
   MaybeAlign getParamAlign() const;
@@ -160,8 +161,6 @@ public:
 
   /// Remove attributes from an argument.
   void removeAttr(Attribute::AttrKind Kind);
-
-  void removeAttrs(const AttributeMask &AM);
 
   /// Check if an argument has a given attribute.
   bool hasAttribute(Attribute::AttrKind Kind) const;

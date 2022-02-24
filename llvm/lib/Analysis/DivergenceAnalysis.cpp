@@ -24,12 +24,12 @@
 // divergent can help the compiler to selectively run these optimizations.
 //
 // This implementation is derived from the Vectorization Analysis of the
-// Region Vectorizer (RV). The analysis is based on the approach described in
+// Region Vectorizer (RV). That implementation in turn is based on the approach
+// described in
 //
-//   An abstract interpretation for SPMD divergence
-//       on reducible control flow graphs.
-//   Julian Rosemann, Simon Moll and Sebastian Hack
-//   POPL '21
+//   Improving Performance of OpenCL on CPUs
+//   Ralf Karrenberg and Sebastian Hack
+//   CC '12
 //
 // This implementation is generic in the sense that it does
 // not itself identify original sources of divergence.
@@ -130,7 +130,7 @@ bool DivergenceAnalysisImpl::inRegion(const Instruction &I) const {
 }
 
 bool DivergenceAnalysisImpl::inRegion(const BasicBlock &BB) const {
-  return RegionLoop ? RegionLoop->contains(&BB) : (BB.getParent() == &F);
+  return (!RegionLoop && BB.getParent() == &F) || RegionLoop->contains(&BB);
 }
 
 void DivergenceAnalysisImpl::pushUsers(const Value &V) {
@@ -348,7 +348,7 @@ DivergenceInfo::DivergenceInfo(Function &F, const DominatorTree &DT,
                                const PostDominatorTree &PDT, const LoopInfo &LI,
                                const TargetTransformInfo &TTI,
                                bool KnownReducible)
-    : F(F) {
+    : F(F), ContainsIrreducible(false) {
   if (!KnownReducible) {
     using RPOTraversal = ReversePostOrderTraversal<const Function *>;
     RPOTraversal FuncRPOT(&F);

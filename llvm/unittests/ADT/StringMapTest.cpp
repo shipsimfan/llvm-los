@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/StringMap.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/DataTypes.h"
 #include "gtest/gtest.h"
@@ -110,13 +109,6 @@ TEST_F(StringMapTest, ConstEmptyMapTest) {
   EXPECT_TRUE(constTestMap.find(StringRef(testKeyFirst, testKeyLength)) ==
               constTestMap.end());
   EXPECT_TRUE(constTestMap.find(testKeyStr) == constTestMap.end());
-}
-
-// initializer_list ctor test; also implicitly tests initializer_list and
-// iterator overloads of insert().
-TEST_F(StringMapTest, InitializerListCtor) {
-  testMap = StringMap<uint32_t>({{"key", 1}});
-  assertSingleItemMap();
 }
 
 // A map with a single entry.
@@ -309,21 +301,7 @@ TEST_F(StringMapTest, InsertOrAssignTest) {
   EXPECT_EQ(0, try1.first->second.copy);
 }
 
-TEST_F(StringMapTest, IterMapKeysVector) {
-  StringMap<int> Map;
-  Map["A"] = 1;
-  Map["B"] = 2;
-  Map["C"] = 3;
-  Map["D"] = 3;
-
-  std::vector<StringRef> Keys{Map.keys().begin(), Map.keys().end()};
-  llvm::sort(Keys);
-
-  std::vector<StringRef> Expected{{"A", "B", "C", "D"}};
-  EXPECT_EQ(Expected, Keys);
-}
-
-TEST_F(StringMapTest, IterMapKeysSmallVector) {
+TEST_F(StringMapTest, IterMapKeys) {
   StringMap<int> Map;
   Map["A"] = 1;
   Map["B"] = 2;

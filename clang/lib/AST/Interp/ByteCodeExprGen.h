@@ -28,6 +28,8 @@ namespace clang {
 class QualType;
 
 namespace interp {
+class Function;
+class State;
 
 template <class Emitter> class LocalScope;
 template <class Emitter> class RecordScope;

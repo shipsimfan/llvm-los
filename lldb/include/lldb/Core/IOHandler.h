@@ -26,8 +26,8 @@
 #include <string>
 #include <vector>
 
-#include <cstdint>
-#include <cstdio>
+#include <stdint.h>
+#include <stdio.h>
 
 namespace lldb_private {
 class Debugger;
@@ -442,6 +442,8 @@ protected:
   bool m_multi_line;
   bool m_color_prompts;
   bool m_interrupt_exits;
+  bool m_editing; // Set to true when fetching a line manually (not using
+                  // libedit)
   std::string m_line_buffer;
 };
 

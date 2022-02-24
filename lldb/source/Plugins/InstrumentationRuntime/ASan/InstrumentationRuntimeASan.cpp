@@ -47,6 +47,10 @@ void InstrumentationRuntimeASan::Terminate() {
   PluginManager::UnregisterPlugin(CreateInstance);
 }
 
+lldb_private::ConstString InstrumentationRuntimeASan::GetPluginNameStatic() {
+  return ConstString("AddressSanitizer");
+}
+
 lldb::InstrumentationRuntimeType InstrumentationRuntimeASan::GetTypeStatic() {
   return eInstrumentationRuntimeTypeAddressSanitizer;
 }
@@ -281,7 +285,7 @@ void InstrumentationRuntimeASan::Activate() {
   if (!process_sp)
     return;
 
-  ConstString symbol_name("_ZN6__asanL7AsanDieEv");
+  ConstString symbol_name("__asan::AsanDie()");
   const Symbol *symbol = GetRuntimeModuleSP()->FindFirstSymbolWithNameAndType(
       symbol_name, eSymbolTypeCode);
 

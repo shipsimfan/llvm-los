@@ -21,7 +21,6 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/Unwind.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "llvm/ADT/SmallPtrSet.h"
 
@@ -66,7 +65,7 @@ uint32_t StackFrameList::GetCurrentInlinedDepth() {
     if (cur_pc != m_current_inlined_pc) {
       m_current_inlined_pc = LLDB_INVALID_ADDRESS;
       m_current_inlined_depth = UINT32_MAX;
-      Log *log = GetLog(LLDBLog::Step);
+      Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
       if (log && log->GetVerbose())
         LLDB_LOGF(
             log,
@@ -90,7 +89,7 @@ void StackFrameList::ResetCurrentInlinedDepth() {
   if (!m_frames[0]->IsInlined()) {
     m_current_inlined_depth = UINT32_MAX;
     m_current_inlined_pc = LLDB_INVALID_ADDRESS;
-    Log *log = GetLog(LLDBLog::Step);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
     if (log && log->GetVerbose())
       LLDB_LOGF(
           log,
@@ -188,7 +187,7 @@ void StackFrameList::ResetCurrentInlinedDepth() {
     }
     m_current_inlined_pc = curr_pc;
     m_current_inlined_depth = num_inlined_functions + 1;
-    Log *log = GetLog(LLDBLog::Step);
+    Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
     if (log && log->GetVerbose())
       LLDB_LOGF(log,
                 "ResetCurrentInlinedDepth: setting inlined "
@@ -377,7 +376,7 @@ void StackFrameList::SynthesizeTailCallFrames(StackFrame &next_frame) {
   if (!next_reg_ctx_sp)
     return;
 
-  Log *log = GetLog(LLDBLog::Step);
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
 
   StackFrame &prev_frame = *m_frames.back().get();
 

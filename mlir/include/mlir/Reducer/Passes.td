@@ -18,33 +18,33 @@ include "mlir/Pass/PassBase.td"
 def CommonReductionPassOptions {
   list<Option> options = [
     Option<"testerName", "test", "std::string", /* default */"",
-           "The location of the tester which tests the file interestingness">,
+           "The filename of the tester">,
     ListOption<"testerArgs", "test-arg", "std::string",
-               "arguments of the tester",
                "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">,
   ];
 }
 
-def ReductionTree : Pass<"reduction-tree"> {
-  let summary = "Reduce the input with reduction-tree algorithm";
+def ReductionTree : Pass<"reduction-tree", "ModuleOp"> {
+  let summary = "A general reduction tree pass for the MLIR Reduce Tool";
 
   let constructor = "mlir::createReductionTreePass()";
 
   let options = [
+    Option<"opReducerName", "op-reducer", "std::string", /* default */"",
+           "The OpReducer to reduce the module">,
     Option<"traversalModeId", "traversal-mode", "unsigned",
-           /* default */"0",
-           "The graph traversal mode, the default is single-path mode">,
+           /* default */"0", "The graph traversal mode">,
   ] # CommonReductionPassOptions.options;
 }
 
 def OptReduction : Pass<"opt-reduction-pass", "ModuleOp"> {
-  let summary = "A wrapper pass that reduces the file with optimization passes";
+  let summary = "A reduction pass wrapper for optimization passes";
 
   let constructor = "mlir::createOptReductionPass()";
 
   let options = [
     Option<"optPass", "opt-pass", "std::string", /* default */"",
-           "The optimization passes used for reduction, e.g., symbol-dce">,
+           "The optimization pass will be run dynamically in OptReductionPass">,
   ] # CommonReductionPassOptions.options;
 }
 

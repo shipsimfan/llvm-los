@@ -9,7 +9,6 @@
 #include "X86MCTargetDesc.h"
 #include "X86TargetStreamer.h"
 #include "llvm/MC/MCAsmBackend.h"
-#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCWin64EH.h"

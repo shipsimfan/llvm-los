@@ -12,6 +12,7 @@
 
 #include "CodeExpander.h"
 #include "CodeExpansions.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TableGen/Error.h"
 

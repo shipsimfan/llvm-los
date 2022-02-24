@@ -41,7 +41,7 @@ private:
                           StringRef BooleanId);
 
   void matchTernaryResult(ast_matchers::MatchFinder *Finder, bool Value,
-                          StringRef Id);
+                          StringRef TernaryId);
 
   void matchIfReturnsBool(ast_matchers::MatchFinder *Finder, bool Value,
                           StringRef Id);
@@ -52,51 +52,30 @@ private:
   void matchCompoundIfReturnsBool(ast_matchers::MatchFinder *Finder, bool Value,
                                   StringRef Id);
 
-  void matchCaseIfReturnsBool(ast_matchers::MatchFinder *Finder, bool Value,
-                              StringRef Id);
-
-  void matchDefaultIfReturnsBool(ast_matchers::MatchFinder *Finder, bool Value,
-                                 StringRef Id);
-
-  void matchLabelIfReturnsBool(ast_matchers::MatchFinder *Finder, bool Value,
-                               StringRef Id);
-
   void
   replaceWithThenStatement(const ast_matchers::MatchFinder::MatchResult &Result,
                            const Expr *BoolLiteral);
 
   void
   replaceWithElseStatement(const ast_matchers::MatchFinder::MatchResult &Result,
-                           const Expr *BoolLiteral);
+                           const Expr *FalseConditionRemoved);
 
   void
   replaceWithCondition(const ast_matchers::MatchFinder::MatchResult &Result,
-                       const ConditionalOperator *Ternary, bool Negated);
+                       const ConditionalOperator *Ternary,
+                       bool Negated = false);
 
   void replaceWithReturnCondition(
       const ast_matchers::MatchFinder::MatchResult &Result, const IfStmt *If,
-      bool Negated);
+      bool Negated = false);
 
   void
   replaceWithAssignment(const ast_matchers::MatchFinder::MatchResult &Result,
-                        const IfStmt *If, bool Negated);
+                        const IfStmt *If, bool Negated = false);
 
   void replaceCompoundReturnWithCondition(
       const ast_matchers::MatchFinder::MatchResult &Result,
-      const CompoundStmt *Compound, bool Negated);
-
-  void replaceCompoundReturnWithCondition(
-      const ast_matchers::MatchFinder::MatchResult &Result, bool Negated,
-      const IfStmt *If);
-
-  void replaceCaseCompoundReturnWithCondition(
-      const ast_matchers::MatchFinder::MatchResult &Result, bool Negated);
-
-  void replaceDefaultCompoundReturnWithCondition(
-      const ast_matchers::MatchFinder::MatchResult &Result, bool Negated);
-
-  void replaceLabelCompoundReturnWithCondition(
-      const ast_matchers::MatchFinder::MatchResult &Result, bool Negated);
+      const CompoundStmt *Compound, bool Negated = false);
 
   void issueDiag(const ast_matchers::MatchFinder::MatchResult &Result,
                  SourceLocation Loc, StringRef Description,

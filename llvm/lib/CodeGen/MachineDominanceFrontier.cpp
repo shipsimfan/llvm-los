@@ -29,7 +29,9 @@ INITIALIZE_PASS_DEPENDENCY(MachineDominatorTree)
 INITIALIZE_PASS_END(MachineDominanceFrontier, "machine-domfrontier",
                 "Machine Dominance Frontier Construction", true, true)
 
-MachineDominanceFrontier::MachineDominanceFrontier() : MachineFunctionPass(ID) {
+MachineDominanceFrontier::MachineDominanceFrontier()
+  : MachineFunctionPass(ID),
+    Base() {
   initializeMachineDominanceFrontierPass(*PassRegistry::getPassRegistry());
 }
 

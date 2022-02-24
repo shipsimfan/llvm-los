@@ -85,18 +85,18 @@ MipsSETargetLowering::MipsSETargetLowering(const MipsTargetMachine &TM,
   if (Subtarget.hasDSP()) {
     MVT::SimpleValueType VecTys[2] = {MVT::v2i16, MVT::v4i8};
 
-    for (const auto &VecTy : VecTys) {
-      addRegisterClass(VecTy, &Mips::DSPRRegClass);
+    for (unsigned i = 0; i < array_lengthof(VecTys); ++i) {
+      addRegisterClass(VecTys[i], &Mips::DSPRRegClass);
 
       // Expand all builtin opcodes.
       for (unsigned Opc = 0; Opc < ISD::BUILTIN_OP_END; ++Opc)
-        setOperationAction(Opc, VecTy, Expand);
+        setOperationAction(Opc, VecTys[i], Expand);
 
-      setOperationAction(ISD::ADD, VecTy, Legal);
-      setOperationAction(ISD::SUB, VecTy, Legal);
-      setOperationAction(ISD::LOAD, VecTy, Legal);
-      setOperationAction(ISD::STORE, VecTy, Legal);
-      setOperationAction(ISD::BITCAST, VecTy, Legal);
+      setOperationAction(ISD::ADD, VecTys[i], Legal);
+      setOperationAction(ISD::SUB, VecTys[i], Legal);
+      setOperationAction(ISD::LOAD, VecTys[i], Legal);
+      setOperationAction(ISD::STORE, VecTys[i], Legal);
+      setOperationAction(ISD::BITCAST, VecTys[i], Legal);
     }
 
     setTargetDAGCombine(ISD::SHL);
@@ -569,7 +569,7 @@ static bool isVectorAllOnes(SDValue N) {
   // Endianness doesn't matter in this context because we are looking for
   // an all-ones value.
   if (BVN->isConstantSplat(SplatValue, SplatUndef, SplatBitSize, HasAnyUndefs))
-    return SplatValue.isAllOnes();
+    return SplatValue.isAllOnesValue();
 
   return false;
 }
@@ -701,7 +701,7 @@ static SDValue performORCombine(SDNode *N, SelectionDAG &DAG,
 
     // Fold degenerate cases.
     if (IsConstantMask) {
-      if (Mask.isAllOnes())
+      if (Mask.isAllOnesValue())
         return IfSet;
       else if (Mask == 0)
         return IfClr;
@@ -2931,7 +2931,7 @@ static SDValue lowerVECTOR_SHUFFLE_PCKOD(SDValue Op, EVT ResTy,
 // operand is unused and can be replaced with anything. We choose to replace it
 // with the used operand since this reduces the number of instructions overall.
 static SDValue lowerVECTOR_SHUFFLE_VSHF(SDValue Op, EVT ResTy,
-                                        const SmallVector<int, 16> &Indices,
+                                        SmallVector<int, 16> Indices,
                                         SelectionDAG &DAG) {
   SmallVector<SDValue, 16> Ops;
   SDValue Op0;
@@ -2953,8 +2953,9 @@ static SDValue lowerVECTOR_SHUFFLE_VSHF(SDValue Op, EVT ResTy,
       Using2ndVec = true;
   }
 
-  for (int Idx : Indices)
-    Ops.push_back(DAG.getTargetConstant(Idx, DL, MaskEltTy));
+  for (SmallVector<int, 16>::iterator I = Indices.begin(); I != Indices.end();
+       ++I)
+    Ops.push_back(DAG.getTargetConstant(*I, DL, MaskEltTy));
 
   SDValue MaskVec = DAG.getBuildVector(MaskVecTy, DL, Ops);
 
@@ -3580,8 +3581,8 @@ MipsSETargetLowering::emitLD_F16_PSEUDO(MachineInstr &MI,
 
   MachineInstrBuilder MIB =
       BuildMI(*BB, MI, DL, TII->get(UsingMips32 ? Mips::LH : Mips::LH64), Rt);
-  for (const MachineOperand &MO : llvm::drop_begin(MI.operands()))
-    MIB.add(MO);
+  for (unsigned i = 1; i < MI.getNumOperands(); i++)
+    MIB.add(MI.getOperand(i));
 
   if(!UsingMips32) {
     Register Tmp = RegInfo.createVirtualRegister(&Mips::GPR32RegClass);

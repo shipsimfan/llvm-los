@@ -15,8 +15,6 @@
 #ifndef LLVM_LIB_TARGET_WEBASSEMBLY_UTILS_WEBASSEMBLYUTILITIES_H
 #define LLVM_LIB_TARGET_WEBASSEMBLY_UTILS_WEBASSEMBLYUTILITIES_H
 
-#include "llvm/Support/CommandLine.h"
-
 namespace llvm {
 
 class MachineBasicBlock;
@@ -24,6 +22,7 @@ class MachineInstr;
 class MachineOperand;
 class MCContext;
 class MCSymbolWasm;
+class StringRef;
 class WebAssemblyFunctionInfo;
 class WebAssemblySubtarget;
 
@@ -31,12 +30,6 @@ namespace WebAssembly {
 
 bool isChild(const MachineInstr &MI, const WebAssemblyFunctionInfo &MFI);
 bool mayThrow(const MachineInstr &MI);
-
-// Exception handling / setjmp-longjmp handling command-line options
-extern cl::opt<bool> WasmEnableEmEH;   // asm.js-style EH
-extern cl::opt<bool> WasmEnableEmSjLj; // asm.js-style SjLJ
-extern cl::opt<bool> WasmEnableEH;     // EH using Wasm EH instructions
-extern cl::opt<bool> WasmEnableSjLj;   // SjLj using Wasm EH instructions
 
 // Exception-related function names
 extern const char *const ClangCallTerminateFn;
@@ -54,12 +47,6 @@ const MachineOperand &getCalleeOp(const MachineInstr &MI);
 MCSymbolWasm *
 getOrCreateFunctionTableSymbol(MCContext &Ctx,
                                const WebAssemblySubtarget *Subtarget);
-
-/// Returns the __funcref_call_table, for use in funcref calls when lowered to
-/// table.set + call_indirect.
-MCSymbolWasm *
-getOrCreateFuncrefCallTableSymbol(MCContext &Ctx,
-                                  const WebAssemblySubtarget *Subtarget);
 
 /// Find a catch instruction from an EH pad. Returns null if no catch
 /// instruction found or the catch is in an invalid location.

@@ -40,6 +40,9 @@ public:
 
   static IslAst create(Scop &Scop, const Dependences &D);
 
+  /// Print a source code representation of the program.
+  void pprint(raw_ostream &OS);
+
   isl::ast_node getAst();
 
   const std::shared_ptr<isl_ctx> getSharedIslCtx() const { return Ctx; }
@@ -75,6 +78,9 @@ public:
     /// Construct and initialize the payload.
     IslAstUserPayload() = default;
 
+    /// Cleanup all isl structs on destruction.
+    ~IslAstUserPayload();
+
     /// Does the dependence analysis determine that there are no loop-carried
     /// dependencies?
     bool IsParallel = false;
@@ -95,7 +101,7 @@ public:
     isl::pw_aff MinimalDependenceDistance;
 
     /// The build environment at the time this node was constructed.
-    isl::ast_build Build;
+    isl_ast_build *Build = nullptr;
 
     /// Set of accesses which break reduction dependences.
     MemoryAccessSet BrokenReductions;
@@ -158,7 +164,7 @@ public:
   static MemoryAccessSet *getBrokenReductions(const isl::ast_node &Node);
 
   /// Get the nodes build context or a nullptr if not available.
-  static isl::ast_build getBuild(const isl::ast_node &Node);
+  static __isl_give isl_ast_build *getBuild(__isl_keep isl_ast_node *Node);
 
   ///}
 };

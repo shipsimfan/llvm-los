@@ -60,7 +60,7 @@ enum ID {
 #include "Opts.inc"
 #undef PREFIX
 
-const opt::OptTable::Info InfoTable[] = {
+static const opt::OptTable::Info InfoTable[] = {
 #define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
                HELPTEXT, METAVAR, VALUES)                                      \
   {                                                                            \
@@ -90,7 +90,7 @@ enum Windres_ID {
 #include "WindresOpts.inc"
 #undef PREFIX
 
-const opt::OptTable::Info WindresInfoTable[] = {
+static const opt::OptTable::Info WindresInfoTable[] = {
 #define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
                HELPTEXT, METAVAR, VALUES)                                      \
   {                                                                            \
@@ -111,7 +111,7 @@ static ExitOnError ExitOnErr;
 static FileRemover TempPreprocFile;
 static FileRemover TempResFile;
 
-[[noreturn]] static void fatalError(const Twine &Message) {
+LLVM_ATTRIBUTE_NORETURN static void fatalError(const Twine &Message) {
   errs() << Message << "\n";
   exit(1);
 }
@@ -124,14 +124,13 @@ std::string createTempFile(const Twine &Prefix, StringRef Suffix) {
   return static_cast<std::string>(FileName);
 }
 
-ErrorOr<std::string> findClang(const char *Argv0, StringRef Triple) {
+ErrorOr<std::string> findClang(const char *Argv0) {
   StringRef Parent = llvm::sys::path::parent_path(Argv0);
   ErrorOr<std::string> Path = std::error_code();
-  std::string TargetClang = (Triple + "-clang").str();
   if (!Parent.empty()) {
     // First look for the tool with all potential names in the specific
     // directory of Argv0, if known
-    for (const auto *Name : {TargetClang.c_str(), "clang", "clang-cl"}) {
+    for (const auto *Name : {"clang", "clang-cl"}) {
       Path = sys::findProgramByName(Name, Parent);
       if (Path)
         return Path;
@@ -146,7 +145,7 @@ ErrorOr<std::string> findClang(const char *Argv0, StringRef Triple) {
   return Path;
 }
 
-bool isUsableArch(Triple::ArchType Arch) {
+Triple::ArchType getDefaultArch(Triple::ArchType Arch) {
   switch (Arch) {
   case Triple::x86:
   case Triple::x86_64:
@@ -155,23 +154,17 @@ bool isUsableArch(Triple::ArchType Arch) {
   case Triple::aarch64:
     // These work properly with the clang driver, setting the expected
     // defines such as _WIN32 etc.
-    return true;
+    return Arch;
   default:
     // Other archs aren't set up for use with windows as target OS, (clang
-    // doesn't define e.g. _WIN32 etc), so with them we need to set a
-    // different default arch.
-    return false;
+    // doesn't define e.g. _WIN32 etc), so set a reasonable default arch.
+    return Triple::x86_64;
   }
-}
-
-Triple::ArchType getDefaultFallbackArch() {
-  return Triple::x86_64;
 }
 
 std::string getClangClTriple() {
   Triple T(sys::getDefaultTargetTriple());
-  if (!isUsableArch(T.getArch()))
-    T.setArch(getDefaultFallbackArch());
+  T.setArch(getDefaultArch(T.getArch()));
   T.setOS(Triple::Win32);
   T.setVendor(Triple::PC);
   T.setEnvironment(Triple::MSVC);
@@ -181,8 +174,7 @@ std::string getClangClTriple() {
 
 std::string getMingwTriple() {
   Triple T(sys::getDefaultTargetTriple());
-  if (!isUsableArch(T.getArch()))
-    T.setArch(getDefaultFallbackArch());
+  T.setArch(getDefaultArch(T.getArch()));
   if (T.isWindowsGNUEnvironment())
     return T.str();
   // Write out the literal form of the vendor/env here, instead of
@@ -220,7 +212,7 @@ bool preprocess(StringRef Src, StringRef Dst, const RcOptions &Opts,
   if (Opts.PrintCmdAndExit) {
     Clang = "clang";
   } else {
-    ErrorOr<std::string> ClangOrErr = findClang(Argv0, Opts.Triple);
+    ErrorOr<std::string> ClangOrErr = findClang(Argv0);
     if (ClangOrErr) {
       Clang = *ClangOrErr;
     } else {
@@ -264,16 +256,23 @@ bool preprocess(StringRef Src, StringRef Dst, const RcOptions &Opts,
   return true;
 }
 
+static bool consume_back_lower(StringRef &S, const char *Str) {
+  if (!S.endswith_lower(Str))
+    return false;
+  S = S.drop_back(strlen(Str));
+  return true;
+}
+
 static std::pair<bool, std::string> isWindres(llvm::StringRef Argv0) {
   StringRef ProgName = llvm::sys::path::stem(Argv0);
   // x86_64-w64-mingw32-windres -> x86_64-w64-mingw32, windres
   // llvm-rc -> "", llvm-rc
   // aarch64-w64-mingw32-llvm-windres-10.exe -> aarch64-w64-mingw32, llvm-windres
   ProgName = ProgName.rtrim("0123456789.-");
-  if (!ProgName.consume_back_insensitive("windres"))
+  if (!consume_back_lower(ProgName, "windres"))
     return std::make_pair<bool, std::string>(false, "");
-  ProgName.consume_back_insensitive("llvm-");
-  ProgName.consume_back_insensitive("-");
+  consume_back_lower(ProgName, "llvm-");
+  consume_back_lower(ProgName, "-");
   return std::make_pair<bool, std::string>(true, ProgName.str());
 }
 
@@ -355,7 +354,7 @@ RcOptions parseWindresOptions(ArrayRef<const char *> ArgsArr,
 
   // The tool prints nothing when invoked with no command-line arguments.
   if (InputArgs.hasArg(WINDRES_help)) {
-    T.printHelp(outs(), "windres [options] file...",
+    T.PrintHelp(outs(), "windres [options] file...",
                 "LLVM windres (GNU windres compatible)", false, true);
     exit(0);
   }
@@ -477,14 +476,13 @@ RcOptions parseWindresOptions(ArrayRef<const char *> ArgsArr,
   Opts.Params.CodePage = CpWin1252; // Different default
   if (InputArgs.hasArg(WINDRES_codepage)) {
     if (InputArgs.getLastArgValue(WINDRES_codepage)
-            .getAsInteger(0, Opts.Params.CodePage))
+            .getAsInteger(10, Opts.Params.CodePage))
       fatalError("Invalid code page: " +
                  InputArgs.getLastArgValue(WINDRES_codepage));
   }
   if (InputArgs.hasArg(WINDRES_language)) {
-    StringRef Val = InputArgs.getLastArgValue(WINDRES_language);
-    Val.consume_front_insensitive("0x");
-    if (Val.getAsInteger(16, Opts.LangId))
+    if (InputArgs.getLastArgValue(WINDRES_language)
+            .getAsInteger(16, Opts.LangId))
       fatalError("Invalid language id: " +
                  InputArgs.getLastArgValue(WINDRES_language));
   }
@@ -503,7 +501,7 @@ RcOptions parseRcOptions(ArrayRef<const char *> ArgsArr,
 
   // The tool prints nothing when invoked with no command-line arguments.
   if (InputArgs.hasArg(OPT_help)) {
-    T.printHelp(outs(), "rc [options] file...", "Resource Converter", false);
+    T.PrintHelp(outs(), "rc [options] file...", "Resource Converter", false);
     exit(0);
   }
 
@@ -567,9 +565,7 @@ RcOptions parseRcOptions(ArrayRef<const char *> ArgsArr,
   }
   Opts.AppendNull = InputArgs.hasArg(OPT_add_null);
   if (InputArgs.hasArg(OPT_lang_id)) {
-    StringRef Val = InputArgs.getLastArgValue(OPT_lang_id);
-    Val.consume_front_insensitive("0x");
-    if (Val.getAsInteger(16, Opts.LangId))
+    if (InputArgs.getLastArgValue(OPT_lang_id).getAsInteger(16, Opts.LangId))
       fatalError("Invalid language id: " +
                  InputArgs.getLastArgValue(OPT_lang_id));
   }

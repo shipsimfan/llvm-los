@@ -2,7 +2,7 @@
 // RUN: %clang_cc1 %s -fasm-blocks -triple i386-apple-darwin10 -emit-llvm -o - | FileCheck %s
 
 int gVar;
-void t1(void) {
+void t1() {
   // CHECK: add eax, dword ptr gVar[eax]
   __asm add eax, dword ptr gVar[eax]
   // CHECK: add dword ptr gVar[eax], eax
@@ -19,7 +19,7 @@ void t1(void) {
   __asm add 1 + 1 + 2 + 3[gVar + ecx + ebx], eax
 }
 
-void t2(void) {
+void t2() {
   int lVar;
   // CHECK: mov eax, dword ptr ${{[0-9]}}[eax]
   __asm mov eax, dword ptr lVar[eax]
@@ -32,3 +32,4 @@ void t2(void) {
   // CHECK: mov ${{[0-9]}}[ebx + $$47], eax
   __asm mov 5 + 8 + 13 + 21[lVar + ebx], eax
 }
+

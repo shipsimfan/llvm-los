@@ -7,7 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: no-exceptions
-// XFAIL: use_system_cxx_lib && target={{.+}}-apple-macosx10.{{9|10|11}}
+// XFAIL: with_system_cxx_lib=macosx10.11
+// XFAIL: with_system_cxx_lib=macosx10.10
+// XFAIL: with_system_cxx_lib=macosx10.9
 
 // <string>
 
@@ -32,30 +34,21 @@ test(const S& s)
     assert ( false );
 }
 
-bool test() {
-  {
+int main(int, char**)
+{
+    {
     typedef std::string S;
     test(S());
     test(S("123"));
     test(S("12345678901234567890123456789012345678901234567890"));
-  }
+    }
 #if TEST_STD_VER >= 11
-  {
+    {
     typedef std::basic_string<char, std::char_traits<char>, min_allocator<char>> S;
     test(S());
     test(S("123"));
     test(S("12345678901234567890123456789012345678901234567890"));
-  }
-#endif
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-#if TEST_STD_VER > 17
-  // static_assert(test());
+    }
 #endif
 
   return 0;

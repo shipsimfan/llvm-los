@@ -61,8 +61,7 @@ public:
 
   // The Hexagon target can unroll loops with run-time trip counts.
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
-                               TTI::UnrollingPreferences &UP,
-                               OptimizationRemarkEmitter *ORE);
+                               TTI::UnrollingPreferences &UP);
 
   void getPeelingPreferences(Loop *L, ScalarEvolution &SE,
                              TTI::PeelingPreferences &PP);
@@ -121,9 +120,10 @@ public:
                                   MaybeAlign Alignment, unsigned AddressSpace,
                                   TTI::TargetCostKind CostKind,
                                   const Instruction *I = nullptr);
-  InstructionCost getMaskedMemoryOpCost(unsigned Opcode, Type *Src,
-                                        Align Alignment, unsigned AddressSpace,
-                                        TTI::TargetCostKind CostKind);
+  InstructionCost
+  getMaskedMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
+                        unsigned AddressSpace,
+                        TTI::TargetCostKind CostKind = TTI::TCK_SizeAndLatency);
   InstructionCost getShuffleCost(TTI::ShuffleKind Kind, Type *Tp,
                                  ArrayRef<int> Mask, int Index, Type *SubTp);
   InstructionCost getGatherScatterOpCost(unsigned Opcode, Type *DataTy,
@@ -133,14 +133,16 @@ public:
                                          const Instruction *I);
   InstructionCost getInterleavedMemoryOpCost(
       unsigned Opcode, Type *VecTy, unsigned Factor, ArrayRef<unsigned> Indices,
-      Align Alignment, unsigned AddressSpace, TTI::TargetCostKind CostKind,
+      Align Alignment, unsigned AddressSpace,
+      TTI::TargetCostKind CostKind = TTI::TCK_SizeAndLatency,
       bool UseMaskForCond = false, bool UseMaskForGaps = false);
   InstructionCost getCmpSelInstrCost(unsigned Opcode, Type *ValTy, Type *CondTy,
                                      CmpInst::Predicate VecPred,
                                      TTI::TargetCostKind CostKind,
                                      const Instruction *I = nullptr);
   InstructionCost getArithmeticInstrCost(
-      unsigned Opcode, Type *Ty, TTI::TargetCostKind CostKind,
+      unsigned Opcode, Type *Ty,
+      TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput,
       TTI::OperandValueKind Opd1Info = TTI::OK_AnyValue,
       TTI::OperandValueKind Opd2Info = TTI::OK_AnyValue,
       TTI::OperandValueProperties Opd1PropInfo = TTI::OP_None,

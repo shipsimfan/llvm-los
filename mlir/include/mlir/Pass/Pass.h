@@ -56,12 +56,13 @@ public:
   TypeID getTypeID() const { return passID; }
 
   /// Returns the pass info for the specified pass class or null if unknown.
-  static const PassInfo *lookupPassInfo(StringRef passArg);
-
-  /// Returns the pass info for this pass, or null if unknown.
-  const PassInfo *lookupPassInfo() const {
-    return lookupPassInfo(getArgument());
+  static const PassInfo *lookupPassInfo(TypeID passID);
+  template <typename PassT> static const PassInfo *lookupPassInfo() {
+    return lookupPassInfo(TypeID::get<PassT>());
   }
+
+  /// Returns the pass info for this pass.
+  const PassInfo *lookupPassInfo() const { return lookupPassInfo(getTypeID()); }
 
   /// Returns the derived pass name.
   virtual StringRef getName() const = 0;
@@ -73,13 +74,13 @@ public:
   /// register the Affine dialect but does not need to register Linalg.
   virtual void getDependentDialects(DialectRegistry &registry) const {}
 
-  /// Return the command line argument used when registering this pass. Return
+  /// Returns the command line argument used when registering this pass. Return
   /// an empty string if one does not exist.
-  virtual StringRef getArgument() const { return ""; }
-
-  /// Return the command line description used when registering this pass.
-  /// Return an empty string if one does not exist.
-  virtual StringRef getDescription() const { return ""; }
+  virtual StringRef getArgument() const {
+    if (const PassInfo *passInfo = lookupPassInfo())
+      return passInfo->getPassArgument();
+    return "";
+  }
 
   /// Returns the name of the operation that this pass operates on, or None if
   /// this is a generic OperationPass.
@@ -144,21 +145,6 @@ public:
   ArrayRef<Statistic *> getStatistics() const { return statistics; }
   MutableArrayRef<Statistic *> getStatistics() { return statistics; }
 
-  /// Returns the thread sibling of this pass.
-  ///
-  /// If this pass was cloned by the pass manager for the sake of
-  /// multi-threading, this function returns the original pass it was cloned
-  /// from. This is useful for diagnostic purposes to distinguish passes that
-  /// were replicated for threading purposes from passes instantiated by the
-  /// user. Used to collapse passes in timing statistics.
-  const Pass *getThreadingSibling() const { return threadingSibling; }
-
-  /// Returns the thread sibling of this pass, or the pass itself it has no
-  /// sibling. See `getThreadingSibling()` for details.
-  const Pass *getThreadingSiblingOrThis() const {
-    return threadingSibling ? threadingSibling : this;
-  }
-
 protected:
   explicit Pass(TypeID passID, Optional<StringRef> opName = llvm::None)
       : passID(passID), opName(opName) {}
@@ -170,7 +156,7 @@ protected:
     return *passState;
   }
 
-  /// Return the MLIR context for the current operation being transformed.
+  /// Return the MLIR context for the current function being transformed.
   MLIRContext &getContext() { return *getOperation()->getContext(); }
 
   /// The polymorphic API that runs the pass over the currently held operation.
@@ -306,10 +292,6 @@ private:
   /// The pass options registered to this pass instance.
   detail::PassOptions passOptions;
 
-  /// A pointer to the pass this pass was cloned from, if the clone was made by
-  /// the pass manager for the sake of multi-threading.
-  const Pass *threadingSibling = nullptr;
-
   /// Allow access to 'clone'.
   friend class OpPassManager;
 
@@ -332,14 +314,13 @@ private:
 ///   - modify any state within the parent operation, this includes adding
 ///     additional operations.
 ///
-/// Derived operation passes are expected to provide the following:
+/// Derived function passes are expected to provide the following:
 ///   - A 'void runOnOperation()' method.
 ///   - A 'StringRef getName() const' method.
 ///   - A 'std::unique_ptr<Pass> clonePass() const' method.
 template <typename OpT = void> class OperationPass : public Pass {
 protected:
   OperationPass(TypeID passID) : Pass(passID, OpT::getOperationName()) {}
-  OperationPass(const OperationPass &) = default;
 
   /// Support isa/dyn_cast functionality.
   static bool classof(const Pass *pass) {
@@ -365,14 +346,36 @@ protected:
 ///   - modify any state within the parent operation, this includes adding
 ///     additional operations.
 ///
-/// Derived operation passes are expected to provide the following:
+/// Derived function passes are expected to provide the following:
 ///   - A 'void runOnOperation()' method.
 ///   - A 'StringRef getName() const' method.
 ///   - A 'std::unique_ptr<Pass> clonePass() const' method.
 template <> class OperationPass<void> : public Pass {
 protected:
   OperationPass(TypeID passID) : Pass(passID) {}
-  OperationPass(const OperationPass &) = default;
+};
+
+/// A model for providing function pass specific utilities.
+///
+/// Derived function passes are expected to provide the following:
+///   - A 'void runOnFunction()' method.
+///   - A 'StringRef getName() const' method.
+///   - A 'std::unique_ptr<Pass> clonePass() const' method.
+class FunctionPass : public OperationPass<FuncOp> {
+public:
+  using OperationPass<FuncOp>::OperationPass;
+
+  /// The polymorphic API that runs the pass over the currently held function.
+  virtual void runOnFunction() = 0;
+
+  /// The polymorphic API that runs the pass over the currently held operation.
+  void runOnOperation() final {
+    if (!getFunction().isExternal())
+      runOnFunction();
+  }
+
+  /// Return the current function being transformed.
+  FuncOp getFunction() { return this->getOperation(); }
 };
 
 /// This class provides a CRTP wrapper around a base pass class to define
@@ -388,7 +391,6 @@ public:
 
 protected:
   PassWrapper() : BaseT(TypeID::get<PassT>()) {}
-  PassWrapper(const PassWrapper &) = default;
 
   /// Returns the derived pass name.
   StringRef getName() const override { return llvm::getTypeName<PassT>(); }
@@ -399,6 +401,6 @@ protected:
   }
 };
 
-} // namespace mlir
+} // end namespace mlir
 
 #endif // MLIR_PASS_PASS_H

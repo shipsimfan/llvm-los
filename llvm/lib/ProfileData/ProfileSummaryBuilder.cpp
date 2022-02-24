@@ -59,12 +59,12 @@ cl::opt<unsigned> ProfileSummaryLargeWorkingSetSizeThreshold(
 
 // The next two options override the counts derived from summary computation and
 // are useful for debugging purposes.
-cl::opt<uint64_t> ProfileSummaryHotCount(
+cl::opt<int> ProfileSummaryHotCount(
     "profile-summary-hot-count", cl::ReallyHidden, cl::ZeroOrMore,
     cl::desc("A fixed hot count that overrides the count derived from"
              " profile-summary-cutoff-hot"));
 
-cl::opt<uint64_t> ProfileSummaryColdCount(
+cl::opt<int> ProfileSummaryColdCount(
     "profile-summary-cold-count", cl::ReallyHidden, cl::ZeroOrMore,
     cl::desc("A fixed cold count that overrides the count derived from"
              " profile-summary-cutoff-cold"));
@@ -80,7 +80,7 @@ const ArrayRef<uint32_t> ProfileSummaryBuilder::DefaultCutoffs =
     DefaultCutoffsData;
 
 const ProfileSummaryEntry &
-ProfileSummaryBuilder::getEntryForPercentile(const SummaryEntryVector &DS,
+ProfileSummaryBuilder::getEntryForPercentile(SummaryEntryVector &DS,
                                              uint64_t Percentile) {
   auto It = partition_point(DS, [=](const ProfileSummaryEntry &Entry) {
     return Entry.Cutoff < Percentile;
@@ -110,15 +110,11 @@ void SampleProfileSummaryBuilder::addRecord(
     NumFunctions++;
     if (FS.getHeadSamples() > MaxFunctionCount)
       MaxFunctionCount = FS.getHeadSamples();
-  } else if (FS.getContext().hasAttribute(
-                 sampleprof::ContextDuplicatedIntoBase)) {
-    // Do not recount callee samples if they are already merged into their base
-    // profiles. This can happen to CS nested profile.
-    return;
   }
-
   for (const auto &I : FS.getBodySamples()) {
     uint64_t Count = I.second.getSamples();
+    if (!sampleprof::FunctionSamples::ProfileIsProbeBased ||
+        (Count != sampleprof::FunctionSamples::InvalidProbeCount))
       addCount(Count);
   }
   for (const auto &I : FS.getCallsiteSamples())
@@ -160,8 +156,7 @@ void ProfileSummaryBuilder::computeDetailedSummary() {
   }
 }
 
-uint64_t
-ProfileSummaryBuilder::getHotCountThreshold(const SummaryEntryVector &DS) {
+uint64_t ProfileSummaryBuilder::getHotCountThreshold(SummaryEntryVector &DS) {
   auto &HotEntry =
       ProfileSummaryBuilder::getEntryForPercentile(DS, ProfileSummaryCutoffHot);
   uint64_t HotCountThreshold = HotEntry.MinCount;
@@ -170,8 +165,7 @@ ProfileSummaryBuilder::getHotCountThreshold(const SummaryEntryVector &DS) {
   return HotCountThreshold;
 }
 
-uint64_t
-ProfileSummaryBuilder::getColdCountThreshold(const SummaryEntryVector &DS) {
+uint64_t ProfileSummaryBuilder::getColdCountThreshold(SummaryEntryVector &DS) {
   auto &ColdEntry = ProfileSummaryBuilder::getEntryForPercentile(
       DS, ProfileSummaryCutoffCold);
   uint64_t ColdCountThreshold = ColdEntry.MinCount;
@@ -189,18 +183,18 @@ std::unique_ptr<ProfileSummary> SampleProfileSummaryBuilder::getSummary() {
 
 std::unique_ptr<ProfileSummary>
 SampleProfileSummaryBuilder::computeSummaryForProfiles(
-    const SampleProfileMap &Profiles) {
+    const StringMap<sampleprof::FunctionSamples> &Profiles) {
   assert(NumFunctions == 0 &&
          "This can only be called on an empty summary builder");
-  sampleprof::SampleProfileMap ContextLessProfiles;
-  const sampleprof::SampleProfileMap *ProfilesToUse = &Profiles;
+  StringMap<sampleprof::FunctionSamples> ContextLessProfiles;
+  const StringMap<sampleprof::FunctionSamples> *ProfilesToUse = &Profiles;
   // For CSSPGO, context-sensitive profile effectively split a function profile
   // into many copies each representing the CFG profile of a particular calling
   // context. That makes the count distribution looks more flat as we now have
   // more function profiles each with lower counts, which in turn leads to lower
-  // hot thresholds. To compensate for that, by default we merge context
-  // profiles before computing profile summary.
-  if (UseContextLessSummary || (sampleprof::FunctionSamples::ProfileIsCSFlat &&
+  // hot thresholds. To compensate for that, by defauly we merge context
+  // profiles before coumputing profile summary.
+  if (UseContextLessSummary || (sampleprof::FunctionSamples::ProfileIsCS &&
                                 !UseContextLessSummary.getNumOccurrences())) {
     for (const auto &I : Profiles) {
       ContextLessProfiles[I.second.getName()].merge(I.second);

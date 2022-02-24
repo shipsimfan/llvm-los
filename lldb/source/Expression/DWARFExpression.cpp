@@ -8,7 +8,7 @@
 
 #include "lldb/Expression/DWARFExpression.h"
 
-#include <cinttypes>
+#include <inttypes.h>
 
 #include <vector>
 
@@ -16,7 +16,6 @@
 #include "lldb/Core/Value.h"
 #include "lldb/Core/dwarf.h"
 #include "lldb/Utility/DataEncoder.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/RegisterValue.h"
 #include "lldb/Utility/Scalar.h"
@@ -36,8 +35,6 @@
 #include "lldb/Target/StackID.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
-#include "llvm/DebugInfo/DWARF/DWARFDebugLoc.h"
-#include "llvm/DebugInfo/DWARF/DWARFExpression.h"
 
 #include "Plugins/SymbolFile/DWARF/DWARFUnit.h"
 
@@ -58,7 +55,9 @@ ReadAddressFromDebugAddrSection(const DWARFUnit *dwarf_cu,
 }
 
 // DWARFExpression constructor
-DWARFExpression::DWARFExpression() : m_module_wp(), m_data() {}
+DWARFExpression::DWARFExpression()
+    : m_module_wp(), m_data(), m_dwarf_cu(nullptr),
+      m_reg_kind(eRegisterKindDWARF) {}
 
 DWARFExpression::DWARFExpression(lldb::ModuleSP module_sp,
                                  const DataExtractor &data,
@@ -70,7 +69,7 @@ DWARFExpression::DWARFExpression(lldb::ModuleSP module_sp,
 }
 
 // Destructor
-DWARFExpression::~DWARFExpression() = default;
+DWARFExpression::~DWARFExpression() {}
 
 bool DWARFExpression::IsValid() const { return m_data.GetByteSize() > 0; }
 
@@ -463,19 +462,22 @@ bool DWARFExpression::Update_DW_OP_addr(lldb::addr_t file_addr) {
       // first, then modify it, and if all goes well, we then replace the data
       // for this expression
 
-      // Make en encoder that contains a copy of the location expression data
-      // so we can write the address into the buffer using the correct byte
-      // order.
-      DataEncoder encoder(m_data.GetDataStart(), m_data.GetByteSize(),
+      // So first we copy the data into a heap buffer
+      std::unique_ptr<DataBufferHeap> head_data_up(
+          new DataBufferHeap(m_data.GetDataStart(), m_data.GetByteSize()));
+
+      // Make en encoder so we can write the address into the buffer using the
+      // correct byte order (endianness)
+      DataEncoder encoder(head_data_up->GetBytes(), head_data_up->GetByteSize(),
                           m_data.GetByteOrder(), addr_byte_size);
 
       // Replace the address in the new buffer
-      if (encoder.PutAddress(offset, file_addr) == UINT32_MAX)
+      if (encoder.PutUnsigned(offset, addr_byte_size, file_addr) == UINT32_MAX)
         return false;
 
       // All went well, so now we can reset the data using a shared pointer to
       // the heap data so "m_data" will now correctly manage the heap data.
-      m_data.SetData(encoder.GetDataBuffer());
+      m_data.SetData(DataBufferSP(head_data_up.release()));
       return true;
     } else {
       const offset_t op_arg_size = GetOpcodeDataSize(m_data, offset, op);
@@ -521,11 +523,15 @@ bool DWARFExpression::LinkThreadLocalStorage(
   // We have to make a copy of the data as we don't know if this data is from a
   // read only memory mapped buffer, so we duplicate all of the data first,
   // then modify it, and if all goes well, we then replace the data for this
-  // expression.
+  // expression
 
-  // Make en encoder that contains a copy of the location expression data so we
-  // can write the address into the buffer using the correct byte order.
-  DataEncoder encoder(m_data.GetDataStart(), m_data.GetByteSize(),
+  // So first we copy the data into a heap buffer
+  std::shared_ptr<DataBufferHeap> heap_data_sp(
+      new DataBufferHeap(m_data.GetDataStart(), m_data.GetByteSize()));
+
+  // Make en encoder so we can write the address into the buffer using the
+  // correct byte order (endianness)
+  DataEncoder encoder(heap_data_sp->GetBytes(), heap_data_sp->GetByteSize(),
                       m_data.GetByteOrder(), addr_byte_size);
 
   lldb::offset_t offset = 0;
@@ -599,7 +605,7 @@ bool DWARFExpression::LinkThreadLocalStorage(
   // and read the
   // TLS data
   m_module_wp = new_module_sp;
-  m_data.SetData(encoder.GetDataBuffer());
+  m_data.SetData(heap_data_sp);
   return true;
 }
 
@@ -828,7 +834,7 @@ static bool Evaluate_DW_OP_entry_value(std::vector<Value> &stack,
   const DWARFExpression &param_expr = matched_param->LocationInCaller;
   if (!param_expr.Evaluate(&parent_exe_ctx,
                            parent_frame->GetRegisterContext().get(),
-                           /*loclist_base_load_addr=*/LLDB_INVALID_ADDRESS,
+                           /*loclist_base_addr=*/LLDB_INVALID_ADDRESS,
                            /*initial_value_ptr=*/nullptr,
                            /*object_address_ptr=*/nullptr, result, error_ptr)) {
     LLDB_LOG(log,
@@ -980,7 +986,7 @@ bool DWARFExpression::Evaluate(
   uint64_t op_piece_offset = 0;
   Value pieces; // Used for DW_OP_piece
 
-  Log *log = GetLog(LLDBLog::Expressions);
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
   // A generic type is "an integral type that has the size of an address and an
   // unspecified signedness". For now, just use the signedness of the operand.
   // TODO: Implement a real typed stack, and store the genericness of the value
@@ -1124,8 +1130,6 @@ bool DWARFExpression::Evaluate(
             lldb::addr_t pointer_value =
                 process->ReadPointerFromMemory(pointer_addr, error);
             if (pointer_value != LLDB_INVALID_ADDRESS) {
-              if (ABISP abi_sp = process->GetABI())
-                pointer_value = abi_sp->FixCodeAddress(pointer_value);
               stack.back().GetScalar() = pointer_value;
               stack.back().ClearContext();
             } else {
@@ -2676,7 +2680,7 @@ static DataExtractor ToDataExtractor(const llvm::DWARFLocationExpression &loc,
 llvm::Optional<DataExtractor>
 DWARFExpression::GetLocationExpression(addr_t load_function_start,
                                        addr_t addr) const {
-  Log *log = GetLog(LLDBLog::Expressions);
+  Log *log = GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS);
 
   std::unique_ptr<llvm::DWARFLocationTable> loctable_up =
       m_dwarf_cu->GetLocationTable(m_data);
@@ -2813,3 +2817,4 @@ bool DWARFExpression::MatchesOperand(StackFrame &frame,
     return MatchRegOp(*reg)(operand);
   }
 }
+

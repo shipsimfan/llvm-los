@@ -4,13 +4,13 @@
 
 @import Module.Sub;
 
-void test_Module_Sub(void) {
+void test_Module_Sub() {
   int *ip = Module_Sub;
 }
 
 @import Module.Buried.Treasure;
 
-void dig(void) {
+void dig() {
   unsigned *up = Buried_Treasure;
 }
 

@@ -36,7 +36,6 @@ class AnyMemTransferInst;
 class AnyMemIntrinsic;
 class TargetLibraryInfo;
 class VAArgInst;
-class Value;
 
 // Represents the size of a MemoryLocation. Logically, it's an
 // Optional<uint63_t> that also carries a bit to represent whether the integer
@@ -254,8 +253,6 @@ public:
   static MemoryLocation getForDest(const MemIntrinsic *MI);
   static MemoryLocation getForDest(const AtomicMemIntrinsic *MI);
   static MemoryLocation getForDest(const AnyMemIntrinsic *MI);
-  static Optional<MemoryLocation> getForDest(const CallBase *CI,
-                                             const TargetLibraryInfo &TLI);
 
   /// Return a location representing a particular argument of a call.
   static MemoryLocation getForArgument(const CallBase *Call, unsigned ArgIdx,
@@ -285,7 +282,8 @@ public:
     return T.isScalable() ? UnknownSize : T.getFixedSize();
   }
 
-  MemoryLocation() : Ptr(nullptr), Size(LocationSize::beforeOrAfterPointer()) {}
+  MemoryLocation()
+      : Ptr(nullptr), Size(LocationSize::beforeOrAfterPointer()), AATags() {}
 
   explicit MemoryLocation(const Value *Ptr, LocationSize Size,
                           const AAMDNodes &AATags = AAMDNodes())

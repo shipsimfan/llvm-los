@@ -7,7 +7,7 @@ extern struct T {
   int b2 : 1;
 } g;
 
-int func(void) {
+int func() {
   return g.b1;
 }
 

@@ -38,7 +38,7 @@ public:
   bool SelectAddr(SDNode *Op, SDValue N, SDValue &Base, SDValue &Disp);
 
   bool selectIndexedLoad(SDNode *N);
-  unsigned selectIndexedProgMemLoad(const LoadSDNode *LD, MVT VT, int Bank);
+  unsigned selectIndexedProgMemLoad(const LoadSDNode *LD, MVT VT);
 
   bool SelectInlineAsmMemoryOperand(const SDValue &Op, unsigned ConstraintCode,
                                     std::vector<SDValue> &OutOps) override;
@@ -156,50 +156,55 @@ bool AVRDAGToDAGISel::selectIndexedLoad(SDNode *N) {
     return false;
   }
 
-  SDNode *ResNode =
-      CurDAG->getMachineNode(Opcode, SDLoc(N), VT, PtrVT, MVT::Other,
-                             LD->getBasePtr(), LD->getChain());
+  SDNode *ResNode = CurDAG->getMachineNode(Opcode, SDLoc(N), VT,
+                                           PtrVT, MVT::Other,
+                                           LD->getBasePtr(), LD->getChain());
   ReplaceUses(N, ResNode);
   CurDAG->RemoveDeadNode(N);
 
   return true;
 }
 
-unsigned AVRDAGToDAGISel::selectIndexedProgMemLoad(const LoadSDNode *LD, MVT VT,
-                                                   int Bank) {
-  // Progmem indexed loads only work in POSTINC mode.
-  if (LD->getExtensionType() != ISD::NON_EXTLOAD ||
-      LD->getAddressingMode() != ISD::POST_INC)
-    return 0;
+unsigned AVRDAGToDAGISel::selectIndexedProgMemLoad(const LoadSDNode *LD,
+                                                   MVT VT) {
+  ISD::MemIndexedMode AM = LD->getAddressingMode();
 
-  // Feature ELPM is needed for loading from extended program memory.
-  assert((Bank == 0 || Subtarget->hasELPM()) &&
-         "cannot load from extended program memory on this mcu");
+  // Progmem indexed loads only work in POSTINC mode.
+  if (LD->getExtensionType() != ISD::NON_EXTLOAD || AM != ISD::POST_INC) {
+    return 0;
+  }
 
   unsigned Opcode = 0;
   int Offs = cast<ConstantSDNode>(LD->getOffset())->getSExtValue();
 
   switch (VT.SimpleTy) {
-  case MVT::i8:
-    if (Offs == 1)
-      Opcode = Bank > 0 ? AVR::ELPMBRdZPi : AVR::LPMRdZPi;
+  case MVT::i8: {
+    if (Offs != 1) {
+      return 0;
+    }
+    Opcode = AVR::LPMRdZPi;
     break;
-  case MVT::i16:
-    if (Offs == 2)
-      Opcode = Bank > 0 ? AVR::ELPMWRdZPi : AVR::LPMWRdZPi;
+  }
+  case MVT::i16: {
+    if (Offs != 2) {
+      return 0;
+    }
+    Opcode = AVR::LPMWRdZPi;
     break;
+  }
   default:
-    break;
+    return 0;
   }
 
   return Opcode;
 }
 
-bool AVRDAGToDAGISel::SelectInlineAsmMemoryOperand(
-    const SDValue &Op, unsigned ConstraintCode, std::vector<SDValue> &OutOps) {
+bool AVRDAGToDAGISel::SelectInlineAsmMemoryOperand(const SDValue &Op,
+                                                   unsigned ConstraintCode,
+                                                   std::vector<SDValue> &OutOps) {
   assert((ConstraintCode == InlineAsm::Constraint_m ||
-          ConstraintCode == InlineAsm::Constraint_Q) &&
-         "Unexpected asm memory constraint");
+         ConstraintCode == InlineAsm::Constraint_Q) &&
+      "Unexpected asm memory constraint");
 
   MachineRegisterInfo &RI = MF->getRegInfo();
   const AVRSubtarget &STI = MF->getSubtarget<AVRSubtarget>();
@@ -271,8 +276,7 @@ bool AVRDAGToDAGISel::SelectInlineAsmMemoryOperand(
       }
 
       if (ImmNode->getValueType(0) != MVT::i8) {
-        Disp = CurDAG->getTargetConstant(
-            ImmNode->getAPIntValue().getZExtValue(), dl, MVT::i8);
+        Disp = CurDAG->getTargetConstant(ImmNode->getAPIntValue().getZExtValue(), dl, MVT::i8);
       } else {
         Disp = ImmOp;
       }
@@ -305,10 +309,11 @@ template <> bool AVRDAGToDAGISel::select<ISD::FrameIndex>(SDNode *N) {
   // effective address of the final stack slot.
   int FI = cast<FrameIndexSDNode>(N)->getIndex();
   SDValue TFI =
-      CurDAG->getTargetFrameIndex(FI, getTargetLowering()->getPointerTy(DL));
+    CurDAG->getTargetFrameIndex(FI, getTargetLowering()->getPointerTy(DL));
 
-  CurDAG->SelectNodeTo(N, AVR::FRMIDX, getTargetLowering()->getPointerTy(DL),
-                       TFI, CurDAG->getTargetConstant(0, SDLoc(N), MVT::i16));
+  CurDAG->SelectNodeTo(N, AVR::FRMIDX,
+                       getTargetLowering()->getPointerTy(DL), TFI,
+                       CurDAG->getTargetConstant(0, SDLoc(N), MVT::i16));
   return true;
 }
 
@@ -356,12 +361,7 @@ template <> bool AVRDAGToDAGISel::select<ISD::LOAD>(SDNode *N) {
     return selectIndexedLoad(N);
   }
 
-  if (!Subtarget->hasLPM())
-    report_fatal_error("cannot load from program memory on this mcu");
-
-  int ProgMemBank = AVR::getProgramMemoryBank(LD);
-  if (ProgMemBank < 0 || ProgMemBank > 5)
-    report_fatal_error("unexpected program memory bank");
+  assert(Subtarget->hasLPM() && "cannot load from program memory on this mcu");
 
   // This is a flash memory load, move the pointer into R31R30 and emit
   // the lpm instruction.
@@ -375,48 +375,25 @@ template <> bool AVRDAGToDAGISel::select<ISD::LOAD>(SDNode *N) {
   Ptr = CurDAG->getCopyFromReg(Chain, DL, AVR::R31R30, MVT::i16,
                                Chain.getValue(1));
 
+  SDValue RegZ = CurDAG->getRegister(AVR::R31R30, MVT::i16);
+
   // Check if the opcode can be converted into an indexed load.
-  if (unsigned LPMOpc = selectIndexedProgMemLoad(LD, VT, ProgMemBank)) {
+  if (unsigned LPMOpc = selectIndexedProgMemLoad(LD, VT)) {
     // It is legal to fold the load into an indexed load.
-    if (ProgMemBank == 0) {
-      ResNode =
-          CurDAG->getMachineNode(LPMOpc, DL, VT, MVT::i16, MVT::Other, Ptr);
-    } else {
-      // Do not combine the LDI instruction into the ELPM pseudo instruction,
-      // since it may be reused by other ELPM pseudo instructions.
-      SDValue NC = CurDAG->getTargetConstant(ProgMemBank, DL, MVT::i8);
-      auto *NP = CurDAG->getMachineNode(AVR::LDIRdK, DL, MVT::i8, NC);
-      ResNode = CurDAG->getMachineNode(LPMOpc, DL, VT, MVT::i16, MVT::Other,
-                                       Ptr, SDValue(NP, 0));
-    }
+    ResNode = CurDAG->getMachineNode(LPMOpc, DL, VT, MVT::i16, MVT::Other, Ptr,
+                                     RegZ);
+    ReplaceUses(SDValue(N, 1), SDValue(ResNode, 1));
   } else {
     // Selecting an indexed load is not legal, fallback to a normal load.
     switch (VT.SimpleTy) {
     case MVT::i8:
-      if (ProgMemBank == 0) {
-        ResNode =
-            CurDAG->getMachineNode(AVR::LPMRdZ, DL, MVT::i8, MVT::Other, Ptr);
-      } else {
-        // Do not combine the LDI instruction into the ELPM pseudo instruction,
-        // since it may be reused by other ELPM pseudo instructions.
-        SDValue NC = CurDAG->getTargetConstant(ProgMemBank, DL, MVT::i8);
-        auto *NP = CurDAG->getMachineNode(AVR::LDIRdK, DL, MVT::i8, NC);
-        ResNode = CurDAG->getMachineNode(AVR::ELPMBRdZ, DL, MVT::i8, MVT::Other,
-                                         Ptr, SDValue(NP, 0));
-      }
+      ResNode = CurDAG->getMachineNode(AVR::LPMRdZ, DL, MVT::i8, MVT::Other,
+                                       Ptr, RegZ);
       break;
     case MVT::i16:
-      if (ProgMemBank == 0) {
-        ResNode =
-            CurDAG->getMachineNode(AVR::LPMWRdZ, DL, MVT::i16, MVT::Other, Ptr);
-      } else {
-        // Do not combine the LDI instruction into the ELPM pseudo instruction,
-        // since LDI requires the destination register in range R16~R31.
-        SDValue NC = CurDAG->getTargetConstant(ProgMemBank, DL, MVT::i8);
-        auto *NP = CurDAG->getMachineNode(AVR::LDIRdK, DL, MVT::i8, NC);
-        ResNode = CurDAG->getMachineNode(AVR::ELPMWRdZ, DL, MVT::i16,
-                                         MVT::Other, Ptr, SDValue(NP, 0));
-      }
+      ResNode = CurDAG->getMachineNode(AVR::LPMWRdZ, DL, MVT::i16,
+                                       MVT::Other, Ptr, RegZ);
+      ReplaceUses(SDValue(N, 1), SDValue(ResNode, 1));
       break;
     default:
       llvm_unreachable("Unsupported VT!");
@@ -464,7 +441,7 @@ template <> bool AVRDAGToDAGISel::select<AVRISD::CALL>(SDNode *N) {
   Ops.push_back(Chain.getValue(1));
 
   SDNode *ResNode =
-      CurDAG->getMachineNode(AVR::ICALL, DL, MVT::Other, MVT::Glue, Ops);
+    CurDAG->getMachineNode(AVR::ICALL, DL, MVT::Other, MVT::Glue, Ops);
 
   ReplaceUses(SDValue(N, 0), SDValue(ResNode, 0));
   ReplaceUses(SDValue(N, 1), SDValue(ResNode, 1));
@@ -555,23 +532,16 @@ bool AVRDAGToDAGISel::trySelect(SDNode *N) {
 
   switch (Opcode) {
   // Nodes we fully handle.
-  case ISD::FrameIndex:
-    return select<ISD::FrameIndex>(N);
-  case ISD::BRIND:
-    return select<ISD::BRIND>(N);
+  case ISD::FrameIndex: return select<ISD::FrameIndex>(N);
+  case ISD::BRIND:      return select<ISD::BRIND>(N);
   case ISD::UMUL_LOHI:
-  case ISD::SMUL_LOHI:
-    return selectMultiplication(N);
+  case ISD::SMUL_LOHI:  return selectMultiplication(N);
 
   // Nodes we handle partially. Other cases are autogenerated
-  case ISD::STORE:
-    return select<ISD::STORE>(N);
-  case ISD::LOAD:
-    return select<ISD::LOAD>(N);
-  case AVRISD::CALL:
-    return select<AVRISD::CALL>(N);
-  default:
-    return false;
+  case ISD::STORE:   return select<ISD::STORE>(N);
+  case ISD::LOAD:    return select<ISD::LOAD>(N);
+  case AVRISD::CALL: return select<AVRISD::CALL>(N);
+  default:           return false;
   }
 }
 
@@ -581,3 +551,4 @@ FunctionPass *createAVRISelDag(AVRTargetMachine &TM,
 }
 
 } // end of namespace llvm
+

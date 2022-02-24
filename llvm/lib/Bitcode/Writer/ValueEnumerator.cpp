@@ -28,7 +28,6 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/Operator.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
 #include "llvm/IR/User.h"
@@ -229,11 +228,8 @@ static void predictValueUseListOrderImpl(const Value *V, const Function *F,
     // have been read (despite having earlier IDs).  Rather than awkwardly
     // modeling this behaviour here, orderModule() has assigned IDs to
     // initializers of GlobalValues before GlobalValues themselves.
-    if (OM.isGlobalValue(LID) && OM.isGlobalValue(RID)) {
-      if (LID == RID)
-        return LU->getOperandNo() > RU->getOperandNo();
+    if (OM.isGlobalValue(LID) && OM.isGlobalValue(RID))
       return LID < RID;
-    }
 
     // If ID is 4, then expect: 7 6 5 1 2 3.
     if (LID < RID) {
@@ -310,7 +306,8 @@ static UseListOrderStack predictUseListOrder(const Module &M) {
   // We want to visit the functions backward now so we can list function-local
   // constants in the last Function they're used in.  Module-level constants
   // have already been visited above.
-  for (const Function &F : llvm::reverse(M)) {
+  for (auto I = M.rbegin(), E = M.rend(); I != E; ++I) {
+    const Function &F = *I;
     if (F.isDeclaration())
       continue;
     for (const BasicBlock &BB : F)
@@ -367,29 +364,22 @@ ValueEnumerator::ValueEnumerator(const Module &M,
     UseListOrders = predictUseListOrder(M);
 
   // Enumerate the global variables.
-  for (const GlobalVariable &GV : M.globals()) {
+  for (const GlobalVariable &GV : M.globals())
     EnumerateValue(&GV);
-    EnumerateType(GV.getValueType());
-  }
 
   // Enumerate the functions.
   for (const Function & F : M) {
     EnumerateValue(&F);
-    EnumerateType(F.getValueType());
     EnumerateAttributes(F.getAttributes());
   }
 
   // Enumerate the aliases.
-  for (const GlobalAlias &GA : M.aliases()) {
+  for (const GlobalAlias &GA : M.aliases())
     EnumerateValue(&GA);
-    EnumerateType(GA.getValueType());
-  }
 
   // Enumerate the ifuncs.
-  for (const GlobalIFunc &GIF : M.ifuncs()) {
+  for (const GlobalIFunc &GIF : M.ifuncs())
     EnumerateValue(&GIF);
-    EnumerateType(GIF.getValueType());
-  }
 
   // Remember what is the cutoff between globalvalue's and other constants.
   unsigned FirstConstant = Values.size();
@@ -473,15 +463,9 @@ ValueEnumerator::ValueEnumerator(const Module &M,
         }
         if (auto *SVI = dyn_cast<ShuffleVectorInst>(&I))
           EnumerateType(SVI->getShuffleMaskForBitcode()->getType());
-        if (auto *GEP = dyn_cast<GetElementPtrInst>(&I))
-          EnumerateType(GEP->getSourceElementType());
-        if (auto *AI = dyn_cast<AllocaInst>(&I))
-          EnumerateType(AI->getAllocatedType());
         EnumerateType(I.getType());
-        if (const auto *Call = dyn_cast<CallBase>(&I)) {
+        if (const auto *Call = dyn_cast<CallBase>(&I))
           EnumerateAttributes(Call->getAttributes());
-          EnumerateType(Call->getFunctionType());
-        }
 
         // Enumerate metadata attached with this instruction.
         MDs.clear();
@@ -542,8 +526,9 @@ void ValueEnumerator::print(raw_ostream &OS, const ValueMapType &Map,
                             const char *Name) const {
   OS << "Map Name: " << Name << "\n";
   OS << "Size: " << Map.size() << "\n";
-  for (const auto &I : Map) {
-    const Value *V = I.first;
+  for (ValueMapType::const_iterator I = Map.begin(),
+         E = Map.end(); I != E; ++I) {
+    const Value *V = I->first;
     if (V->hasName())
       OS << "Value: " << V->getName();
     else
@@ -569,10 +554,10 @@ void ValueEnumerator::print(raw_ostream &OS, const MetadataMapType &Map,
                             const char *Name) const {
   OS << "Map Name: " << Name << "\n";
   OS << "Size: " << Map.size() << "\n";
-  for (const auto &I : Map) {
-    const Metadata *MD = I.first;
-    OS << "Metadata: slot = " << I.second.ID << "\n";
-    OS << "Metadata: function = " << I.second.F << "\n";
+  for (auto I = Map.begin(), E = Map.end(); I != E; ++I) {
+    const Metadata *MD = I->first;
+    OS << "Metadata: slot = " << I->second.ID << "\n";
+    OS << "Metadata: function = " << I->second.F << "\n";
     MD->print(OS);
     OS << "\n";
   }
@@ -1019,12 +1004,9 @@ void ValueEnumerator::EnumerateOperandType(const Value *V) {
 
     EnumerateOperandType(Op);
   }
-  if (auto *CE = dyn_cast<ConstantExpr>(C)) {
+  if (auto *CE = dyn_cast<ConstantExpr>(C))
     if (CE->getOpcode() == Instruction::ShuffleVector)
       EnumerateOperandType(CE->getShuffleMaskForBitcode());
-    if (CE->getOpcode() == Instruction::GetElementPtr)
-      EnumerateType(cast<GEPOperator>(CE)->getSourceElementType());
-  }
 }
 
 void ValueEnumerator::EnumerateAttributes(AttributeList PAL) {
@@ -1039,7 +1021,7 @@ void ValueEnumerator::EnumerateAttributes(AttributeList PAL) {
   }
 
   // Do lookups for all attribute groups.
-  for (unsigned i : PAL.indexes()) {
+  for (unsigned i = PAL.index_begin(), e = PAL.index_end(); i != e; ++i) {
     AttributeSet AS = PAL.getAttributes(i);
     if (!AS.hasAttributes())
       continue;
@@ -1048,11 +1030,6 @@ void ValueEnumerator::EnumerateAttributes(AttributeList PAL) {
     if (Entry == 0) {
       AttributeGroups.push_back(Pair);
       Entry = AttributeGroups.size();
-
-      for (Attribute Attr : AS) {
-        if (Attr.isTypeAttribute())
-          EnumerateType(Attr.getValueAsType());
-      }
     }
   }
 }
@@ -1148,8 +1125,8 @@ void ValueEnumerator::purgeFunction() {
     ValueMap.erase(Values[i].first);
   for (unsigned i = NumModuleMDs, e = MDs.size(); i != e; ++i)
     MetadataMap.erase(MDs[i]);
-  for (const BasicBlock *BB : BasicBlocks)
-    ValueMap.erase(BB);
+  for (unsigned i = 0, e = BasicBlocks.size(); i != e; ++i)
+    ValueMap.erase(BasicBlocks[i]);
 
   Values.resize(NumModuleValues);
   MDs.resize(NumModuleMDs);

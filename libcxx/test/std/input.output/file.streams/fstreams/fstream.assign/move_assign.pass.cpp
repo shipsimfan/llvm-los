@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+// UNSUPPORTED: c++03
+
 // <fstream>
 
 // template <class charT, class traits = char_traits<charT> >
@@ -25,7 +27,7 @@ int main(int, char**)
         std::fstream fso(temp.c_str(), std::ios_base::in | std::ios_base::out
                                                  | std::ios_base::trunc);
         std::fstream fs;
-        fs = std::move(fso);
+        fs = move(fso);
         double x = 0;
         fs << 3.25;
         fs.seekg(0);
@@ -33,13 +35,11 @@ int main(int, char**)
         assert(x == 3.25);
     }
     std::remove(temp.c_str());
-
-#ifndef TEST_HAS_NO_WIDE_CHARACTERS
     {
         std::wfstream fso(temp.c_str(), std::ios_base::in | std::ios_base::out
                                                   | std::ios_base::trunc);
         std::wfstream fs;
-        fs = std::move(fso);
+        fs = move(fso);
         double x = 0;
         fs << 3.25;
         fs.seekg(0);
@@ -47,7 +47,6 @@ int main(int, char**)
         assert(x == 3.25);
     }
     std::remove(temp.c_str());
-#endif
 
   return 0;
 }

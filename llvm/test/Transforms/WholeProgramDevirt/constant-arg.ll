@@ -1,3 +1,4 @@
+; RUN: opt -S -wholeprogramdevirt -whole-program-visibility %s | FileCheck %s
 ; RUN: opt -S -passes=wholeprogramdevirt -whole-program-visibility %s | FileCheck %s
 
 target datalayout = "e-p:64:64"

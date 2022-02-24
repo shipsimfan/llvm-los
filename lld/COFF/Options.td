@@ -41,7 +41,6 @@ def color_diagnostics_eq: Joined<["--"], "color-diagnostics=">,
     MetaVarName<"[auto,always,never]">;
 def defaultlib : P<"defaultlib", "Add the library to the list of input files">;
 def delayload : P<"delayload", "Delay loaded DLL name">;
-def diasdkdir : P<"diasdkdir", "Set the location of the DIA SDK">;
 def entry   : P<"entry", "Name of entry point symbol">;
 def errorlimit : P<"errorlimit",
     "Maximum number of errors to emit before stopping (0 = no limit)">;
@@ -79,9 +78,8 @@ def order   : P<"order", "Put functions in order">;
 def out     : P<"out", "Path to file to write output">;
 def natvis : P<"natvis", "Path to natvis file to embed in the PDB">;
 def pdb : P<"pdb", "PDB file path">;
-def pdbaltpath : P<"pdbaltpath", "PDB file path to embed in the image">;
-def pdbpagesize : P<"pdbpagesize", "PDB page size">;
 def pdbstripped : P<"pdbstripped", "Stripped PDB file path">;
+def pdbaltpath : P<"pdbaltpath", "PDB file path to embed in the image">;
 def pdbstream : Joined<["/", "-", "/?", "-?"], "pdbstream:">,
     MetaVarName<"<name>=<file>">,
     HelpText<"Embed the contents of <file> in the PDB as named stream <name>">;
@@ -90,16 +88,9 @@ def stack   : P<"stack", "Size of the stack">;
 def stub    : P<"stub", "Specify DOS stub file">;
 def subsystem : P<"subsystem", "Specify subsystem">;
 def timestamp : P<"timestamp", "Specify the PE header timestamp">;
-def vctoolsdir : P<"vctoolsdir", "Set the location of the VC tools">;
-def vctoolsversion : P<"vctoolsversion",
-    "Specify which VC tools version to use">;
 def version : P<"version", "Specify a version number in the PE header">;
 def wholearchive_file : P<"wholearchive",
     "Include all object files from this library">;
-def winsdkdir : P<"winsdkdir", "Set the location of the Windows SDK">;
-def winsdkversion : P<"winsdkversion", "Specify which SDK version to use">;
-def winsysroot : P<"winsysroot",
-    "Adds several subdirectories to the library search paths">;
 
 def disallowlib : Joined<["/", "-", "/?", "-?"], "disallowlib:">,
     Alias<nodefaultlib>;
@@ -230,7 +221,6 @@ def rsp_quoting : Joined<["--"], "rsp-quoting=">,
   HelpText<"Quoting style for response files, 'windows' (default) or 'posix'">;
 def start_lib : F<"start-lib">,
   HelpText<"Start group of objects treated as if they were in a library">;
-defm stdcall_fixup : B_priv<"stdcall-fixup">;
 def thinlto_emit_imports_files :
     F<"thinlto-emit-imports-files">,
     HelpText<"Emit .imports files with -thinlto-index-only">;
@@ -253,10 +243,6 @@ def lto_cs_profile_generate: F<"lto-cs-profile-generate">,
     HelpText<"Perform context sensitive PGO instrumentation">;
 def lto_cs_profile_file : P<"lto-cs-profile-file",
     "Context sensitive profile file path">;
-defm lto_pgo_warn_mismatch: B<
-     "lto-pgo-warn-mismatch",
-     "turn on warnings about profile cfg mismatch (default)>",
-     "turn off warnings about profile cfg mismatch">;
 def dash_dash_version : Flag<["--"], "version">,
   HelpText<"Display the version number and exit">;
 def threads
@@ -277,9 +263,9 @@ def wrap : P_priv<"wrap">;
 
 // Flags for debugging
 def lldmap : F<"lldmap">;
-def lldmap_file : P_priv<"lldmap">;
+def lldmap_file : Joined<["/", "-", "/?", "-?"], "lldmap:">;
 def map : F<"map">;
-def map_file : P_priv<"map">;
+def map_file : Joined<["/", "-", "/?", "-?"], "map:">;
 def show_timing : F<"time">;
 def summary : F<"summary">;
 
@@ -287,21 +273,19 @@ def summary : F<"summary">;
 // The flags below do nothing. They are defined only for link.exe compatibility.
 //==============================================================================
 
+class QF<string name> : Joined<["/", "-", "/?", "-?"], name#":">;
+
 def ignoreidl : F<"ignoreidl">;
-def ltcg : F<"ltcg">;
 def nologo : F<"nologo">;
 def throwingnew : F<"throwingnew">;
 def editandcontinue : F<"editandcontinue">;
 def fastfail : F<"fastfail">;
 
-def delay : P_priv<"delay">;
-def errorreport : P_priv<"errorreport">;
-def idlout : P_priv<"idlout">;
-def ilk : P_priv<"ilk">;
-def ltcg_opt : P_priv<"ltcg">;
-def ltcgout : P_priv<"ltcgout">;
-def maxilksize : P_priv<"maxilksize">;
-def tlbid : P_priv<"tlbid">;
-def tlbout : P_priv<"tlbout">;
-def verbose_all : P_priv<"verbose">;
-def guardsym : P_priv<"guardsym">;
+def delay : QF<"delay">;
+def errorreport : QF<"errorreport">;
+def idlout : QF<"idlout">;
+def maxilksize : QF<"maxilksize">;
+def tlbid : QF<"tlbid">;
+def tlbout : QF<"tlbout">;
+def verbose_all : QF<"verbose">;
+def guardsym : QF<"guardsym">;

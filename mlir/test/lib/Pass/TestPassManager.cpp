@@ -16,21 +16,11 @@ namespace {
 struct TestModulePass
     : public PassWrapper<TestModulePass, OperationPass<ModuleOp>> {
   void runOnOperation() final {}
-  StringRef getArgument() const final { return "test-module-pass"; }
-  StringRef getDescription() const final {
-    return "Test a module pass in the pass manager";
-  }
 };
-struct TestFunctionPass
-    : public PassWrapper<TestFunctionPass, OperationPass<FuncOp>> {
-  void runOnOperation() final {}
-  StringRef getArgument() const final { return "test-function-pass"; }
-  StringRef getDescription() const final {
-    return "Test a function pass in the pass manager";
-  }
+struct TestFunctionPass : public PassWrapper<TestFunctionPass, FunctionPass> {
+  void runOnFunction() final {}
 };
-class TestOptionsPass
-    : public PassWrapper<TestOptionsPass, OperationPass<FuncOp>> {
+class TestOptionsPass : public PassWrapper<TestOptionsPass, FunctionPass> {
 public:
   struct Options : public PassPipelineOptions<Options> {
     ListOption<int> listOption{*this, "list",
@@ -50,11 +40,7 @@ public:
     stringListOption = options.stringListOption;
   }
 
-  void runOnOperation() final {}
-  StringRef getArgument() const final { return "test-options-pass"; }
-  StringRef getDescription() const final {
-    return "Test options parsing capabilities";
-  }
+  void runOnFunction() final {}
 
   ListOption<int> listOption{*this, "list", llvm::cl::MiscFlags::CommaSeparated,
                              llvm::cl::desc("Example list option")};
@@ -70,20 +56,6 @@ public:
 class TestCrashRecoveryPass
     : public PassWrapper<TestCrashRecoveryPass, OperationPass<>> {
   void runOnOperation() final { abort(); }
-  StringRef getArgument() const final { return "test-pass-crash"; }
-  StringRef getDescription() const final {
-    return "Test a pass in the pass manager that always crashes";
-  }
-};
-
-/// A test pass that always fails to enable testing the failure recovery
-/// mechanisms of the pass manager.
-class TestFailurePass : public PassWrapper<TestFailurePass, OperationPass<>> {
-  void runOnOperation() final { signalPassFailure(); }
-  StringRef getArgument() const final { return "test-pass-failure"; }
-  StringRef getDescription() const final {
-    return "Test a pass in the pass manager that always fails";
-  }
 };
 
 /// A test pass that contains a statistic.
@@ -91,8 +63,6 @@ struct TestStatisticPass
     : public PassWrapper<TestStatisticPass, OperationPass<>> {
   TestStatisticPass() = default;
   TestStatisticPass(const TestStatisticPass &) {}
-  StringRef getArgument() const final { return "test-stats-pass"; }
-  StringRef getDescription() const final { return "Test pass statistics"; }
 
   Statistic opCount{this, "num-ops", "Number of operations counted"};
 
@@ -100,7 +70,7 @@ struct TestStatisticPass
     getOperation()->walk([&](Operation *) { ++opCount; });
   }
 };
-} // namespace
+} // end anonymous namespace
 
 static void testNestedPipeline(OpPassManager &pm) {
   // Nest a module pipeline that contains:
@@ -122,16 +92,20 @@ static void testNestedPipelineTextual(OpPassManager &pm) {
 
 namespace mlir {
 void registerPassManagerTestPass() {
-  PassRegistration<TestOptionsPass>();
+  PassRegistration<TestOptionsPass>("test-options-pass",
+                                    "Test options parsing capabilities");
 
-  PassRegistration<TestModulePass>();
+  PassRegistration<TestModulePass>("test-module-pass",
+                                   "Test a module pass in the pass manager");
 
-  PassRegistration<TestFunctionPass>();
+  PassRegistration<TestFunctionPass>(
+      "test-function-pass", "Test a function pass in the pass manager");
 
-  PassRegistration<TestCrashRecoveryPass>();
-  PassRegistration<TestFailurePass>();
+  PassRegistration<TestCrashRecoveryPass>(
+      "test-pass-crash", "Test a pass in the pass manager that always crashes");
 
-  PassRegistration<TestStatisticPass>();
+  PassRegistration<TestStatisticPass> unusedStatP("test-stats-pass",
+                                                  "Test pass statistics");
 
   PassPipelineRegistration<>("test-pm-nested-pipeline",
                              "Test a nested pipeline in the pass manager",

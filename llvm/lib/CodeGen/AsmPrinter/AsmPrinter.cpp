@@ -38,6 +38,7 @@
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/CodeGen/GCMetadata.h"
 #include "llvm/CodeGen/GCMetadataPrinter.h"
+#include "llvm/CodeGen/GCStrategy.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineDominators.h"
@@ -59,7 +60,6 @@
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/Config/config.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Comdat.h"
 #include "llvm/IR/Constant.h"
@@ -68,9 +68,9 @@
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/GCStrategy.h"
 #include "llvm/IR/GlobalAlias.h"
 #include "llvm/IR/GlobalIFunc.h"
+#include "llvm/IR/GlobalIndirectSymbol.h"
 #include "llvm/IR/GlobalObject.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/GlobalVariable.h"
@@ -101,7 +101,6 @@
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/MC/SectionKind.h"
-#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Pass.h"
 #include "llvm/Remarks/Remark.h"
 #include "llvm/Remarks/RemarkFormat.h"
@@ -115,6 +114,7 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
@@ -180,7 +180,7 @@ Align AsmPrinter::getGVAlignment(const GlobalObject *GV, const DataLayout &DL,
     Alignment = InAlign;
 
   // If the GV has a specified alignment, take it into account.
-  const MaybeAlign GVAlign(GV->getAlign());
+  const MaybeAlign GVAlign(GV->getAlignment());
   if (!GVAlign)
     return Alignment;
 
@@ -247,11 +247,6 @@ void AsmPrinter::emitInitialRawDwarfLocDirective(const MachineFunction &MF) {
   if (DD) {
     assert(OutStreamer->hasRawTextSupport() &&
            "Expected assembly output mode.");
-    // This is NVPTX specific and it's unclear why.
-    // PR51079: If we have code without debug information we need to give up.
-    DISubprogram *MFSP = MF.getFunction().getSubprogram();
-    if (!MFSP)
-      return;
     (void)DD->emitInitialLocDirective(MF, /*CUID=*/0);
   }
 }
@@ -279,7 +274,7 @@ bool AsmPrinter::doInitialization(Module &M) {
   const_cast<TargetLoweringObjectFile &>(getObjFileLowering())
       .getModuleMetadata(M);
 
-  OutStreamer->initSections(false, *TM.getMCSubtargetInfo());
+  OutStreamer->InitSections(false);
 
   if (DisableDebugInfoPrinting)
     MMI->setDebugInfoAvailability(false);
@@ -293,11 +288,7 @@ bool AsmPrinter::doInitialization(Module &M) {
   // use the directive, where it would need the same conditionalization
   // anyway.
   const Triple &Target = TM.getTargetTriple();
-  Triple TVT(M.getDarwinTargetVariantTriple());
-  OutStreamer->emitVersionForTarget(
-      Target, M.getSDKVersion(),
-      M.getDarwinTargetVariantTriple().empty() ? nullptr : &TVT,
-      M.getDarwinTargetVariantSDKVersion());
+  OutStreamer->emitVersionForTarget(Target, M.getSDKVersion());
 
   // Allow the target to emit any magic that it wants at the start of the file.
   emitStartOfAsmFile(M);
@@ -306,24 +297,11 @@ bool AsmPrinter::doInitialization(Module &M) {
   // don't, this at least helps the user find where a global came from.
   if (MAI->hasSingleParameterDotFile()) {
     // .file "foo.c"
-
-    SmallString<128> FileName;
     if (MAI->hasBasenameOnlyForFileDirective())
-      FileName = llvm::sys::path::filename(M.getSourceFileName());
+      OutStreamer->emitFileDirective(
+          llvm::sys::path::filename(M.getSourceFileName()));
     else
-      FileName = M.getSourceFileName();
-    if (MAI->hasFourStringsDotFile()) {
-#ifdef PACKAGE_VENDOR
-      const char VerStr[] =
-          PACKAGE_VENDOR " " PACKAGE_NAME " version " PACKAGE_VERSION;
-#else
-      const char VerStr[] = PACKAGE_NAME " version " PACKAGE_VERSION;
-#endif
-      // TODO: Add timestamp and description.
-      OutStreamer->emitFileDirective(FileName, VerStr, "", "");
-    } else {
-      OutStreamer->emitFileDirective(FileName);
-    }
+      OutStreamer->emitFileDirective(M.getSourceFileName());
   }
 
   GCModuleInfo *MI = getAnalysisIfAvailable<GCModuleInfo>();
@@ -334,10 +312,16 @@ bool AsmPrinter::doInitialization(Module &M) {
 
   // Emit module-level inline asm if it exists.
   if (!M.getModuleInlineAsm().empty()) {
+    // We're at the module level. Construct MCSubtarget from the default CPU
+    // and target triple.
+    std::unique_ptr<MCSubtargetInfo> STI(TM.getTarget().createMCSubtargetInfo(
+        TM.getTargetTriple().str(), TM.getTargetCPU(),
+        TM.getTargetFeatureString()));
+    assert(STI && "Unable to create subtarget info");
     OutStreamer->AddComment("Start of file scope inline assembly");
     OutStreamer->AddBlankLine();
-    emitInlineAsm(M.getModuleInlineAsm() + "\n", *TM.getMCSubtargetInfo(),
-                  TM.Options.MCOptions);
+    emitInlineAsm(M.getModuleInlineAsm() + "\n",
+                  OutContext.getSubtargetCopy(*STI), TM.Options.MCOptions);
     OutStreamer->AddComment("End of file scope inline assembly");
     OutStreamer->AddBlankLine();
   }
@@ -361,15 +345,12 @@ bool AsmPrinter::doInitialization(Module &M) {
   }
 
   if (M.getNamedMetadata(PseudoProbeDescMetadataName)) {
-    PP = new PseudoProbeHandler(this);
+    PP = new PseudoProbeHandler(this, &M);
     Handlers.emplace_back(std::unique_ptr<PseudoProbeHandler>(PP), PPTimerName,
                           PPTimerDescription, PPGroupName, PPGroupDescription);
   }
 
   switch (MAI->getExceptionHandlingType()) {
-  case ExceptionHandling::None:
-    // We may want to emit CFI for debug.
-    LLVM_FALLTHROUGH;
   case ExceptionHandling::SjLj:
   case ExceptionHandling::DwarfCFI:
   case ExceptionHandling::ARM:
@@ -391,9 +372,7 @@ bool AsmPrinter::doInitialization(Module &M) {
   EHStreamer *ES = nullptr;
   switch (MAI->getExceptionHandlingType()) {
   case ExceptionHandling::None:
-    if (!needsCFIForDebug())
-      break;
-    LLVM_FALLTHROUGH;
+    break;
   case ExceptionHandling::SjLj:
   case ExceptionHandling::DwarfCFI:
     ES = new DwarfCFIException(this);
@@ -818,9 +797,9 @@ void AsmPrinter::emitFunctionHeader() {
   // so that we don't get references to undefined symbols.
   std::vector<MCSymbol*> DeadBlockSyms;
   MMI->takeDeletedSymbolsForFunction(&F, DeadBlockSyms);
-  for (MCSymbol *DeadBlockSym : DeadBlockSyms) {
+  for (unsigned i = 0, e = DeadBlockSyms.size(); i != e; ++i) {
     OutStreamer->AddComment("Address taken block that was later removed");
-    OutStreamer->emitLabel(DeadBlockSym);
+    OutStreamer->emitLabel(DeadBlockSyms[i]);
   }
 
   if (CurrentFnBegin) {
@@ -919,7 +898,8 @@ static void emitKill(const MachineInstr *MI, AsmPrinter &AP) {
   std::string Str;
   raw_string_ostream OS(Str);
   OS << "kill:";
-  for (const MachineOperand &Op : MI->operands()) {
+  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
+    const MachineOperand &Op = MI->getOperand(i);
     assert(Op.isReg() && "KILL instruction must have only register operands");
     OS << ' ' << (Op.isDef() ? "def " : "killed ")
        << printReg(Op.getReg(), AP.MF->getSubtarget().getRegisterInfo());
@@ -968,9 +948,9 @@ static bool emitDebugValueComment(const MachineInstr *MI, AsmPrinter &AP) {
     switch (Op.getType()) {
     case MachineOperand::MO_FPImmediate: {
       APFloat APF = APFloat(Op.getFPImm()->getValueAPF());
-      Type *ImmTy = Op.getFPImm()->getType();
-      if (ImmTy->isBFloatTy() || ImmTy->isHalfTy() || ImmTy->isFloatTy() ||
-          ImmTy->isDoubleTy()) {
+      if (Op.getFPImm()->getType()->isFloatTy()) {
+        OS << (double)APF.convertToFloat();
+      } else if (Op.getFPImm()->getType()->isDoubleTy()) {
         OS << APF.convertToDouble();
       } else {
         // There is no good way to print long double.  Convert a copy to
@@ -1082,15 +1062,9 @@ bool AsmPrinter::needsSEHMoves() {
   return MAI->usesWindowsCFI() && MF->getFunction().needsUnwindTableEntry();
 }
 
-bool AsmPrinter::needsCFIForDebug() const {
-  return MAI->getExceptionHandlingType() == ExceptionHandling::None &&
-         MAI->doesUseCFIForDebug() && ModuleCFISection == CFISection::Debug;
-}
-
 void AsmPrinter::emitCFIInstruction(const MachineInstr &MI) {
   ExceptionHandling ExceptionHandlingType = MAI->getExceptionHandlingType();
-  if (!needsCFIForDebug() &&
-      ExceptionHandlingType != ExceptionHandling::DwarfCFI &&
+  if (ExceptionHandlingType != ExceptionHandling::DwarfCFI &&
       ExceptionHandlingType != ExceptionHandling::ARM)
     return;
 
@@ -1152,19 +1126,16 @@ void AsmPrinter::emitBBAddrMapSection(const MachineFunction &MF) {
   OutStreamer->emitSymbolValue(FunctionSymbol, getPointerSize());
   // Emit the total number of basic blocks in this function.
   OutStreamer->emitULEB128IntValue(MF.size());
-  const MCSymbol *PrevMBBEndSymbol = FunctionSymbol;
   // Emit BB Information for each basic block in the funciton.
   for (const MachineBasicBlock &MBB : MF) {
     const MCSymbol *MBBSymbol =
         MBB.isEntryBlock() ? FunctionSymbol : MBB.getSymbol();
-    // Emit the basic block offset relative to the end of the previous block.
-    // This is zero unless the block is padded due to alignment.
-    emitLabelDifferenceAsULEB128(MBBSymbol, PrevMBBEndSymbol);
+    // Emit the basic block offset.
+    emitLabelDifferenceAsULEB128(MBBSymbol, FunctionSymbol);
     // Emit the basic block size. When BBs have alignments, their size cannot
     // always be computed from their offsets.
     emitLabelDifferenceAsULEB128(MBB.getEndSymbol(), MBBSymbol);
     OutStreamer->emitULEB128IntValue(getBBAddrMapMetadata(MBB));
-    PrevMBBEndSymbol = MBB.getEndSymbol();
   }
   OutStreamer->PopSection();
 }
@@ -1201,37 +1172,6 @@ void AsmPrinter::emitStackSizeSection(const MachineFunction &MF) {
   OutStreamer->emitULEB128IntValue(StackSize);
 
   OutStreamer->PopSection();
-}
-
-void AsmPrinter::emitStackUsage(const MachineFunction &MF) {
-  const std::string &OutputFilename = MF.getTarget().Options.StackUsageOutput;
-
-  // OutputFilename empty implies -fstack-usage is not passed.
-  if (OutputFilename.empty())
-    return;
-
-  const MachineFrameInfo &FrameInfo = MF.getFrameInfo();
-  uint64_t StackSize = FrameInfo.getStackSize();
-
-  if (StackUsageStream == nullptr) {
-    std::error_code EC;
-    StackUsageStream =
-        std::make_unique<raw_fd_ostream>(OutputFilename, EC, sys::fs::OF_Text);
-    if (EC) {
-      errs() << "Could not open file: " << EC.message();
-      return;
-    }
-  }
-
-  *StackUsageStream << MF.getFunction().getParent()->getName();
-  if (const DISubprogram *DSP = MF.getFunction().getSubprogram())
-    *StackUsageStream << ':' << DSP->getLine();
-
-  *StackUsageStream << ':' << MF.getName() << '\t' << StackSize << '\t';
-  if (FrameInfo.hasVarSizedObjects())
-    *StackUsageStream << "dynamic\n";
-  else
-    *StackUsageStream << "static\n";
 }
 
 static bool needFuncLabelsForEHOrDebugInfo(const MachineFunction &MF) {
@@ -1331,10 +1271,6 @@ void AsmPrinter::emitFunctionBody() {
         // location, and a nearby DBG_VALUE created. We can safely ignore
         // the instruction reference.
         break;
-      case TargetOpcode::DBG_PHI:
-        // This instruction is only used to label a program point, it's purely
-        // meta information.
-        break;
       case TargetOpcode::DBG_LABEL:
         if (isVerbose()) {
           if (!emitDebugLabelComment(&MI, *this))
@@ -1349,10 +1285,6 @@ void AsmPrinter::emitFunctionBody() {
         break;
       case TargetOpcode::PSEUDO_PROBE:
         emitPseudoProbe(MI);
-        break;
-      case TargetOpcode::ARITH_FENCE:
-        if (isVerbose())
-          OutStreamer->emitRawComment("ARITH_FENCE");
         break;
       default:
         emitInstruction(&MI);
@@ -1379,9 +1311,11 @@ void AsmPrinter::emitFunctionBody() {
 
     // We must emit temporary symbol for the end of this basic block, if either
     // we have BBLabels enabled or if this basic blocks marks the end of a
-    // section.
+    // section (except the section containing the entry basic block as the end
+    // symbol for that section is CurrentFnEnd).
     if (MF->hasBBLabels() ||
-        (MAI->hasDotTypeDotSizeDirective() && MBB.isEndSection()))
+        (MAI->hasDotTypeDotSizeDirective() && MBB.isEndSection() &&
+         !MBB.sameSection(&MF->front())))
       OutStreamer->emitLabel(MBB.getEndSymbol());
 
     if (MBB.isEndSection()) {
@@ -1426,7 +1360,7 @@ void AsmPrinter::emitFunctionBody() {
       });
       R << "BasicBlock: " << ore::NV("BasicBlock", MBB.getName()) << "\n";
       for (auto &KV : MnemonicVec) {
-        auto Name = (Twine("INST_") + getToken(KV.first.trim()).first).str();
+        auto Name = (Twine("INST_") + KV.first.trim()).str();
         R << KV.first << ": " << ore::NV(Name, KV.second) << "\n";
       }
       ORE->emit(R);
@@ -1524,9 +1458,6 @@ void AsmPrinter::emitFunctionBody() {
   // Emit section containing stack size metadata.
   emitStackSizeSection(*MF);
 
-  // Emit .su file containing function stack size information.
-  emitStackUsage(*MF);
-
   emitPatchableFunctionEntries();
 
   if (isVerbose())
@@ -1614,101 +1545,76 @@ void AsmPrinter::emitGlobalGOTEquivs() {
     emitGlobalVariable(GV);
 }
 
-void AsmPrinter::emitGlobalAlias(Module &M, const GlobalAlias &GA) {
-  MCSymbol *Name = getSymbol(&GA);
-  bool IsFunction = GA.getValueType()->isFunctionTy();
+void AsmPrinter::emitGlobalIndirectSymbol(Module &M,
+                                          const GlobalIndirectSymbol& GIS) {
+  MCSymbol *Name = getSymbol(&GIS);
+  bool IsFunction = GIS.getValueType()->isFunctionTy();
   // Treat bitcasts of functions as functions also. This is important at least
   // on WebAssembly where object and function addresses can't alias each other.
   if (!IsFunction)
-    IsFunction = isa<Function>(GA.getAliasee()->stripPointerCasts());
+    if (auto *CE = dyn_cast<ConstantExpr>(GIS.getIndirectSymbol()))
+      if (CE->getOpcode() == Instruction::BitCast)
+        IsFunction =
+          CE->getOperand(0)->getType()->getPointerElementType()->isFunctionTy();
 
   // AIX's assembly directive `.set` is not usable for aliasing purpose,
   // so AIX has to use the extra-label-at-definition strategy. At this
   // point, all the extra label is emitted, we just have to emit linkage for
   // those labels.
   if (TM.getTargetTriple().isOSBinFormatXCOFF()) {
+    assert(!isa<GlobalIFunc>(GIS) && "IFunc is not supported on AIX.");
     assert(MAI->hasVisibilityOnlyWithLinkage() &&
            "Visibility should be handled with emitLinkage() on AIX.");
-    emitLinkage(&GA, Name);
+    emitLinkage(&GIS, Name);
     // If it's a function, also emit linkage for aliases of function entry
     // point.
     if (IsFunction)
-      emitLinkage(&GA,
-                  getObjFileLowering().getFunctionEntryPointSymbol(&GA, TM));
+      emitLinkage(&GIS,
+                  getObjFileLowering().getFunctionEntryPointSymbol(&GIS, TM));
     return;
   }
 
-  if (GA.hasExternalLinkage() || !MAI->getWeakRefDirective())
+  if (GIS.hasExternalLinkage() || !MAI->getWeakRefDirective())
     OutStreamer->emitSymbolAttribute(Name, MCSA_Global);
-  else if (GA.hasWeakLinkage() || GA.hasLinkOnceLinkage())
+  else if (GIS.hasWeakLinkage() || GIS.hasLinkOnceLinkage())
     OutStreamer->emitSymbolAttribute(Name, MCSA_WeakReference);
   else
-    assert(GA.hasLocalLinkage() && "Invalid alias linkage");
+    assert(GIS.hasLocalLinkage() && "Invalid alias or ifunc linkage");
 
   // Set the symbol type to function if the alias has a function type.
   // This affects codegen when the aliasee is not a function.
-  if (IsFunction) {
-    OutStreamer->emitSymbolAttribute(Name, MCSA_ELF_TypeFunction);
-    if (TM.getTargetTriple().isOSBinFormatCOFF()) {
-      OutStreamer->BeginCOFFSymbolDef(Name);
-      OutStreamer->EmitCOFFSymbolStorageClass(
-          GA.hasLocalLinkage() ? COFF::IMAGE_SYM_CLASS_STATIC
-                               : COFF::IMAGE_SYM_CLASS_EXTERNAL);
-      OutStreamer->EmitCOFFSymbolType(COFF::IMAGE_SYM_DTYPE_FUNCTION
-                                      << COFF::SCT_COMPLEX_TYPE_SHIFT);
-      OutStreamer->EndCOFFSymbolDef();
-    }
-  }
+  if (IsFunction)
+    OutStreamer->emitSymbolAttribute(Name, isa<GlobalIFunc>(GIS)
+                                               ? MCSA_ELF_TypeIndFunction
+                                               : MCSA_ELF_TypeFunction);
 
-  emitVisibility(Name, GA.getVisibility());
+  emitVisibility(Name, GIS.getVisibility());
 
-  const MCExpr *Expr = lowerConstant(GA.getAliasee());
+  const MCExpr *Expr = lowerConstant(GIS.getIndirectSymbol());
 
-  if (MAI->hasAltEntry() && isa<MCBinaryExpr>(Expr))
+  if (isa<GlobalAlias>(&GIS) && MAI->hasAltEntry() && isa<MCBinaryExpr>(Expr))
     OutStreamer->emitSymbolAttribute(Name, MCSA_AltEntry);
 
   // Emit the directives as assignments aka .set:
   OutStreamer->emitAssignment(Name, Expr);
-  MCSymbol *LocalAlias = getSymbolPreferLocal(GA);
+  MCSymbol *LocalAlias = getSymbolPreferLocal(GIS);
   if (LocalAlias != Name)
     OutStreamer->emitAssignment(LocalAlias, Expr);
 
-  // If the aliasee does not correspond to a symbol in the output, i.e. the
-  // alias is not of an object or the aliased object is private, then set the
-  // size of the alias symbol from the type of the alias. We don't do this in
-  // other situations as the alias and aliasee having differing types but same
-  // size may be intentional.
-  const GlobalObject *BaseObject = GA.getAliaseeObject();
-  if (MAI->hasDotTypeDotSizeDirective() && GA.getValueType()->isSized() &&
-      (!BaseObject || BaseObject->hasPrivateLinkage())) {
-    const DataLayout &DL = M.getDataLayout();
-    uint64_t Size = DL.getTypeAllocSize(GA.getValueType());
-    OutStreamer->emitELFSize(Name, MCConstantExpr::create(Size, OutContext));
+  if (auto *GA = dyn_cast<GlobalAlias>(&GIS)) {
+    // If the aliasee does not correspond to a symbol in the output, i.e. the
+    // alias is not of an object or the aliased object is private, then set the
+    // size of the alias symbol from the type of the alias. We don't do this in
+    // other situations as the alias and aliasee having differing types but same
+    // size may be intentional.
+    const GlobalObject *BaseObject = GA->getBaseObject();
+    if (MAI->hasDotTypeDotSizeDirective() && GA->getValueType()->isSized() &&
+        (!BaseObject || BaseObject->hasPrivateLinkage())) {
+      const DataLayout &DL = M.getDataLayout();
+      uint64_t Size = DL.getTypeAllocSize(GA->getValueType());
+      OutStreamer->emitELFSize(Name, MCConstantExpr::create(Size, OutContext));
+    }
   }
-}
-
-void AsmPrinter::emitGlobalIFunc(Module &M, const GlobalIFunc &GI) {
-  assert(!TM.getTargetTriple().isOSBinFormatXCOFF() &&
-         "IFunc is not supported on AIX.");
-
-  MCSymbol *Name = getSymbol(&GI);
-
-  if (GI.hasExternalLinkage() || !MAI->getWeakRefDirective())
-    OutStreamer->emitSymbolAttribute(Name, MCSA_Global);
-  else if (GI.hasWeakLinkage() || GI.hasLinkOnceLinkage())
-    OutStreamer->emitSymbolAttribute(Name, MCSA_WeakReference);
-  else
-    assert(GI.hasLocalLinkage() && "Invalid ifunc linkage");
-
-  OutStreamer->emitSymbolAttribute(Name, MCSA_ELF_TypeIndFunction);
-  emitVisibility(Name, GI.getVisibility());
-
-  // Emit the directives as assignments aka .set:
-  const MCExpr *Expr = lowerConstant(GI.getResolver());
-  OutStreamer->emitAssignment(Name, Expr);
-  MCSymbol *LocalAlias = getSymbolPreferLocal(GI);
-  if (LocalAlias != Name)
-    OutStreamer->emitAssignment(LocalAlias, Expr);
 }
 
 void AsmPrinter::emitRemarksSection(remarks::RemarkStreamer &RS) {
@@ -1727,7 +1633,7 @@ void AsmPrinter::emitRemarksSection(remarks::RemarkStreamer &RS) {
   std::string Buf;
   raw_string_ostream OS(Buf);
   std::unique_ptr<remarks::MetaSerializer> MetaSerializer =
-      Filename ? RemarkSerializer.metaSerializer(OS, Filename->str())
+      Filename ? RemarkSerializer.metaSerializer(OS, StringRef(*Filename))
                : RemarkSerializer.metaSerializer(OS);
   MetaSerializer->emit();
 
@@ -1844,11 +1750,6 @@ bool AsmPrinter::doFinalization(Module &M) {
     }
   }
 
-  // This needs to happen before emitting debug information since that can end
-  // arbitrary sections.
-  if (auto *TS = OutStreamer->getTargetStreamer())
-    TS->emitConstantPools();
-
   // Finalize debug and EH information.
   for (const HandlerInfo &HI : Handlers) {
     NamedRegionTimer T(HI.TimerName, HI.TimerDescription, HI.TimerGroupName,
@@ -1875,17 +1776,6 @@ bool AsmPrinter::doFinalization(Module &M) {
         continue;
       OutStreamer->emitSymbolAttribute(getSymbol(&GO), MCSA_WeakReference);
     }
-    if (shouldEmitWeakSwiftAsyncExtendedFramePointerFlags()) {
-      auto SymbolName = "swift_async_extendedFramePointerFlags";
-      auto Global = M.getGlobalVariable(SymbolName);
-      if (!Global) {
-        auto Int8PtrTy = Type::getInt8PtrTy(M.getContext());
-        Global = new GlobalVariable(M, Int8PtrTy, false,
-                                    GlobalValue::ExternalWeakLinkage, nullptr,
-                                    SymbolName);
-        OutStreamer->emitSymbolAttribute(getSymbol(Global), MCSA_WeakReference);
-      }
-    }
   }
 
   // Print aliases in topological order, that is, for each alias a = b,
@@ -1902,11 +1792,11 @@ bool AsmPrinter::doFinalization(Module &M) {
       AliasStack.push_back(Cur);
     }
     for (const GlobalAlias *AncestorAlias : llvm::reverse(AliasStack))
-      emitGlobalAlias(M, *AncestorAlias);
+      emitGlobalIndirectSymbol(M, *AncestorAlias);
     AliasStack.clear();
   }
   for (const auto &IFunc : M.ifuncs())
-    emitGlobalIFunc(M, IFunc);
+    emitGlobalIndirectSymbol(M, IFunc);
 
   GCModuleInfo *MI = getAnalysisIfAvailable<GCModuleInfo>();
   assert(MI && "AsmPrinter didn't require GCModuleInfo?");
@@ -2179,7 +2069,8 @@ void AsmPrinter::emitJumpTableInfo() {
       SmallPtrSet<const MachineBasicBlock*, 16> EmittedSets;
       const TargetLowering *TLI = MF->getSubtarget().getTargetLowering();
       const MCExpr *Base = TLI->getPICJumpTableRelocBaseExpr(MF,JTI,OutContext);
-      for (const MachineBasicBlock *MBB : JTBBs) {
+      for (unsigned ii = 0, ee = JTBBs.size(); ii != ee; ++ii) {
+        const MachineBasicBlock *MBB = JTBBs[ii];
         if (!EmittedSets.insert(MBB).second)
           continue;
 
@@ -2205,8 +2096,8 @@ void AsmPrinter::emitJumpTableInfo() {
     MCSymbol* JTISymbol = GetJTISymbol(JTI);
     OutStreamer->emitLabel(JTISymbol);
 
-    for (const MachineBasicBlock *MBB : JTBBs)
-      emitJumpTableEntry(MJTI, MBB, JTI);
+    for (unsigned ii = 0, ee = JTBBs.size(); ii != ee; ++ii)
+      emitJumpTableEntry(MJTI, JTBBs[ii], JTI);
   }
   if (!JTInDiffSection)
     OutStreamer->emitDataRegion(MCDR_DataRegionEnd);
@@ -2368,11 +2259,6 @@ void AsmPrinter::emitXXStructorList(const DataLayout &DL, const Constant *List,
   if (Structors.empty())
     return;
 
-  // Emit the structors in reverse order if we are using the .ctor/.dtor
-  // initialization scheme.
-  if (!TM.Options.UseInitArray)
-    std::reverse(Structors.begin(), Structors.end());
-
   const Align Align = DL.getPointerPrefAlignment();
   for (Structor &S : Structors) {
     const TargetLoweringObjectFile &Obj = getObjFileLowering();
@@ -2492,23 +2378,17 @@ void AsmPrinter::emitLabelPlusOffset(const MCSymbol *Label, uint64_t Offset,
 // two boundary.  If a global value is specified, and if that global has
 // an explicit alignment requested, it will override the alignment request
 // if required for correctness.
-void AsmPrinter::emitAlignment(Align Alignment, const GlobalObject *GV,
-                               unsigned MaxBytesToEmit) const {
+void AsmPrinter::emitAlignment(Align Alignment, const GlobalObject *GV) const {
   if (GV)
     Alignment = getGVAlignment(GV, GV->getParent()->getDataLayout(), Alignment);
 
   if (Alignment == Align(1))
     return; // 1-byte aligned: no need to emit alignment.
 
-  if (getCurrentSection()->getKind().isText()) {
-    const MCSubtargetInfo *STI = nullptr;
-    if (this->MF)
-      STI = &getSubtargetInfo();
-    else
-      STI = TM.getMCSubtargetInfo();
-    OutStreamer->emitCodeAlignment(Alignment.value(), STI, MaxBytesToEmit);
-  } else
-    OutStreamer->emitValueToAlignment(Alignment.value(), 0, 1, MaxBytesToEmit);
+  if (getCurrentSection()->getKind().isText())
+    OutStreamer->emitCodeAlignment(Alignment.value());
+  else
+    OutStreamer->emitValueToAlignment(Alignment.value());
 }
 
 //===----------------------------------------------------------------------===//
@@ -2532,9 +2412,6 @@ const MCExpr *AsmPrinter::lowerConstant(const Constant *CV) {
 
   if (const auto *Equiv = dyn_cast<DSOLocalEquivalent>(CV))
     return getObjFileLowering().lowerDSOLocalEquivalent(Equiv, TM);
-
-  if (const NoCFIValue *NC = dyn_cast<NoCFIValue>(CV))
-    return MCSymbolRefExpr::create(getSymbol(NC->getGlobalValue()), Ctx);
 
   const ConstantExpr *CE = dyn_cast<ConstantExpr>(CV);
   if (!CE) {
@@ -2566,7 +2443,7 @@ const MCExpr *AsmPrinter::lowerConstant(const Constant *CV) {
     OS << "Unsupported expression in static initializer: ";
     CE->printAsOperand(OS, /*PrintType=*/false,
                    !MF ? nullptr : MF->getFunction().getParent());
-    report_fatal_error(Twine(OS.str()));
+    report_fatal_error(OS.str());
   }
   case Instruction::GetElementPtr: {
     // Generate a symbolic expression for the byte address
@@ -3302,7 +3179,7 @@ void AsmPrinter::emitBasicBlockStart(const MachineBasicBlock &MBB) {
   // Emit an alignment directive for this block, if needed.
   const Align Alignment = MBB.getAlignment();
   if (Alignment != Align(1))
-    emitAlignment(Alignment, nullptr, MBB.getMaxBytesForAlignment());
+    emitAlignment(Alignment);
 
   // Switch to a new section if this basic block must begin a section. The
   // entry block is always placed in the function section and is handled
@@ -3318,21 +3195,21 @@ void AsmPrinter::emitBasicBlockStart(const MachineBasicBlock &MBB) {
   // reference the block.  It is possible that there is more than one label
   // here, because multiple LLVM BB's may have been RAUW'd to this block after
   // the references were generated.
-  const BasicBlock *BB = MBB.getBasicBlock();
   if (MBB.hasAddressTaken()) {
+    const BasicBlock *BB = MBB.getBasicBlock();
     if (isVerbose())
       OutStreamer->AddComment("Block address taken");
 
     // MBBs can have their address taken as part of CodeGen without having
     // their corresponding BB's address taken in IR
-    if (BB && BB->hasAddressTaken())
+    if (BB->hasAddressTaken())
       for (MCSymbol *Sym : MMI->getAddrLabelSymbolToEmit(BB))
         OutStreamer->emitLabel(Sym);
   }
 
   // Print some verbose block comments.
   if (isVerbose()) {
-    if (BB) {
+    if (const BasicBlock *BB = MBB.getBasicBlock()) {
       if (BB->hasName()) {
         BB->printAsOperand(OutStreamer->GetCommentOS(),
                            /*PrintType=*/false, BB->getModule());
@@ -3591,7 +3468,7 @@ void AsmPrinter::emitXRayTable() {
   // pointers. This should work for both 32-bit and 64-bit platforms.
   if (FnSledIndex) {
     OutStreamer->SwitchSection(FnSledIndex);
-    OutStreamer->emitCodeAlignment(2 * WordSizeBytes, &getSubtargetInfo());
+    OutStreamer->emitCodeAlignment(2 * WordSizeBytes);
     OutStreamer->emitSymbolValue(SledsStart, WordSizeBytes, false);
     OutStreamer->emitSymbolValue(SledsEnd, WordSizeBytes, false);
     OutStreamer->SwitchSection(PrevSection);
@@ -3662,12 +3539,6 @@ bool AsmPrinter::isDwarf64() const {
 unsigned int AsmPrinter::getDwarfOffsetByteSize() const {
   return dwarf::getDwarfOffsetByteSize(
       OutStreamer->getContext().getDwarfFormat());
-}
-
-dwarf::FormParams AsmPrinter::getDwarfFormParams() const {
-  return {getDwarfVersion(), uint8_t(getPointerSize()),
-          OutStreamer->getContext().getDwarfFormat(),
-          MAI->doesDwarfUseRelocationsAcrossSections()};
 }
 
 unsigned int AsmPrinter::getUnitLengthFieldByteSize() const {

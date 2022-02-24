@@ -9,7 +9,6 @@
 #include "src/time/mktime.h"
 #include "src/time/time_utils.h"
 #include "test/ErrnoSetterMatcher.h"
-#include "test/src/time/TmHelper.h"
 #include "test/src/time/TmMatcher.h"
 #include "utils/UnitTest/Test.h"
 
@@ -21,18 +20,33 @@ using __llvm_libc::testing::ErrnoSetterMatcher::Fails;
 using __llvm_libc::testing::ErrnoSetterMatcher::Succeeds;
 using __llvm_libc::time_utils::TimeConstants;
 
+// A helper function to initialize tm data structure.
+static inline void initialize_tm_data(struct tm *tm_data, int year, int month,
+                                      int mday, int hour, int min, int sec,
+                                      int wday, int yday) {
+  struct tm temp = {.tm_sec = sec,
+                    .tm_min = min,
+                    .tm_hour = hour,
+                    .tm_mday = mday,
+                    .tm_mon = month - 1, // tm_mon starts with 0 for Jan
+                    // years since 1900
+                    .tm_year = year - TimeConstants::TimeYearBase,
+                    .tm_wday = wday,
+                    .tm_yday = yday};
+  *tm_data = temp;
+}
+
 static inline time_t call_mktime(struct tm *tm_data, int year, int month,
                                  int mday, int hour, int min, int sec, int wday,
                                  int yday) {
-  __llvm_libc::tmhelper::testing::initialize_tm_data(
-      tm_data, year, month, mday, hour, min, sec, wday, yday);
+  initialize_tm_data(tm_data, year, month, mday, hour, min, sec, wday, yday);
   return __llvm_libc::mktime(tm_data);
 }
 
 TEST(LlvmLibcMkTime, FailureSetsErrno) {
   struct tm tm_data;
-  __llvm_libc::tmhelper::testing::initialize_tm_data(
-      &tm_data, INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX, -1, 0, 0);
+  initialize_tm_data(&tm_data, INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX, -1,
+                     0, 0);
   EXPECT_THAT(__llvm_libc::mktime(&tm_data), Fails(EOVERFLOW));
 }
 
@@ -54,9 +68,9 @@ TEST(LlvmLibcMkTime, InvalidSeconds) {
                    23,     // hr
                    31,     // day
                    12 - 1, // tm_mon starts with 0 for Jan
-                   1969 - TimeConstants::TIME_YEAR_BASE, // year
-                   3,                                    // wday
-                   364,                                  // yday
+                   1969 - TimeConstants::TimeYearBase, // year
+                   3,                                  // wday
+                   364,                                // yday
                    0}),
                tm_data);
   // 60 seconds from 1970-01-01 00:00:00 returns 1970-01-01 00:01:00.
@@ -75,9 +89,9 @@ TEST(LlvmLibcMkTime, InvalidSeconds) {
                    0, // hr
                    1, // day
                    0, // tm_mon starts with 0 for Jan
-                   1970 - TimeConstants::TIME_YEAR_BASE, // year
-                   4,                                    // wday
-                   0,                                    // yday
+                   1970 - TimeConstants::TimeYearBase, // year
+                   4,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
 }
@@ -94,15 +108,15 @@ TEST(LlvmLibcMkTime, InvalidMinutes) {
                           0,    // sec
                           0,    // wday
                           0),   // yday
-              Succeeds(-TimeConstants::SECONDS_PER_MIN));
+              Succeeds(-TimeConstants::SecondsPerMin));
   EXPECT_TM_EQ((tm{0,  // sec
                    59, // min
                    23, // hr
                    31, // day
                    11, // tm_mon starts with 0 for Jan
-                   1969 - TimeConstants::TIME_YEAR_BASE, // year
-                   3,                                    // wday
-                   0,                                    // yday
+                   1969 - TimeConstants::TimeYearBase, // year
+                   3,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
   // 60 minutes from 1970-01-01 00:00:00 returns 1970-01-01 01:00:00.
@@ -115,15 +129,15 @@ TEST(LlvmLibcMkTime, InvalidMinutes) {
                           0,    // sec
                           0,    // wday
                           0),   // yday
-              Succeeds(60 * TimeConstants::SECONDS_PER_MIN));
+              Succeeds(60 * TimeConstants::SecondsPerMin));
   EXPECT_TM_EQ((tm{0, // sec
                    0, // min
                    1, // hr
                    1, // day
                    0, // tm_mon starts with 0 for Jan
-                   1970 - TimeConstants::TIME_YEAR_BASE, // year
-                   4,                                    // wday
-                   0,                                    // yday
+                   1970 - TimeConstants::TimeYearBase, // year
+                   4,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
 }
@@ -140,15 +154,15 @@ TEST(LlvmLibcMkTime, InvalidHours) {
                           0,    // sec
                           0,    // wday
                           0),   // yday
-              Succeeds(-TimeConstants::SECONDS_PER_HOUR));
+              Succeeds(-TimeConstants::SecondsPerHour));
   EXPECT_TM_EQ((tm{0,  // sec
                    0,  // min
                    23, // hr
                    31, // day
                    11, // tm_mon starts with 0 for Jan
-                   1969 - TimeConstants::TIME_YEAR_BASE, // year
-                   3,                                    // wday
-                   0,                                    // yday
+                   1969 - TimeConstants::TimeYearBase, // year
+                   3,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
   // 24 hours from 1970-01-01 00:00:00 returns 1970-01-02 00:00:00.
@@ -161,15 +175,15 @@ TEST(LlvmLibcMkTime, InvalidHours) {
                           0,    // sec
                           0,    // wday
                           0),   // yday
-              Succeeds(24 * TimeConstants::SECONDS_PER_HOUR));
+              Succeeds(24 * TimeConstants::SecondsPerHour));
   EXPECT_TM_EQ((tm{0, // sec
                    0, // min
                    0, // hr
                    2, // day
                    0, // tm_mon starts with 0 for Jan
-                   1970 - TimeConstants::TIME_YEAR_BASE, // year
-                   5,                                    // wday
-                   0,                                    // yday
+                   1970 - TimeConstants::TimeYearBase, // year
+                   5,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
 }
@@ -186,16 +200,16 @@ TEST(LlvmLibcMkTime, InvalidYear) {
                           0,    // sec
                           0,    // wday
                           0),   // yday
-              Succeeds(-TimeConstants::DAYS_PER_NON_LEAP_YEAR *
-                       TimeConstants::SECONDS_PER_DAY));
+              Succeeds(-TimeConstants::DaysPerNonLeapYear *
+                       TimeConstants::SecondsPerDay));
   EXPECT_TM_EQ((tm{0, // sec
                    0, // min
                    0, // hr
                    1, // day
                    0, // tm_mon starts with 0 for Jan
-                   1969 - TimeConstants::TIME_YEAR_BASE, // year
-                   3,                                    // wday
-                   0,                                    // yday
+                   1969 - TimeConstants::TimeYearBase, // year
+                   3,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
 }
@@ -206,22 +220,22 @@ TEST(LlvmLibcMkTime, InvalidEndOf32BitEpochYear) {
   struct tm tm_data;
   // 2038-01-19 03:14:08 tests overflow of the second in 2038.
   EXPECT_THAT(call_mktime(&tm_data, 2038, 1, 19, 3, 14, 8, 0, 0),
-              Succeeds(TimeConstants::OUT_OF_RANGE_RETURN_VALUE));
+              Succeeds(TimeConstants::OutOfRangeReturnValue));
   // 2038-01-19 03:15:07 tests overflow of the minute in 2038.
   EXPECT_THAT(call_mktime(&tm_data, 2038, 1, 19, 3, 15, 7, 0, 0),
-              Succeeds(TimeConstants::OUT_OF_RANGE_RETURN_VALUE));
+              Succeeds(TimeConstants::OutOfRangeReturnValue));
   // 2038-01-19 04:14:07 tests overflow of the hour in 2038.
   EXPECT_THAT(call_mktime(&tm_data, 2038, 1, 19, 4, 14, 7, 0, 0),
-              Succeeds(TimeConstants::OUT_OF_RANGE_RETURN_VALUE));
+              Succeeds(TimeConstants::OutOfRangeReturnValue));
   // 2038-01-20 03:14:07 tests overflow of the day in 2038.
   EXPECT_THAT(call_mktime(&tm_data, 2038, 1, 20, 3, 14, 7, 0, 0),
-              Succeeds(TimeConstants::OUT_OF_RANGE_RETURN_VALUE));
+              Succeeds(TimeConstants::OutOfRangeReturnValue));
   // 2038-02-19 03:14:07 tests overflow of the month in 2038.
   EXPECT_THAT(call_mktime(&tm_data, 2038, 2, 19, 3, 14, 7, 0, 0),
-              Succeeds(TimeConstants::OUT_OF_RANGE_RETURN_VALUE));
+              Succeeds(TimeConstants::OutOfRangeReturnValue));
   // 2039-01-19 03:14:07 tests overflow of the year.
   EXPECT_THAT(call_mktime(&tm_data, 2039, 1, 19, 3, 14, 7, 0, 0),
-              Succeeds(TimeConstants::OUT_OF_RANGE_RETURN_VALUE));
+              Succeeds(TimeConstants::OutOfRangeReturnValue));
 }
 
 TEST(LlvmLibcMkTime, InvalidMonths) {
@@ -236,15 +250,15 @@ TEST(LlvmLibcMkTime, InvalidMonths) {
                           0,    // sec
                           0,    // wday
                           0),   // yday
-              Succeeds(-31 * TimeConstants::SECONDS_PER_DAY));
+              Succeeds(-31 * TimeConstants::SecondsPerDay));
   EXPECT_TM_EQ((tm{0,      // sec
                    0,      // min
                    0,      // hr
                    1,      // day
                    12 - 1, // tm_mon starts with 0 for Jan
-                   1969 - TimeConstants::TIME_YEAR_BASE, // year
-                   1,                                    // wday
-                   0,                                    // yday
+                   1969 - TimeConstants::TimeYearBase, // year
+                   1,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
   // 1970-13-01 00:00:00 returns 1971-01-01 00:00:00.
@@ -257,16 +271,16 @@ TEST(LlvmLibcMkTime, InvalidMonths) {
                           0,    // sec
                           0,    // wday
                           0),   // yday
-              Succeeds(TimeConstants::DAYS_PER_NON_LEAP_YEAR *
-                       TimeConstants::SECONDS_PER_DAY));
+              Succeeds(TimeConstants::DaysPerNonLeapYear *
+                       TimeConstants::SecondsPerDay));
   EXPECT_TM_EQ((tm{0, // sec
                    0, // min
                    0, // hr
                    1, // day
                    0, // tm_mon starts with 0 for Jan
-                   1971 - TimeConstants::TIME_YEAR_BASE, // year
-                   5,                                    // wday
-                   0,                                    // yday
+                   1971 - TimeConstants::TimeYearBase, // year
+                   5,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
 }
@@ -283,15 +297,15 @@ TEST(LlvmLibcMkTime, InvalidDays) {
                           0,    // sec
                           0,    // wday
                           0),   // yday
-              Succeeds(-1 * TimeConstants::SECONDS_PER_DAY));
+              Succeeds(-1 * TimeConstants::SecondsPerDay));
   EXPECT_TM_EQ((tm{0,  // sec
                    0,  // min
                    0,  // hr
                    31, // day
                    11, // tm_mon starts with 0 for Jan
-                   1969 - TimeConstants::TIME_YEAR_BASE, // year
-                   3,                                    // wday
-                   0,                                    // yday
+                   1969 - TimeConstants::TimeYearBase, // year
+                   3,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
 
@@ -305,15 +319,15 @@ TEST(LlvmLibcMkTime, InvalidDays) {
                           0,    // sec
                           0,    // wday
                           0),   // yday
-              Succeeds(31 * TimeConstants::SECONDS_PER_DAY));
+              Succeeds(31 * TimeConstants::SecondsPerDay));
   EXPECT_TM_EQ((tm{0, // sec
                    0, // min
                    0, // hr
                    1, // day
                    0, // tm_mon starts with 0 for Jan
-                   1970 - TimeConstants::TIME_YEAR_BASE, // year
-                   0,                                    // wday
-                   0,                                    // yday
+                   1970 - TimeConstants::TimeYearBase, // year
+                   0,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
 
@@ -327,15 +341,15 @@ TEST(LlvmLibcMkTime, InvalidDays) {
                           0,    // sec
                           0,    // wday
                           0),   // yday
-              Succeeds(59 * TimeConstants::SECONDS_PER_DAY));
+              Succeeds(59 * TimeConstants::SecondsPerDay));
   EXPECT_TM_EQ((tm{0, // sec
                    0, // min
                    0, // hr
                    1, // day
                    2, // tm_mon starts with 0 for Jan
-                   1970 - TimeConstants::TIME_YEAR_BASE, // year
-                   0,                                    // wday
-                   0,                                    // yday
+                   1970 - TimeConstants::TimeYearBase, // year
+                   0,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
 
@@ -349,16 +363,16 @@ TEST(LlvmLibcMkTime, InvalidDays) {
                           0,    // sec
                           0,    // wday
                           0),   // yday
-              Succeeds(((2 * TimeConstants::DAYS_PER_NON_LEAP_YEAR) + 60) *
-                       TimeConstants::SECONDS_PER_DAY));
+              Succeeds(((2 * TimeConstants::DaysPerNonLeapYear) + 60) *
+                       TimeConstants::SecondsPerDay));
   EXPECT_TM_EQ((tm{0, // sec
                    0, // min
                    0, // hr
                    1, // day
                    2, // tm_mon starts with 0 for Jan
-                   1972 - TimeConstants::TIME_YEAR_BASE, // year
-                   3,                                    // wday
-                   0,                                    // yday
+                   1972 - TimeConstants::TimeYearBase, // year
+                   3,                                  // wday
+                   0,                                  // yday
                    0}),
                tm_data);
 }
@@ -382,9 +396,9 @@ TEST(LlvmLibcMkTime, EndOf32BitEpochYear) {
                    3,  // hr
                    19, // day
                    0,  // tm_mon starts with 0 for Jan
-                   2038 - TimeConstants::TIME_YEAR_BASE, // year
-                   2,                                    // wday
-                   7,                                    // yday
+                   2038 - TimeConstants::TimeYearBase, // year
+                   2,                                  // wday
+                   7,                                  // yday
                    0}),
                tm_data);
 }
@@ -409,9 +423,9 @@ TEST(LlvmLibcMkTime, Max64BitYear) {
                    12, // hr
                    1,  // day
                    0,  // tm_mon starts with 0 for Jan
-                   2170 - TimeConstants::TIME_YEAR_BASE, // year
-                   1,                                    // wday
-                   50,                                   // yday
+                   2170 - TimeConstants::TimeYearBase, // year
+                   1,                                  // wday
+                   50,                                 // yday
                    0}),
                tm_data);
 
@@ -423,9 +437,9 @@ TEST(LlvmLibcMkTime, Max64BitYear) {
                    12, // hr
                    1,  // day
                    0,  // tm_mon starts with 0 for Jan
-                   2147483647 - TimeConstants::TIME_YEAR_BASE, // year
-                   2,                                          // wday
-                   50,                                         // yday
+                   2147483647 - TimeConstants::TimeYearBase, // year
+                   2,                                        // wday
+                   50,                                       // yday
                    0}),
                tm_data);
 }

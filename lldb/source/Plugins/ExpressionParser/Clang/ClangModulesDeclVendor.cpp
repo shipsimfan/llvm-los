@@ -32,7 +32,6 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
 #include "lldb/Utility/ReproducerProvider.h"
 #include "lldb/Utility/StreamString.h"
@@ -131,7 +130,7 @@ private:
 } // anonymous namespace
 
 StoringDiagnosticConsumer::StoringDiagnosticConsumer() {
-  m_log = GetLog(LLDBLog::Expressions);
+  m_log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS);
 
   clang::DiagnosticOptions *m_options = new clang::DiagnosticOptions();
   m_os = std::make_shared<llvm::raw_string_ostream>(m_output);
@@ -177,7 +176,7 @@ void StoringDiagnosticConsumer::EndSourceFile() {
 ClangModulesDeclVendor::ClangModulesDeclVendor()
     : ClangDeclVendor(eClangModuleDeclVendor) {}
 
-ClangModulesDeclVendor::~ClangModulesDeclVendor() = default;
+ClangModulesDeclVendor::~ClangModulesDeclVendor() {}
 
 ClangModulesDeclVendorImpl::ClangModulesDeclVendorImpl(
     llvm::IntrusiveRefCntPtr<clang::DiagnosticsEngine> diagnostics_engine,
@@ -518,9 +517,8 @@ void ClangModulesDeclVendorImpl::ForEachMacro(
 
         bool first_token = true;
 
-        for (clang::MacroInfo::const_tokens_iterator
-                 ti = macro_info->tokens_begin(),
-                 te = macro_info->tokens_end();
+        for (clang::MacroInfo::tokens_iterator ti = macro_info->tokens_begin(),
+                                               te = macro_info->tokens_end();
              ti != te; ++ti) {
           if (!first_token)
             macro_expansion.append(" ");
@@ -658,7 +656,7 @@ ClangModulesDeclVendor::Create(Target &target) {
   for (const std::string &arg : compiler_invocation_arguments)
     compiler_invocation_argument_cstrs.push_back(arg.c_str());
 
-  Log *log = GetLog(LLDBLog::Expressions);
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
   LLDB_LOG(log, "ClangModulesDeclVendor's compiler flags {0:$[ ]}",
            llvm::make_range(compiler_invocation_arguments.begin(),
                             compiler_invocation_arguments.end()));
@@ -706,7 +704,7 @@ ClangModulesDeclVendor::Create(Target &target) {
   if (!instance->hasTarget())
     return nullptr;
 
-  instance->getTarget().adjust(*diagnostics_engine, instance->getLangOpts());
+  instance->getTarget().adjust(instance->getLangOpts());
 
   if (!action->BeginSourceFile(*instance,
                                instance->getFrontendOpts().Inputs[0]))
@@ -726,8 +724,8 @@ ClangModulesDeclVendor::Create(Target &target) {
   parser->Initialize();
 
   clang::Parser::DeclGroupPtrTy parsed;
-  auto ImportState = clang::Sema::ModuleImportState::NotACXX20Module;
-  while (!parser->ParseTopLevelDecl(parsed, ImportState))
+
+  while (!parser->ParseTopLevelDecl(parsed))
     ;
 
   return new ClangModulesDeclVendorImpl(std::move(diagnostics_engine),

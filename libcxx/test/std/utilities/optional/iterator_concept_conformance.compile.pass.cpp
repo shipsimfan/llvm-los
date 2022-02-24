@@ -8,8 +8,10 @@
 
 // UNSUPPORTED: c++03, c++11, c++14, c++17
 // UNSUPPORTED: libcpp-no-concepts
+// UNSUPPORTED: gcc-10
+// XFAIL: msvc && clang
 
-// optional
+// unique_ptr
 
 #include <optional>
 
@@ -18,7 +20,3 @@
 static_assert(!std::indirectly_readable<std::optional<int> >);
 static_assert(!std::indirectly_writable<std::optional<int>, int>);
 static_assert(!std::weakly_incrementable<std::optional<int> >);
-static_assert(!std::indirectly_movable<std::optional<int>, std::optional<int>>);
-static_assert(!std::indirectly_movable_storable<std::optional<int>, std::optional<int>>);
-static_assert(!std::indirectly_copyable<std::optional<int>, std::optional<int>>);
-static_assert(!std::indirectly_copyable_storable<std::optional<int>, std::optional<int>>);

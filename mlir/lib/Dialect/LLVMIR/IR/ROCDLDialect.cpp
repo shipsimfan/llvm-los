@@ -30,8 +30,6 @@
 using namespace mlir;
 using namespace ROCDL;
 
-#include "mlir/Dialect/LLVMIR/ROCDLOpsDialect.cpp.inc"
-
 //===----------------------------------------------------------------------===//
 // Parsing for ROCDL ops
 //===----------------------------------------------------------------------===//
@@ -39,14 +37,15 @@ using namespace ROCDL;
 // <operation> ::=
 //     `llvm.amdgcn.buffer.load.* %rsrc, %vindex, %offset, %glc, %slc :
 //     result_type`
-ParseResult MubufLoadOp::parse(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseROCDLMubufLoadOp(OpAsmParser &parser,
+                                         OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 8> ops;
   Type type;
   if (parser.parseOperandList(ops, 5) || parser.parseColonType(type) ||
       parser.addTypeToList(type, result.types))
     return failure();
 
-  MLIRContext *context = parser.getContext();
+  MLIRContext *context = parser.getBuilder().getContext();
   auto int32Ty = IntegerType::get(context, 32);
   auto int1Ty = IntegerType::get(context, 1);
   auto i32x4Ty = LLVM::getFixedVectorType(int32Ty, 4);
@@ -55,20 +54,17 @@ ParseResult MubufLoadOp::parse(OpAsmParser &parser, OperationState &result) {
                                 parser.getNameLoc(), result.operands);
 }
 
-void MubufLoadOp::print(OpAsmPrinter &p) {
-  p << " " << getOperands() << " : " << (*this)->getResultTypes();
-}
-
 // <operation> ::=
 //     `llvm.amdgcn.buffer.store.* %vdata, %rsrc, %vindex, %offset, %glc, %slc :
 //     result_type`
-ParseResult MubufStoreOp::parse(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseROCDLMubufStoreOp(OpAsmParser &parser,
+                                          OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 8> ops;
   Type type;
   if (parser.parseOperandList(ops, 6) || parser.parseColonType(type))
     return failure();
 
-  MLIRContext *context = parser.getContext();
+  MLIRContext *context = parser.getBuilder().getContext();
   auto int32Ty = IntegerType::get(context, 32);
   auto int1Ty = IntegerType::get(context, 1);
   auto i32x4Ty = LLVM::getFixedVectorType(int32Ty, 4);
@@ -78,10 +74,6 @@ ParseResult MubufStoreOp::parse(OpAsmParser &parser, OperationState &result) {
                              parser.getNameLoc(), result.operands))
     return failure();
   return success();
-}
-
-void MubufStoreOp::print(OpAsmPrinter &p) {
-  p << " " << getOperands() << " : " << vdata().getType();
 }
 
 //===----------------------------------------------------------------------===//
@@ -102,7 +94,7 @@ void ROCDLDialect::initialize() {
 LogicalResult ROCDLDialect::verifyOperationAttribute(Operation *op,
                                                      NamedAttribute attr) {
   // Kernel function attribute should be attached to functions.
-  if (attr.getName() == ROCDLDialect::getKernelFuncAttrName()) {
+  if (attr.first == ROCDLDialect::getKernelFuncAttrName()) {
     if (!isa<LLVM::LLVMFuncOp>(op)) {
       return op->emitError() << "'" << ROCDLDialect::getKernelFuncAttrName()
                              << "' attribute attached to unexpected op";

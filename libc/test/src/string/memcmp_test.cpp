@@ -11,7 +11,7 @@
 
 TEST(LlvmLibcMemcmpTest, CmpZeroByte) {
   const char *lhs = "ab";
-  const char *rhs = "yz";
+  const char *rhs = "bc";
   EXPECT_EQ(__llvm_libc::memcmp(lhs, rhs, 0), 0);
 }
 
@@ -23,36 +23,12 @@ TEST(LlvmLibcMemcmpTest, LhsRhsAreTheSame) {
 
 TEST(LlvmLibcMemcmpTest, LhsBeforeRhsLexically) {
   const char *lhs = "ab";
-  const char *rhs = "az";
-  EXPECT_LT(__llvm_libc::memcmp(lhs, rhs, 2), 0);
+  const char *rhs = "ac";
+  EXPECT_EQ(__llvm_libc::memcmp(lhs, rhs, 2), -1);
 }
 
 TEST(LlvmLibcMemcmpTest, LhsAfterRhsLexically) {
-  const char *lhs = "az";
+  const char *lhs = "ac";
   const char *rhs = "ab";
-  EXPECT_GT(__llvm_libc::memcmp(lhs, rhs, 2), 0);
-}
-
-TEST(LlvmLibcMemcmpTest, Sweep) {
-  static constexpr size_t K_MAX_SIZE = 1024;
-  char lhs[K_MAX_SIZE];
-  char rhs[K_MAX_SIZE];
-
-  const auto reset = [](char *const ptr) {
-    for (size_t i = 0; i < K_MAX_SIZE; ++i)
-      ptr[i] = 'a';
-  };
-
-  reset(lhs);
-  reset(rhs);
-  for (size_t i = 0; i < K_MAX_SIZE; ++i)
-    EXPECT_EQ(__llvm_libc::memcmp(lhs, rhs, i), 0);
-
-  reset(lhs);
-  reset(rhs);
-  for (size_t i = 0; i < K_MAX_SIZE; ++i) {
-    rhs[i] = 'z';
-    EXPECT_LT(__llvm_libc::memcmp(lhs, rhs, K_MAX_SIZE), 0);
-    rhs[i] = 'a';
-  }
+  EXPECT_EQ(__llvm_libc::memcmp(lhs, rhs, 2), 1);
 }

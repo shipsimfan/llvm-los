@@ -48,7 +48,7 @@ def SPV_UndefOp : SPV_Op<"Undef", []> {
     SPV_Type:$result
   );
 
-  let hasVerifier = 0;
+  let verifier = [{ return success(); }];
 
   let hasOpcode = 0;
   let autogenSerialization = 0;

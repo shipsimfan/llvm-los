@@ -5,10 +5,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-///
-/// \file
-/// This file defines the SmallString class.
-///
+//
+// This file defines the SmallString class.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_SMALLSTRING_H
@@ -71,16 +70,16 @@ public:
 
   /// Append from a list of StringRefs.
   void append(std::initializer_list<StringRef> Refs) {
-    size_t CurrentSize = this->size();
-    size_t SizeNeeded = CurrentSize;
+    size_t SizeNeeded = this->size();
     for (const StringRef &Ref : Refs)
       SizeNeeded += Ref.size();
-    this->resize_for_overwrite(SizeNeeded);
+    this->reserve(SizeNeeded);
+    auto CurEnd = this->end();
     for (const StringRef &Ref : Refs) {
-      std::copy(Ref.begin(), Ref.end(), this->begin() + CurrentSize);
-      CurrentSize += Ref.size();
+      this->uninitialized_copy(Ref.begin(), Ref.end(), CurEnd);
+      CurEnd += Ref.size();
     }
-    assert(CurrentSize == this->size());
+    this->set_size(SizeNeeded);
   }
 
   /// @}
@@ -94,8 +93,8 @@ public:
   }
 
   /// Check for string equality, ignoring case.
-  bool equals_insensitive(StringRef RHS) const {
-    return str().equals_insensitive(RHS);
+  bool equals_lower(StringRef RHS) const {
+    return str().equals_lower(RHS);
   }
 
   /// Compare two strings; the result is -1, 0, or 1 if this string is
@@ -104,9 +103,9 @@ public:
     return str().compare(RHS);
   }
 
-  /// compare_insensitive - Compare two strings, ignoring case.
-  int compare_insensitive(StringRef RHS) const {
-    return str().compare_insensitive(RHS);
+  /// compare_lower - Compare two strings, ignoring case.
+  int compare_lower(StringRef RHS) const {
+    return str().compare_lower(RHS);
   }
 
   /// compare_numeric - Compare two strings, treating sequences of digits as

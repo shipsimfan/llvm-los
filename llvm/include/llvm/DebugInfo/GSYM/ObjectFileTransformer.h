@@ -21,6 +21,7 @@ class ObjectFile;
 
 namespace gsym {
 
+struct CUInfo;
 class GsymCreator;
 
 class ObjectFileTransformer {

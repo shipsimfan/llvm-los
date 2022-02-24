@@ -1,4 +1,4 @@
-//===-- Implementation of the base class for libc unittests----------------===//
+//===-- Implementation of the base class for libc unittests ---------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -44,7 +44,7 @@ std::string describeValue(std::string Value) { return std::string(Value); }
 
 // When the value is __uint128_t, also show its hexadecimal digits.
 // Using template to force exact match, prevent ambiguous promotion.
-std::string describeValue128(__uint128_t Value) {
+template <> std::string describeValue<__uint128_t>(__uint128_t Value) {
   std::string S(sizeof(__uint128_t) * 2, '0');
 
   for (auto I = S.rbegin(), End = S.rend(); I != End; ++I, Value >>= 4) {
@@ -53,13 +53,6 @@ std::string describeValue128(__uint128_t Value) {
   }
 
   return "0x" + S;
-}
-
-template <> std::string describeValue<__int128_t>(__int128_t Value) {
-  return describeValue128(Value);
-}
-template <> std::string describeValue<__uint128_t>(__uint128_t Value) {
-  return describeValue128(Value);
 }
 
 template <typename ValType>
@@ -150,18 +143,14 @@ void Test::addTest(Test *T) {
   End = T;
 }
 
-int Test::runTests(const char *TestFilter) {
+int Test::runTests() {
   int TestCount = 0;
   int FailCount = 0;
-  for (Test *T = Start; T != nullptr; T = T->Next) {
+  for (Test *T = Start; T != nullptr; T = T->Next, ++TestCount) {
     const char *TestName = T->getName();
-    std::string StrTestName(TestName);
     constexpr auto GREEN = "\033[32m";
     constexpr auto RED = "\033[31m";
     constexpr auto RESET = "\033[0m";
-    if ((TestFilter != nullptr) && (StrTestName != TestFilter)) {
-      continue;
-    }
     std::cout << GREEN << "[ RUN      ] " << RESET << TestName << '\n';
     RunContext Ctx;
     T->SetUp();
@@ -178,87 +167,73 @@ int Test::runTests(const char *TestFilter) {
       std::cout << GREEN << "[       OK ] " << RESET << TestName << '\n';
       break;
     }
-    ++TestCount;
   }
 
-  if (TestCount > 0) {
-    std::cout << "Ran " << TestCount << " tests. "
-              << " PASS: " << TestCount - FailCount << ' '
-              << " FAIL: " << FailCount << '\n';
-  } else {
-    std::cout << "No tests run.\n";
-    if (TestFilter) {
-      std::cout << "No matching test for " << TestFilter << '\n';
-    }
-  }
+  std::cout << "Ran " << TestCount << " tests. "
+            << " PASS: " << TestCount - FailCount << ' '
+            << " FAIL: " << FailCount << '\n';
 
-  return FailCount > 0 || TestCount == 0 ? 1 : 0;
+  return FailCount > 0 ? 1 : 0;
 }
 
-namespace internal {
-
-template bool test<char>(RunContext *Ctx, TestCondition Cond, char LHS,
-                         char RHS, const char *LHSStr, const char *RHSStr,
-                         const char *File, unsigned long Line);
-
-template bool test<short>(RunContext *Ctx, TestCondition Cond, short LHS,
-                          short RHS, const char *LHSStr, const char *RHSStr,
-                          const char *File, unsigned long Line);
-
-template bool test<int>(RunContext *Ctx, TestCondition Cond, int LHS, int RHS,
-                        const char *LHSStr, const char *RHSStr,
-                        const char *File, unsigned long Line);
-
-template bool test<long>(RunContext *Ctx, TestCondition Cond, long LHS,
-                         long RHS, const char *LHSStr, const char *RHSStr,
-                         const char *File, unsigned long Line);
-
-template bool test<long long>(RunContext *Ctx, TestCondition Cond,
-                              long long LHS, long long RHS, const char *LHSStr,
-                              const char *RHSStr, const char *File,
-                              unsigned long Line);
-
-template bool test<__int128_t>(RunContext *Ctx, TestCondition Cond,
-                               __int128_t LHS, __int128_t RHS,
-                               const char *LHSStr, const char *RHSStr,
-                               const char *File, unsigned long Line);
-
-template bool test<unsigned char>(RunContext *Ctx, TestCondition Cond,
-                                  unsigned char LHS, unsigned char RHS,
+template bool Test::test<char, 0>(TestCondition Cond, char LHS, char RHS,
                                   const char *LHSStr, const char *RHSStr,
                                   const char *File, unsigned long Line);
 
-template bool test<unsigned short>(RunContext *Ctx, TestCondition Cond,
-                                   unsigned short LHS, unsigned short RHS,
+template bool Test::test<short, 0>(TestCondition Cond, short LHS, short RHS,
                                    const char *LHSStr, const char *RHSStr,
                                    const char *File, unsigned long Line);
 
-template bool test<unsigned int>(RunContext *Ctx, TestCondition Cond,
-                                 unsigned int LHS, unsigned int RHS,
+template bool Test::test<int, 0>(TestCondition Cond, int LHS, int RHS,
                                  const char *LHSStr, const char *RHSStr,
                                  const char *File, unsigned long Line);
 
-template bool test<unsigned long>(RunContext *Ctx, TestCondition Cond,
-                                  unsigned long LHS, unsigned long RHS,
+template bool Test::test<long, 0>(TestCondition Cond, long LHS, long RHS,
                                   const char *LHSStr, const char *RHSStr,
                                   const char *File, unsigned long Line);
 
-template bool test<bool>(RunContext *Ctx, TestCondition Cond, bool LHS,
-                         bool RHS, const char *LHSStr, const char *RHSStr,
-                         const char *File, unsigned long Line);
+template bool Test::test<long long, 0>(TestCondition Cond, long long LHS,
+                                       long long RHS, const char *LHSStr,
+                                       const char *RHSStr, const char *File,
+                                       unsigned long Line);
 
-template bool test<unsigned long long>(RunContext *Ctx, TestCondition Cond,
-                                       unsigned long long LHS,
-                                       unsigned long long RHS,
-                                       const char *LHSStr, const char *RHSStr,
-                                       const char *File, unsigned long Line);
+template bool Test::test<unsigned char, 0>(TestCondition Cond,
+                                           unsigned char LHS, unsigned char RHS,
+                                           const char *LHSStr,
+                                           const char *RHSStr, const char *File,
+                                           unsigned long Line);
 
-template bool test<__uint128_t>(RunContext *Ctx, TestCondition Cond,
-                                __uint128_t LHS, __uint128_t RHS,
-                                const char *LHSStr, const char *RHSStr,
-                                const char *File, unsigned long Line);
+template bool
+Test::test<unsigned short, 0>(TestCondition Cond, unsigned short LHS,
+                              unsigned short RHS, const char *LHSStr,
+                              const char *RHSStr, const char *File,
+                              unsigned long Line);
 
-} // namespace internal
+template bool Test::test<unsigned int, 0>(TestCondition Cond, unsigned int LHS,
+                                          unsigned int RHS, const char *LHSStr,
+                                          const char *RHSStr, const char *File,
+                                          unsigned long Line);
+
+template bool Test::test<unsigned long, 0>(TestCondition Cond,
+                                           unsigned long LHS, unsigned long RHS,
+                                           const char *LHSStr,
+                                           const char *RHSStr, const char *File,
+                                           unsigned long Line);
+
+template bool Test::test<bool, 0>(TestCondition Cond, bool LHS, bool RHS,
+                                  const char *LHSStr, const char *RHSStr,
+                                  const char *File, unsigned long Line);
+
+template bool
+Test::test<unsigned long long, 0>(TestCondition Cond, unsigned long long LHS,
+                                  unsigned long long RHS, const char *LHSStr,
+                                  const char *RHSStr, const char *File,
+                                  unsigned long Line);
+
+template bool Test::test<__uint128_t, 0>(TestCondition Cond, __uint128_t LHS,
+                                         __uint128_t RHS, const char *LHSStr,
+                                         const char *RHSStr, const char *File,
+                                         unsigned long Line);
 
 bool Test::testStrEq(const char *LHS, const char *RHS, const char *LHSStr,
                      const char *RHSStr, const char *File, unsigned long Line) {
@@ -287,27 +262,25 @@ bool Test::testMatch(bool MatchResult, MatcherBase &Matcher, const char *LHSStr,
   return false;
 }
 
-#ifdef ENABLE_SUBPROCESS_TESTS
-
 bool Test::testProcessKilled(testutils::FunctionCaller *Func, int Signal,
                              const char *LHSStr, const char *RHSStr,
                              const char *File, unsigned long Line) {
-  testutils::ProcessStatus Result = testutils::invoke_in_subprocess(Func, 500);
+  testutils::ProcessStatus Result = testutils::invokeInSubprocess(Func, 500);
 
-  if (const char *error = Result.get_error()) {
+  if (const char *error = Result.getError()) {
     Ctx->markFail();
     std::cout << File << ":" << Line << ": FAILURE\n" << error << '\n';
     return false;
   }
 
-  if (Result.timed_out()) {
+  if (Result.timedOut()) {
     Ctx->markFail();
     std::cout << File << ":" << Line << ": FAILURE\n"
               << "Process timed out after " << 500 << " milliseconds.\n";
     return false;
   }
 
-  if (Result.exited_normally()) {
+  if (Result.exitedNormally()) {
     Ctx->markFail();
     std::cout << File << ":" << Line << ": FAILURE\n"
               << "Expected " << LHSStr
@@ -315,41 +288,41 @@ bool Test::testProcessKilled(testutils::FunctionCaller *Func, int Signal,
     return false;
   }
 
-  int KilledBy = Result.get_fatal_signal();
+  int KilledBy = Result.getFatalSignal();
   assert(KilledBy != 0 && "Not killed by any signal");
   if (Signal == -1 || KilledBy == Signal)
     return true;
 
-  using testutils::signal_as_string;
+  using testutils::signalAsString;
   Ctx->markFail();
   std::cout << File << ":" << Line << ": FAILURE\n"
             << "              Expected: " << LHSStr << '\n'
             << "To be killed by signal: " << Signal << '\n'
-            << "              Which is: " << signal_as_string(Signal) << '\n'
+            << "              Which is: " << signalAsString(Signal) << '\n'
             << "  But it was killed by: " << KilledBy << '\n'
-            << "              Which is: " << signal_as_string(KilledBy) << '\n';
+            << "              Which is: " << signalAsString(KilledBy) << '\n';
   return false;
 }
 
 bool Test::testProcessExits(testutils::FunctionCaller *Func, int ExitCode,
                             const char *LHSStr, const char *RHSStr,
                             const char *File, unsigned long Line) {
-  testutils::ProcessStatus Result = testutils::invoke_in_subprocess(Func, 500);
+  testutils::ProcessStatus Result = testutils::invokeInSubprocess(Func, 500);
 
-  if (const char *error = Result.get_error()) {
+  if (const char *error = Result.getError()) {
     Ctx->markFail();
     std::cout << File << ":" << Line << ": FAILURE\n" << error << '\n';
     return false;
   }
 
-  if (Result.timed_out()) {
+  if (Result.timedOut()) {
     Ctx->markFail();
     std::cout << File << ":" << Line << ": FAILURE\n"
               << "Process timed out after " << 500 << " milliseconds.\n";
     return false;
   }
 
-  if (!Result.exited_normally()) {
+  if (!Result.exitedNormally()) {
     Ctx->markFail();
     std::cout << File << ":" << Line << ": FAILURE\n"
               << "Expected " << LHSStr << '\n'
@@ -358,7 +331,7 @@ bool Test::testProcessExits(testutils::FunctionCaller *Func, int ExitCode,
     return false;
   }
 
-  int ActualExit = Result.get_exit_code();
+  int ActualExit = Result.getExitCode();
   if (ActualExit == ExitCode)
     return true;
 
@@ -371,6 +344,7 @@ bool Test::testProcessExits(testutils::FunctionCaller *Func, int ExitCode,
   return false;
 }
 
-#endif // ENABLE_SUBPROCESS_TESTS
 } // namespace testing
 } // namespace __llvm_libc
+
+int main() { return __llvm_libc::testing::Test::runTests(); }

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_TEXTAPI_SYMBOL_H
-#define LLVM_TEXTAPI_SYMBOL_H
+#ifndef LLVM_TEXTAPI_MACHO_SYMBOL_H
+#define LLVM_TEXTAPI_MACHO_SYMBOL_H
 
 #include "llvm/ADT/BitmaskEnum.h"
 #include "llvm/ADT/StringRef.h"
@@ -52,12 +52,6 @@ enum class SymbolKind : uint8_t {
   ObjectiveCClassEHType,
   ObjectiveCInstanceVariable,
 };
-
-constexpr StringLiteral ObjC1ClassNamePrefix = ".objc_class_name_";
-constexpr StringLiteral ObjC2ClassNamePrefix = "_OBJC_CLASS_$_";
-constexpr StringLiteral ObjC2MetaClassNamePrefix = "_OBJC_METACLASS_$_";
-constexpr StringLiteral ObjC2EHTypePrefix = "_OBJC_EHTYPE_$_";
-constexpr StringLiteral ObjC2IVarPrefix = "_OBJC_IVAR_$_";
 
 using TargetList = SmallVector<Target, 5>;
 class Symbol {
@@ -111,16 +105,11 @@ public:
 #endif
 
   bool operator==(const Symbol &O) const {
-    return std::tie(Name, Kind, Targets, Flags) ==
-           std::tie(O.Name, O.Kind, O.Targets, O.Flags);
+    return (Kind == O.Kind) && (Name == O.Name) && (Targets == O.Targets) &&
+           (Flags == O.Flags);
   }
 
   bool operator!=(const Symbol &O) const { return !(*this == O); }
-
-  bool operator<(const Symbol &O) const {
-    return std::tie(Name, Kind, Targets, Flags) <
-           std::tie(O.Name, O.Kind, O.Targets, O.Flags);
-  }
 
 private:
   StringRef Name;
@@ -132,4 +121,4 @@ private:
 } // end namespace MachO.
 } // end namespace llvm.
 
-#endif // LLVM_TEXTAPI_SYMBOL_H
+#endif // LLVM_TEXTAPI_MACHO_SYMBOL_H

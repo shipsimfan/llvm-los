@@ -144,7 +144,6 @@ static IMAKind ClassifyImplicitMemberAccess(Sema &SemaRef,
 
   case Sema::ExpressionEvaluationContext::DiscardedStatement:
   case Sema::ExpressionEvaluationContext::ConstantEvaluated:
-  case Sema::ExpressionEvaluationContext::ImmediateFunctionContext:
   case Sema::ExpressionEvaluationContext::PotentiallyEvaluated:
   case Sema::ExpressionEvaluationContext::PotentiallyEvaluatedIfUsed:
     break;
@@ -341,8 +340,7 @@ CheckExtVectorComponent(Sema &S, QualType baseType, ExprValueKind &VK,
 
     // Emit a warning if an rgba selector is used earlier than OpenCL C 3.0.
     if (HasRGBA || (*compStr && IsRGBA(*compStr))) {
-      if (S.getLangOpts().OpenCL &&
-          S.getLangOpts().getOpenCLCompatibleVersion() < 300) {
+      if (S.getLangOpts().OpenCL && S.getLangOpts().OpenCLVersion < 300) {
         const char *DiagBegin = HasRGBA ? CompName->getNameStart() : compStr;
         S.Diag(OpLoc, diag::ext_opencl_ext_vector_type_rgba_selector)
             << StringRef(DiagBegin, 1) << SourceRange(CompLoc);
@@ -410,8 +408,7 @@ CheckExtVectorComponent(Sema &S, QualType baseType, ExprValueKind &VK,
   if (CompSize == 1)
     return vecType->getElementType();
 
-  if (HasRepeated)
-    VK = VK_PRValue;
+  if (HasRepeated) VK = VK_RValue;
 
   QualType VT = S.Context.getExtVectorType(vecType->getElementType(), CompSize);
   // Now look up the TypeDefDecl from the vector type. Without this,
@@ -504,12 +501,9 @@ Sema::ActOnDependentMemberExpr(Expr *BaseExpr, QualType BaseType,
     }
   }
 
-  assert(BaseType->isDependentType() || NameInfo.getName().isDependentName() ||
-         isDependentScopeSpecifier(SS) ||
-         (TemplateArgs && llvm::any_of(TemplateArgs->arguments(),
-                                       [](const TemplateArgumentLoc &Arg) {
-                                         return Arg.getArgument().isDependent();
-                                       })));
+  assert(BaseType->isDependentType() ||
+         NameInfo.getName().isDependentName() ||
+         isDependentScopeSpecifier(SS));
 
   // Get the type being accessed in BaseType.  If this is an arrow, the BaseExpr
   // must have pointer type, and the accessed type is the pointee.
@@ -569,7 +563,10 @@ bool Sema::CheckQualifiedMemberReference(Expr *BaseExpr,
       return false;
 
     // Note that we use the DC of the decl, not the underlying decl.
-    DeclContext *DC = (*I)->getDeclContext()->getNonTransparentContext();
+    DeclContext *DC = (*I)->getDeclContext();
+    while (DC->isTransparentContext())
+      DC = DC->getParent();
+
     if (!DC->isRecord())
       continue;
 
@@ -614,10 +611,11 @@ public:
     if (Record->containsDecl(ND))
       return true;
 
-    if (const auto *RD = dyn_cast<CXXRecordDecl>(Record)) {
+    if (const CXXRecordDecl *RD = dyn_cast<CXXRecordDecl>(Record)) {
       // Accept candidates that occur in any of the current class' base classes.
       for (const auto &BS : RD->bases()) {
-        if (const auto *BSTy = BS.getType()->getAs<RecordType>()) {
+        if (const RecordType *BSTy =
+                dyn_cast_or_null<RecordType>(BS.getType().getTypePtrOrNull())) {
           if (BSTy->getDecl()->containsDecl(ND))
             return true;
         }
@@ -911,8 +909,7 @@ MemberExpr *Sema::BuildMemberExpr(
     bool HadMultipleCandidates, const DeclarationNameInfo &MemberNameInfo,
     QualType Ty, ExprValueKind VK, ExprObjectKind OK,
     const TemplateArgumentListInfo *TemplateArgs) {
-  assert((!IsArrow || Base->isPRValue()) &&
-         "-> base must be a pointer prvalue");
+  assert((!IsArrow || Base->isRValue()) && "-> base must be a pointer rvalue");
   MemberExpr *E =
       MemberExpr::Create(Context, Base, IsArrow, OpLoc, NNS, TemplateKWLoc,
                          Member, FoundDecl, MemberNameInfo, TemplateArgs, Ty,
@@ -966,12 +963,13 @@ Sema::BuildMemberReferenceExpr(Expr *BaseExpr, QualType BaseExprType,
 
   // C++1z [expr.ref]p2:
   //   For the first option (dot) the first expression shall be a glvalue [...]
-  if (!IsArrow && BaseExpr && BaseExpr->isPRValue()) {
+  if (!IsArrow && BaseExpr && BaseExpr->isRValue()) {
     ExprResult Converted = TemporaryMaterializationConversion(BaseExpr);
     if (Converted.isInvalid())
       return ExprError();
     BaseExpr = Converted.get();
   }
+
 
   const DeclarationNameInfo &MemberNameInfo = R.getLookupNameInfo();
   DeclarationName MemberName = MemberNameInfo.getName();
@@ -1120,7 +1118,7 @@ Sema::BuildMemberReferenceExpr(Expr *BaseExpr, QualType BaseExprType,
     ExprValueKind valueKind;
     QualType type;
     if (MemberFn->isInstance()) {
-      valueKind = VK_PRValue;
+      valueKind = VK_RValue;
       type = Context.BoundMemberTy;
     } else {
       valueKind = VK_LValue;
@@ -1136,7 +1134,7 @@ Sema::BuildMemberReferenceExpr(Expr *BaseExpr, QualType BaseExprType,
   if (EnumConstantDecl *Enum = dyn_cast<EnumConstantDecl>(MemberDecl)) {
     return BuildMemberExpr(BaseExpr, IsArrow, OpLoc, &SS, TemplateKWLoc, Enum,
                            FoundDecl, /*HadMultipleCandidates=*/false,
-                           MemberNameInfo, Enum->getType(), VK_PRValue,
+                           MemberNameInfo, Enum->getType(), VK_RValue,
                            OK_Ordinary);
   }
 
@@ -1645,9 +1643,6 @@ static ExprResult LookupMemberExpr(Sema &S, LookupResult &R,
           << BaseType << int(IsArrow) << BaseExpr.get()->getSourceRange()
           << FixItHint::CreateReplacement(OpLoc, "->");
 
-      if (S.isSFINAEContext())
-        return ExprError();
-
       // Recurse as an -> access.
       IsArrow = true;
       return LookupMemberExpr(S, R, BaseExpr, IsArrow, OpLoc, SS,
@@ -1783,9 +1778,9 @@ Sema::BuildFieldReferenceExpr(Expr *BaseExpr, bool IsArrow,
     if (BaseExpr->getObjectKind() == OK_Ordinary)
       VK = BaseExpr->getValueKind();
     else
-      VK = VK_PRValue;
+      VK = VK_RValue;
   }
-  if (VK != VK_PRValue && Field->isBitField())
+  if (VK != VK_RValue && Field->isBitField())
     OK = OK_BitField;
 
   // Figure out the type of the member; see C99 6.5.2.3p3, C++ [expr.ref]

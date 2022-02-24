@@ -15,6 +15,7 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/ErrorHandling.h"
 
 namespace llvm {
 
@@ -208,9 +209,6 @@ public:
   RetTy visitDbgInfoIntrinsic(DbgInfoIntrinsic &I){ DELEGATE(IntrinsicInst); }
   RetTy visitMemSetInst(MemSetInst &I)            { DELEGATE(MemIntrinsic); }
   RetTy visitMemCpyInst(MemCpyInst &I)            { DELEGATE(MemTransferInst); }
-  RetTy visitMemCpyInlineInst(MemCpyInlineInst &I) {
-    DELEGATE(MemTransferInst);
-  }
   RetTy visitMemMoveInst(MemMoveInst &I)          { DELEGATE(MemTransferInst); }
   RetTy visitMemTransferInst(MemTransferInst &I)  { DELEGATE(MemIntrinsic); }
   RetTy visitMemIntrinsic(MemIntrinsic &I)        { DELEGATE(IntrinsicInst); }

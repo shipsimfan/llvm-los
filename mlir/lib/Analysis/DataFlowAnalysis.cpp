@@ -12,8 +12,6 @@
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "llvm/ADT/SmallPtrSet.h"
 
-#include <queue>
-
 using namespace mlir;
 using namespace mlir::detail;
 
@@ -167,7 +165,7 @@ private:
   template <typename ValuesT>
   void markAllPessimisticFixpoint(Operation *op, ValuesT values) {
     markAllPessimisticFixpoint(values);
-    opWorklist.push(op);
+    opWorklist.push_back(op);
   }
   template <typename ValuesT>
   void markAllPessimisticFixpointAndVisitUsers(ValuesT values) {
@@ -197,10 +195,10 @@ private:
   DenseSet<std::pair<Block *, Block *>> executableEdges;
 
   /// A worklist containing blocks that need to be processed.
-  std::queue<Block *> blockWorklist;
+  SmallVector<Block *, 64> blockWorklist;
 
   /// A worklist of operations that need to be processed.
-  std::queue<Operation *> opWorklist;
+  SmallVector<Operation *, 64> opWorklist;
 
   /// The callable operations that have their argument/result state tracked.
   DenseMap<Operation *, CallableLatticeState> callableLatticeState;
@@ -213,7 +211,7 @@ private:
   /// A symbol table used for O(1) symbol lookups during simplification.
   SymbolTableCollection symbolTable;
 };
-} // namespace
+} // end anonymous namespace
 
 ForwardDataFlowSolver::ForwardDataFlowSolver(
     ForwardDataFlowAnalysisBase &analysis, Operation *op)
@@ -231,18 +229,12 @@ ForwardDataFlowSolver::ForwardDataFlowSolver(
 void ForwardDataFlowSolver::solve() {
   while (!blockWorklist.empty() || !opWorklist.empty()) {
     // Process any operations in the op worklist.
-    while (!opWorklist.empty()) {
-      Operation *nextOp = opWorklist.front();
-      opWorklist.pop();
-      visitUsers(*nextOp);
-    }
+    while (!opWorklist.empty())
+      visitUsers(*opWorklist.pop_back_val());
 
     // Process any blocks in the block worklist.
-    while (!blockWorklist.empty()) {
-      Block *nextBlock = blockWorklist.front();
-      blockWorklist.pop();
-      visitBlock(nextBlock);
-    }
+    while (!blockWorklist.empty())
+      visitBlock(blockWorklist.pop_back_val());
   }
 }
 
@@ -376,7 +368,7 @@ void ForwardDataFlowSolver::visitOperation(Operation *op) {
 
   // Visit the current operation.
   if (analysis.visitOperation(op, operandLattices) == ChangeResult::Change)
-    opWorklist.push(op);
+    opWorklist.push_back(op);
 
   // `visitOperation` is required to define all of the result lattices.
   assert(llvm::none_of(
@@ -485,11 +477,9 @@ void ForwardDataFlowSolver::visitRegionSuccessors(
       // region operation can provide information for certain results that
       // aren't part of the control flow.
       if (succArgs.size() != results.size()) {
-        opWorklist.push(parentOp);
-        if (succArgs.empty()) {
-          markAllPessimisticFixpoint(results);
-          continue;
-        }
+        opWorklist.push_back(parentOp);
+        if (succArgs.empty())
+          return markAllPessimisticFixpoint(results);
 
         unsigned firstResIdx = succArgs[0].cast<OpResult>().getResultNumber();
         markAllPessimisticFixpoint(results.take_front(firstResIdx));
@@ -502,7 +492,7 @@ void ForwardDataFlowSolver::visitRegionSuccessors(
       for (auto it : llvm::zip(succArgs, operands))
         join(parentOp, analysis.getLatticeElement(std::get<0>(it)),
              analysis.getLatticeElement(std::get<1>(it)));
-      continue;
+      return;
     }
     assert(!region->empty() && "expected region to be non-empty");
     Block *entryBlock = &region->front();
@@ -570,29 +560,18 @@ void ForwardDataFlowSolver::visitTerminatorOperation(
     if (regionSuccessors.empty())
       return;
 
-    // Try to get "region-like" successor operands if possible in order to
-    // propagate the operand states to the successors.
-    if (isRegionReturnLike(op)) {
-      return visitRegionSuccessors(
-          parentOp, regionSuccessors, [&](Optional<unsigned> regionIndex) {
-            // Determine the individual region successor operands for the given
-            // region index (if any).
-            return *getRegionBranchSuccessorOperands(op, regionIndex);
-          });
-    }
-
     // If this terminator is not "region-like", conservatively mark all of the
     // successor values as having reached the pessimistic fixpoint.
-    for (auto &it : regionSuccessors) {
-      // If the successor is a region, mark the entry block as executable so
-      // that we visit operations defined within. If the successor is the
-      // parent operation, we simply mark the control flow results as having
-      // reached the pessimistic state.
-      if (Region *region = it.getSuccessor())
-        markEntryBlockExecutable(region, /*markPessimisticFixpoint=*/true);
-      else
+    if (!op->hasTrait<OpTrait::ReturnLike>()) {
+      for (auto &it : regionSuccessors)
         markAllPessimisticFixpointAndVisitUsers(it.getSuccessorInputs());
+      return;
     }
+
+    // Otherwise, propagate the operand lattice states to the successors.
+    OperandRange operands = op->getOperands();
+    return visitRegionSuccessors(parentOp, regionSuccessors,
+                                 [&](Optional<unsigned>) { return operands; });
   }
 
   // Try to resolve to a specific set of successors with the current optimistic
@@ -721,7 +700,7 @@ ForwardDataFlowSolver::markEntryBlockExecutable(Region *region,
 ChangeResult ForwardDataFlowSolver::markBlockExecutable(Block *block) {
   bool marked = executableBlocks.insert(block).second;
   if (marked)
-    blockWorklist.push(block);
+    blockWorklist.push_back(block);
   return marked ? ChangeResult::Change : ChangeResult::NoChange;
 }
 
@@ -730,7 +709,8 @@ bool ForwardDataFlowSolver::isBlockExecutable(Block *block) const {
 }
 
 void ForwardDataFlowSolver::markEdgeExecutable(Block *from, Block *to) {
-  executableEdges.insert(std::make_pair(from, to));
+  if (!executableEdges.insert(std::make_pair(from, to)).second)
+    return;
 
   // Mark the destination as executable, and reprocess its arguments if it was
   // already executable.
@@ -757,20 +737,20 @@ bool ForwardDataFlowSolver::isAtFixpoint(Value value) const {
 void ForwardDataFlowSolver::join(Operation *owner, AbstractLatticeElement &to,
                                  const AbstractLatticeElement &from) {
   if (to.join(from) == ChangeResult::Change)
-    opWorklist.push(owner);
+    opWorklist.push_back(owner);
 }
 
 //===----------------------------------------------------------------------===//
 // AbstractLatticeElement
 //===----------------------------------------------------------------------===//
 
-AbstractLatticeElement::~AbstractLatticeElement() = default;
+AbstractLatticeElement::~AbstractLatticeElement() {}
 
 //===----------------------------------------------------------------------===//
 // ForwardDataFlowAnalysisBase
 //===----------------------------------------------------------------------===//
 
-ForwardDataFlowAnalysisBase::~ForwardDataFlowAnalysisBase() = default;
+ForwardDataFlowAnalysisBase::~ForwardDataFlowAnalysisBase() {}
 
 AbstractLatticeElement &
 ForwardDataFlowAnalysisBase::getLatticeElement(Value value) {

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <climits>
 #include <iomanip>
+#include <limits.h>
 
 #include "lldb/Host/Editline.h"
 
@@ -205,7 +205,7 @@ private:
   // Use static GetHistory() function to get a EditlineHistorySP to one of
   // these objects
   EditlineHistory(const std::string &prefix, uint32_t size, bool unique_entries)
-      : m_prefix(prefix) {
+      : m_history(nullptr), m_event(), m_prefix(prefix), m_path() {
     m_history = history_winit();
     history_w(m_history, &m_event, H_SETSIZE, size);
     if (unique_entries)
@@ -298,15 +298,11 @@ public:
   }
 
 protected:
-  /// The history object.
-  HistoryW *m_history = nullptr;
-  /// The history event needed to contain all history events.
-  HistEventW m_event;
-  /// The prefix name (usually the editline program name) to use when
-  /// loading/saving history.
-  std::string m_prefix;
-  /// Path to the history file.
-  std::string m_path;
+  HistoryW *m_history; // The history object
+  HistEventW m_event;  // The history event needed to contain all history events
+  std::string m_prefix; // The prefix name (usually the editline program name)
+                        // to use when loading/saving history
+  std::string m_path;   // Path to the history file
 };
 }
 }
@@ -1010,11 +1006,11 @@ unsigned char Editline::TabCommand(int ch) {
     switch (completion.GetMode()) {
     case CompletionMode::Normal: {
       std::string to_add = completion.GetCompletion();
+      to_add = to_add.substr(request.GetCursorArgumentPrefix().size());
       // Terminate the current argument with a quote if it started with a quote.
       if (!request.GetParsedLine().empty() && request.GetParsedArg().IsQuoted())
         to_add.push_back(request.GetParsedArg().GetQuoteChar());
       to_add.push_back(' ');
-      el_deletestr(m_editline, request.GetCursorArgumentPrefix().size());
       el_insertstr(m_editline, to_add.c_str());
       // Clear all the autosuggestion parts if the only single space can be completed.
       if (to_add == " ")
@@ -1558,10 +1554,8 @@ bool Editline::GetLines(int first_line_number, StringList &lines,
 
   interrupted = m_editor_status == EditorStatus::Interrupted;
   if (!interrupted) {
-    // Save the completed entry in history before returning. Don't save empty
-    // input as that just clutters the command history.
-    if (!m_input_lines.empty())
-      m_history_sp->Enter(CombineLines(m_input_lines).c_str());
+    // Save the completed entry in history before returning
+    m_history_sp->Enter(CombineLines(m_input_lines).c_str());
 
     lines = GetInputAsStringList();
   }

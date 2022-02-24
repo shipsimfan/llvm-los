@@ -37,7 +37,7 @@ void RedundantDeclarationCheck::registerMatchers(MatchFinder *Finder) {
                       functionDecl(unless(anyOf(
                           isDefinition(), isDefaulted(),
                           doesDeclarationForceExternallyVisibleDefinition(),
-                          hasAncestor(friendDecl()))))))
+                          hasParent(friendDecl()))))))
           .bind("Decl"),
       this);
 }

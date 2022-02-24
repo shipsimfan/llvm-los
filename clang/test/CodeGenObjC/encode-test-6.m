@@ -57,7 +57,7 @@ typedef struct
 // rdar://16655340
 int i;
 typeof(@encode(typeof(i))) e = @encode(typeof(i));
-const char * Test(void)
+const char * Test()
 {
     return e;
 }

@@ -43,10 +43,8 @@ using namespace llvm;
 
 #define DEBUG_TYPE "cgscc-passmgr"
 
-namespace llvm {
 cl::opt<unsigned> MaxDevirtIterations("max-devirt-iterations", cl::ReallyHidden,
                                       cl::init(4));
-}
 
 STATISTIC(MaxSCCIterations, "Maximum CGSCCPassMgr iterations on one SCC");
 
@@ -61,7 +59,7 @@ class CGPassManager : public ModulePass, public PMDataManager {
 public:
   static char ID;
 
-  explicit CGPassManager() : ModulePass(ID) {}
+  explicit CGPassManager() : ModulePass(ID), PMDataManager() {}
 
   /// Execute all of the passes scheduled for execution.  Keep track of
   /// whether any of the passes modifies the module, and if so, return true.

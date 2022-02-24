@@ -21,7 +21,6 @@
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
-#include "clang/AST/GlobalDecl.h"
 #include "clang/AST/Mangle.h"
 #include "clang/AST/VTableBuilder.h"
 #include "clang/Basic/ABI.h"
@@ -39,18 +38,6 @@
 using namespace clang;
 
 namespace {
-
-// Get GlobalDecl of DeclContext of local entities.
-static GlobalDecl getGlobalDeclAsDeclContext(const DeclContext *DC) {
-  GlobalDecl GD;
-  if (auto *CD = dyn_cast<CXXConstructorDecl>(DC))
-    GD = GlobalDecl(CD, Ctor_Complete);
-  else if (auto *DD = dyn_cast<CXXDestructorDecl>(DC))
-    GD = GlobalDecl(DD, Dtor_Complete);
-  else
-    GD = GlobalDecl(cast<FunctionDecl>(DC));
-  return GD;
-}
 
 struct msvc_hashing_ostream : public llvm::raw_svector_ostream {
   raw_ostream &OS;
@@ -358,9 +345,9 @@ public:
 
   raw_ostream &getStream() const { return Out; }
 
-  void mangle(GlobalDecl GD, StringRef Prefix = "?");
-  void mangleName(GlobalDecl GD);
-  void mangleFunctionEncoding(GlobalDecl GD, bool ShouldMangle);
+  void mangle(const NamedDecl *D, StringRef Prefix = "?");
+  void mangleName(const NamedDecl *ND);
+  void mangleFunctionEncoding(const FunctionDecl *FD, bool ShouldMangle);
   void mangleVariableEncoding(const VarDecl *VD);
   void mangleMemberDataPointer(const CXXRecordDecl *RD, const ValueDecl *VD,
                                StringRef Prefix = "$");
@@ -383,7 +370,7 @@ public:
                           const FunctionDecl *D = nullptr,
                           bool ForceThisQuals = false,
                           bool MangleExceptionSpec = true);
-  void mangleNestedName(GlobalDecl GD);
+  void mangleNestedName(const NamedDecl *ND);
 
 private:
   bool isStructorDecl(const NamedDecl *ND) const {
@@ -397,10 +384,10 @@ private:
                                   AddrSpace == LangAS::ptr32_uptr));
   }
 
-  void mangleUnqualifiedName(GlobalDecl GD) {
-    mangleUnqualifiedName(GD, cast<NamedDecl>(GD.getDecl())->getDeclName());
+  void mangleUnqualifiedName(const NamedDecl *ND) {
+    mangleUnqualifiedName(ND, ND->getDeclName());
   }
-  void mangleUnqualifiedName(GlobalDecl GD, DeclarationName Name);
+  void mangleUnqualifiedName(const NamedDecl *ND, DeclarationName Name);
   void mangleSourceName(StringRef Name);
   void mangleOperatorName(OverloadedOperatorKind OO, SourceLocation Loc);
   void mangleCXXDtorType(CXXDtorType T);
@@ -409,9 +396,9 @@ private:
   void manglePointerCVQualifiers(Qualifiers Quals);
   void manglePointerExtQualifiers(Qualifiers Quals, QualType PointeeType);
 
-  void mangleUnscopedTemplateName(GlobalDecl GD);
+  void mangleUnscopedTemplateName(const TemplateDecl *ND);
   void
-  mangleTemplateInstantiationName(GlobalDecl GD,
+  mangleTemplateInstantiationName(const TemplateDecl *TD,
                                   const TemplateArgumentList &TemplateArgs);
   void mangleObjCMethodName(const ObjCMethodDecl *MD);
 
@@ -546,8 +533,7 @@ MicrosoftMangleContextImpl::shouldMangleStringLiteral(const StringLiteral *SL) {
   return true;
 }
 
-void MicrosoftCXXNameMangler::mangle(GlobalDecl GD, StringRef Prefix) {
-  const NamedDecl *D = cast<NamedDecl>(GD.getDecl());
+void MicrosoftCXXNameMangler::mangle(const NamedDecl *D, StringRef Prefix) {
   // MSVC doesn't mangle C++ names the same way it mangles extern "C" names.
   // Therefore it's really important that we don't decorate the
   // name with leading underscores or leading/trailing at signs. So, by
@@ -556,9 +542,9 @@ void MicrosoftCXXNameMangler::mangle(GlobalDecl GD, StringRef Prefix) {
 
   // <mangled-name> ::= ? <name> <type-encoding>
   Out << Prefix;
-  mangleName(GD);
+  mangleName(D);
   if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D))
-    mangleFunctionEncoding(GD, Context.shouldMangleDeclName(FD));
+    mangleFunctionEncoding(FD, Context.shouldMangleDeclName(FD));
   else if (const VarDecl *VD = dyn_cast<VarDecl>(D))
     mangleVariableEncoding(VD);
   else if (isa<MSGuidDecl>(D))
@@ -572,9 +558,8 @@ void MicrosoftCXXNameMangler::mangle(GlobalDecl GD, StringRef Prefix) {
     llvm_unreachable("Tried to mangle unexpected NamedDecl!");
 }
 
-void MicrosoftCXXNameMangler::mangleFunctionEncoding(GlobalDecl GD,
+void MicrosoftCXXNameMangler::mangleFunctionEncoding(const FunctionDecl *FD,
                                                      bool ShouldMangle) {
-  const FunctionDecl *FD = cast<FunctionDecl>(GD.getDecl());
   // <type-encoding> ::= <function-class> <function-type>
 
   // Since MSVC operates on the type as written and not the canonical type, it
@@ -785,13 +770,13 @@ void MicrosoftCXXNameMangler::mangleVirtualMemPtrThunk(
   mangleCallingConvention(MD->getType()->castAs<FunctionProtoType>());
 }
 
-void MicrosoftCXXNameMangler::mangleName(GlobalDecl GD) {
+void MicrosoftCXXNameMangler::mangleName(const NamedDecl *ND) {
   // <name> ::= <unscoped-name> {[<named-scope>]+ | [<nested-name>]}? @
 
   // Always start with the unqualified name.
-  mangleUnqualifiedName(GD);
+  mangleUnqualifiedName(ND);
 
-  mangleNestedName(GD);
+  mangleNestedName(ND);
 
   // Terminate the whole name with an '@'.
   Out << '@';
@@ -859,14 +844,13 @@ void MicrosoftCXXNameMangler::mangleBits(llvm::APInt Value) {
   }
 }
 
-static GlobalDecl isTemplate(GlobalDecl GD,
-                             const TemplateArgumentList *&TemplateArgs) {
-  const NamedDecl *ND = cast<NamedDecl>(GD.getDecl());
+static const TemplateDecl *
+isTemplate(const NamedDecl *ND, const TemplateArgumentList *&TemplateArgs) {
   // Check if we have a function template.
   if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(ND)) {
     if (const TemplateDecl *TD = FD->getPrimaryTemplate()) {
       TemplateArgs = FD->getTemplateSpecializationArgs();
-      return GD.getWithDecl(TD);
+      return TD;
     }
   }
 
@@ -874,22 +858,21 @@ static GlobalDecl isTemplate(GlobalDecl GD,
   if (const ClassTemplateSpecializationDecl *Spec =
           dyn_cast<ClassTemplateSpecializationDecl>(ND)) {
     TemplateArgs = &Spec->getTemplateArgs();
-    return GD.getWithDecl(Spec->getSpecializedTemplate());
+    return Spec->getSpecializedTemplate();
   }
 
   // Check if we have a variable template.
   if (const VarTemplateSpecializationDecl *Spec =
           dyn_cast<VarTemplateSpecializationDecl>(ND)) {
     TemplateArgs = &Spec->getTemplateArgs();
-    return GD.getWithDecl(Spec->getSpecializedTemplate());
+    return Spec->getSpecializedTemplate();
   }
 
-  return GlobalDecl();
+  return nullptr;
 }
 
-void MicrosoftCXXNameMangler::mangleUnqualifiedName(GlobalDecl GD,
+void MicrosoftCXXNameMangler::mangleUnqualifiedName(const NamedDecl *ND,
                                                     DeclarationName Name) {
-  const NamedDecl *ND = cast<NamedDecl>(GD.getDecl());
   //  <unqualified-name> ::= <operator-name>
   //                     ::= <ctor-dtor-name>
   //                     ::= <source-name>
@@ -897,11 +880,11 @@ void MicrosoftCXXNameMangler::mangleUnqualifiedName(GlobalDecl GD,
 
   // Check if we have a template.
   const TemplateArgumentList *TemplateArgs = nullptr;
-  if (GlobalDecl TD = isTemplate(GD, TemplateArgs)) {
+  if (const TemplateDecl *TD = isTemplate(ND, TemplateArgs)) {
     // Function templates aren't considered for name back referencing.  This
     // makes sense since function templates aren't likely to occur multiple
     // times in a symbol.
-    if (isa<FunctionTemplateDecl>(TD.getDecl())) {
+    if (isa<FunctionTemplateDecl>(TD)) {
       mangleTemplateInstantiationName(TD, *TemplateArgs);
       Out << '@';
       return;
@@ -962,19 +945,7 @@ void MicrosoftCXXNameMangler::mangleUnqualifiedName(GlobalDecl GD,
   switch (Name.getNameKind()) {
     case DeclarationName::Identifier: {
       if (const IdentifierInfo *II = Name.getAsIdentifierInfo()) {
-        bool IsDeviceStub =
-            ND &&
-            ((isa<FunctionDecl>(ND) && ND->hasAttr<CUDAGlobalAttr>()) ||
-             (isa<FunctionTemplateDecl>(ND) &&
-              cast<FunctionTemplateDecl>(ND)
-                  ->getTemplatedDecl()
-                  ->hasAttr<CUDAGlobalAttr>())) &&
-            GD.getKernelReferenceKind() == KernelReferenceKind::Stub;
-        if (IsDeviceStub)
-          mangleSourceName(
-              (llvm::Twine("__device_stub__") + II->getName()).str());
-        else
-          mangleSourceName(II->getName());
+        mangleSourceName(II->getName());
         break;
       }
 
@@ -1175,8 +1146,7 @@ void MicrosoftCXXNameMangler::mangleUnqualifiedName(GlobalDecl GD,
 
 // <postfix> ::= <unqualified-name> [<postfix>]
 //           ::= <substitution> [<postfix>]
-void MicrosoftCXXNameMangler::mangleNestedName(GlobalDecl GD) {
-  const NamedDecl *ND = cast<NamedDecl>(GD.getDecl());
+void MicrosoftCXXNameMangler::mangleNestedName(const NamedDecl *ND) {
   const DeclContext *DC = getEffectiveDeclContext(ND);
   while (!DC->isTranslationUnit()) {
     if (isa<TagDecl>(ND) || isa<VarDecl>(ND)) {
@@ -1259,7 +1229,7 @@ void MicrosoftCXXNameMangler::mangleNestedName(GlobalDecl GD) {
     } else if (isa<NamedDecl>(DC)) {
       ND = cast<NamedDecl>(DC);
       if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(ND)) {
-        mangle(getGlobalDeclAsDeclContext(FD), "?");
+        mangle(FD, "?");
         break;
       } else {
         mangleUnqualifiedName(ND);
@@ -1448,7 +1418,7 @@ void MicrosoftCXXNameMangler::mangleObjCMethodName(const ObjCMethodDecl *MD) {
 }
 
 void MicrosoftCXXNameMangler::mangleTemplateInstantiationName(
-    GlobalDecl GD, const TemplateArgumentList &TemplateArgs) {
+    const TemplateDecl *TD, const TemplateArgumentList &TemplateArgs) {
   // <template-name> ::= <unscoped-template-name> <template-args>
   //                 ::= <substitution>
   // Always start with the unqualified name.
@@ -1463,8 +1433,8 @@ void MicrosoftCXXNameMangler::mangleTemplateInstantiationName(
   TemplateArgBackReferences.swap(OuterTemplateArgsContext);
   PassObjectSizeArgs.swap(OuterPassObjectSizeArgs);
 
-  mangleUnscopedTemplateName(GD);
-  mangleTemplateArgs(cast<TemplateDecl>(GD.getDecl()), TemplateArgs);
+  mangleUnscopedTemplateName(TD);
+  mangleTemplateArgs(TD, TemplateArgs);
 
   // Restore the previous back reference contexts.
   NameBackReferences.swap(OuterTemplateContext);
@@ -1473,10 +1443,11 @@ void MicrosoftCXXNameMangler::mangleTemplateInstantiationName(
   PassObjectSizeArgs.swap(OuterPassObjectSizeArgs);
 }
 
-void MicrosoftCXXNameMangler::mangleUnscopedTemplateName(GlobalDecl GD) {
+void
+MicrosoftCXXNameMangler::mangleUnscopedTemplateName(const TemplateDecl *TD) {
   // <unscoped-template-name> ::= ?$ <unqualified-name>
   Out << "?$";
-  mangleUnqualifiedName(GD);
+  mangleUnqualifiedName(TD);
 }
 
 void MicrosoftCXXNameMangler::mangleIntegerLiteral(
@@ -1943,7 +1914,7 @@ void MicrosoftCXXNameMangler::mangleObjCKindOfType(const ObjCObjectType *T,
   Extra.mangleSourceName("KindOf");
   Extra.mangleType(QualType(T, 0)
                        .stripObjCKindOfType(getASTContext())
-                       ->castAs<ObjCObjectType>(),
+                       ->getAs<ObjCObjectType>(),
                    Quals, Range);
 
   mangleArtificialTagType(TTK_Struct, TemplateMangling, {"__ObjC"});
@@ -2495,7 +2466,6 @@ void MicrosoftCXXNameMangler::mangleType(const BuiltinType *T, Qualifiers,
   case BuiltinType::SatUFract:
   case BuiltinType::SatULongFract:
   case BuiltinType::BFloat16:
-  case BuiltinType::Ibm128:
   case BuiltinType::Float128: {
     DiagnosticsEngine &Diags = Context.getDiags();
     unsigned DiagID = Diags.getCustomDiagID(
@@ -2758,8 +2728,6 @@ void MicrosoftCXXNameMangler::mangleCallingConvention(CallingConv CC) {
   //                      ::= J # __export __fastcall
   //                      ::= Q # __vectorcall
   //                      ::= S # __attribute__((__swiftcall__)) // Clang-only
-  //                      ::= T # __attribute__((__swiftasynccall__))
-  //                            // Clang-only
   //                      ::= w # __regcall
   // The 'export' calling conventions are from a bygone era
   // (*cough*Win16*cough*) when functions were declared for export with
@@ -2779,7 +2747,6 @@ void MicrosoftCXXNameMangler::mangleCallingConvention(CallingConv CC) {
     case CC_X86FastCall: Out << 'I'; break;
     case CC_X86VectorCall: Out << 'Q'; break;
     case CC_Swift: Out << 'S'; break;
-    case CC_SwiftAsync: Out << 'W'; break;
     case CC_PreserveMost: Out << 'U'; break;
     case CC_X86RegCall: Out << 'w'; break;
   }
@@ -2854,8 +2821,8 @@ void MicrosoftCXXNameMangler::mangleArtificialTagType(
   // Always start with the unqualified name.
   mangleSourceName(UnqualifiedName);
 
-  for (StringRef N : llvm::reverse(NestedNames))
-    mangleSourceName(N);
+  for (auto I = NestedNames.rbegin(), E = NestedNames.rend(); I != E; ++I)
+    mangleSourceName(*I);
 
   // Terminate the whole name with an '@'.
   Out << '@';
@@ -3352,39 +3319,39 @@ void MicrosoftMangleContextImpl::mangleCXXName(GlobalDecl GD,
   if (auto *CD = dyn_cast<CXXConstructorDecl>(D)) {
     auto Type = GD.getCtorType();
     MicrosoftCXXNameMangler mangler(*this, MHO, CD, Type);
-    return mangler.mangle(GD);
+    return mangler.mangle(D);
   }
 
   if (auto *DD = dyn_cast<CXXDestructorDecl>(D)) {
     auto Type = GD.getDtorType();
     MicrosoftCXXNameMangler mangler(*this, MHO, DD, Type);
-    return mangler.mangle(GD);
+    return mangler.mangle(D);
   }
 
   MicrosoftCXXNameMangler Mangler(*this, MHO);
-  return Mangler.mangle(GD);
+  return Mangler.mangle(D);
 }
 
-void MicrosoftCXXNameMangler::mangleType(const BitIntType *T, Qualifiers,
+void MicrosoftCXXNameMangler::mangleType(const ExtIntType *T, Qualifiers,
                                          SourceRange Range) {
   llvm::SmallString<64> TemplateMangling;
   llvm::raw_svector_ostream Stream(TemplateMangling);
   MicrosoftCXXNameMangler Extra(Context, Stream);
   Stream << "?$";
   if (T->isUnsigned())
-    Extra.mangleSourceName("_UBitInt");
+    Extra.mangleSourceName("_UExtInt");
   else
-    Extra.mangleSourceName("_BitInt");
+    Extra.mangleSourceName("_ExtInt");
   Extra.mangleIntegerLiteral(llvm::APSInt::getUnsigned(T->getNumBits()));
 
   mangleArtificialTagType(TTK_Struct, TemplateMangling, {"__clang"});
 }
 
-void MicrosoftCXXNameMangler::mangleType(const DependentBitIntType *T,
+void MicrosoftCXXNameMangler::mangleType(const DependentExtIntType *T,
                                          Qualifiers, SourceRange Range) {
   DiagnosticsEngine &Diags = Context.getDiags();
   unsigned DiagID = Diags.getCustomDiagID(
-      DiagnosticsEngine::Error, "cannot mangle this DependentBitInt type yet");
+      DiagnosticsEngine::Error, "cannot mangle this DependentExtInt type yet");
   Diags.Report(Range.getBegin(), DiagID) << Range;
 }
 
@@ -3632,7 +3599,7 @@ void MicrosoftMangleContextImpl::mangleCXXCatchableType(
   // FIXME: It is known that the Ctor is present in 2013, and in 2017.7
   // (_MSC_VER 1914) and newer, and that it's omitted in 2015 and 2017.4
   // (_MSC_VER 1911), but it's unknown when exactly it reappeared (1914?
-  // Or 1912, 1913 already?).
+  // Or 1912, 1913 aleady?).
   bool OmitCopyCtor = getASTContext().getLangOpts().isCompatibleWithMSVC(
                           LangOptions::MSVC2015) &&
                       !getASTContext().getLangOpts().isCompatibleWithMSVC(
@@ -3709,7 +3676,7 @@ void MicrosoftMangleContextImpl::mangleCXXRTTICompleteObjectLocator(
   assert(VFTableMangling.startswith("??_7") ||
          VFTableMangling.startswith("??_S"));
 
-  Out << "??_R4" << VFTableMangling.str().drop_front(4);
+  Out << "??_R4" << StringRef(VFTableMangling).drop_front(4);
 }
 
 void MicrosoftMangleContextImpl::mangleSEHFilterExpression(
@@ -3913,7 +3880,7 @@ void MicrosoftMangleContextImpl::mangleStringLiteral(const StringLiteral *SL,
     // - ?[A-Z]: The range from \xc1 to \xda.
     // - ?[0-9]: The set of [,/\:. \n\t'-].
     // - ?$XX: A fallback which maps nibbles.
-    if (isAsciiIdentifierContinue(Byte, /*AllowDollar=*/true)) {
+    if (isIdentifierBody(Byte, /*AllowDollar=*/true)) {
       Mangler.getStream() << Byte;
     } else if (isLetter(Byte & 0x7f)) {
       Mangler.getStream() << '?' << static_cast<char>(Byte & 0x7f);

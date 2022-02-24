@@ -1,5 +1,7 @@
 ! This test verifies the phase control in Flang compiler driver.
 
+! REQUIRES: new-flang-driver
+
 !-----------
 ! RUN LINES
 !-----------

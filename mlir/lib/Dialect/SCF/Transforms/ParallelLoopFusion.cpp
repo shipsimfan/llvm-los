@@ -41,11 +41,9 @@ static bool equalIterationSpaces(ParallelOp firstPloop,
     // TODO: Extend this to support aliases and equal constants.
     return std::equal(lhs.begin(), lhs.end(), rhs.begin());
   };
-  return matchOperands(firstPloop.getLowerBound(),
-                       secondPloop.getLowerBound()) &&
-         matchOperands(firstPloop.getUpperBound(),
-                       secondPloop.getUpperBound()) &&
-         matchOperands(firstPloop.getStep(), secondPloop.getStep());
+  return matchOperands(firstPloop.lowerBound(), secondPloop.lowerBound()) &&
+         matchOperands(firstPloop.upperBound(), secondPloop.upperBound()) &&
+         matchOperands(firstPloop.step(), secondPloop.step());
 }
 
 /// Checks if the parallel loops have mixed access to the same buffers. Returns

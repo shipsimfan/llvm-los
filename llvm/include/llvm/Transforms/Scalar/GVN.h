@@ -21,6 +21,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/InstructionPrecedenceTracking.h"
+#include "llvm/Analysis/MemoryDependenceAnalysis.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/PassManager.h"
@@ -39,16 +40,15 @@ class AssumptionCache;
 class BasicBlock;
 class BranchInst;
 class CallInst;
+class Constant;
 class ExtractValueInst;
 class Function;
 class FunctionPass;
+class IntrinsicInst;
 class LoadInst;
 class LoopInfo;
-class MemDepResult;
-class MemoryDependenceResults;
 class MemorySSA;
 class MemorySSAUpdater;
-class NonLocalDepResult;
 class OptimizationRemarkEmitter;
 class PHINode;
 class TargetLibraryInfo;
@@ -113,19 +113,16 @@ struct GVNOptions {
 ///
 /// FIXME: We should have a good summary of the GVN algorithm implemented by
 /// this particular pass here.
-class GVNPass : public PassInfoMixin<GVNPass> {
+class GVN : public PassInfoMixin<GVN> {
   GVNOptions Options;
 
 public:
   struct Expression;
 
-  GVNPass(GVNOptions Options = {}) : Options(Options) {}
+  GVN(GVNOptions Options = {}) : Options(Options) {}
 
   /// Run the pass over the function.
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-
-  void printPipeline(raw_ostream &OS,
-                     function_ref<StringRef(StringRef)> MapClassName2PassName);
 
   /// This removes the specified instruction from
   /// our various maps and marks it for deletion.
@@ -180,11 +177,11 @@ public:
     Expression createExtractvalueExpr(ExtractValueInst *EI);
     uint32_t lookupOrAddCall(CallInst *C);
     uint32_t phiTranslateImpl(const BasicBlock *BB, const BasicBlock *PhiBlock,
-                              uint32_t Num, GVNPass &Gvn);
+                              uint32_t Num, GVN &Gvn);
     bool areCallValsEqual(uint32_t Num, uint32_t NewNum, const BasicBlock *Pred,
-                          const BasicBlock *PhiBlock, GVNPass &Gvn);
+                          const BasicBlock *PhiBlock, GVN &Gvn);
     std::pair<uint32_t, bool> assignExpNewValueNum(Expression &exp);
-    bool areAllValsInBB(uint32_t num, const BasicBlock *BB, GVNPass &Gvn);
+    bool areAllValsInBB(uint32_t num, const BasicBlock *BB, GVN &Gvn);
 
   public:
     ValueTable();
@@ -198,7 +195,7 @@ public:
     uint32_t lookupOrAddCmp(unsigned Opcode, CmpInst::Predicate Pred,
                             Value *LHS, Value *RHS);
     uint32_t phiTranslate(const BasicBlock *BB, const BasicBlock *PhiBlock,
-                          uint32_t Num, GVNPass &Gvn);
+                          uint32_t Num, GVN &Gvn);
     void eraseTranslateCacheEntry(uint32_t Num, const BasicBlock &CurrBlock);
     bool exists(Value *V) const;
     void add(Value *V, uint32_t num);

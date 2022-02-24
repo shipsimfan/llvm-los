@@ -26,11 +26,9 @@ public:
 
   static void Terminate();
 
-  static llvm::StringRef GetPluginNameStatic() { return "jit"; }
+  static lldb_private::ConstString GetPluginNameStatic();
 
-  static llvm::StringRef GetPluginDescriptionStatic() {
-    return "JIT code object file";
-  }
+  static const char *GetPluginDescriptionStatic();
 
   static lldb_private::ObjectFile *
   CreateInstance(const lldb::ModuleSP &module_sp, lldb::DataBufferSP &data_sp,
@@ -67,7 +65,7 @@ public:
 
   uint32_t GetAddressByteSize() const override;
 
-  void ParseSymtab(lldb_private::Symtab &symtab) override;
+  lldb_private::Symtab *GetSymtab() override;
 
   bool IsStripped() override;
 
@@ -98,7 +96,9 @@ public:
   ObjectFile::Strata CalculateStrata() override;
 
   // PluginInterface protocol
-  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  lldb_private::ConstString GetPluginName() override;
+
+  uint32_t GetPluginVersion() override;
 
 protected:
   lldb::ObjectFileJITDelegateWP m_delegate_wp;

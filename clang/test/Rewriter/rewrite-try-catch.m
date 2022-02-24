@@ -3,12 +3,12 @@
 @interface Foo @end
 @interface GARF @end
 
-void foo(void) {
+void foo() {
   @try  { TRY(); } 
   @catch (...) { SPLATCH(); @throw; }
 }
 
-int main(void)
+int main()
 {
 
   @try  {

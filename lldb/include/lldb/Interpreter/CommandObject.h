@@ -145,10 +145,6 @@ public:
 
   virtual bool IsMultiwordObject() { return false; }
 
-  bool IsUserCommand() { return m_is_user_command; }
-
-  void SetIsUserCommand(bool is_user) { m_is_user_command = is_user; }
-
   virtual CommandObjectMultiword *GetAsMultiwordCommand() { return nullptr; }
 
   virtual bool IsAlias() { return false; }
@@ -163,14 +159,15 @@ public:
     return lldb::CommandObjectSP();
   }
 
-  virtual lldb::CommandObjectSP GetSubcommandSPExact(llvm::StringRef sub_cmd) {
-    return lldb::CommandObjectSP();
-  }
-
   virtual CommandObject *GetSubcommandObject(llvm::StringRef sub_cmd,
                                              StringList *matches = nullptr) {
     return nullptr;
   }
+
+  virtual void AproposAllSubCommands(llvm::StringRef prefix,
+                                     llvm::StringRef search_word,
+                                     StringList &commands_found,
+                                     StringList &commands_help) {}
 
   void FormatLongHelpText(Stream &output_strm, llvm::StringRef long_help);
 
@@ -184,13 +181,6 @@ public:
   virtual bool LoadSubCommand(llvm::StringRef cmd_name,
                               const lldb::CommandObjectSP &command_obj) {
     return false;
-  }
-
-  virtual llvm::Error LoadUserSubcommand(llvm::StringRef cmd_name,
-                                         const lldb::CommandObjectSP &command_obj,
-                                         bool can_replace) {
-    return llvm::createStringError(llvm::inconvertibleErrorCode(),
-                              "can only add commands to container commands");
   }
 
   virtual bool WantsRawCommandString() = 0;
@@ -276,13 +266,14 @@ public:
   ///    The command arguments.
   ///
   /// \return
-  ///     llvm::None if there is no special repeat command - it will use the
+  ///     nullptr if there is no special repeat command - it will use the
   ///     current command line.
-  ///     Otherwise a std::string containing the command to be repeated.
-  ///     If the string is empty, the command won't be allow repeating.
-  virtual llvm::Optional<std::string>
-  GetRepeatCommand(Args &current_command_args, uint32_t index) {
-    return llvm::None;
+  ///     Otherwise a pointer to the command to be repeated.
+  ///     If the returned string is the empty string, the command won't be
+  ///     repeated.
+  virtual const char *GetRepeatCommand(Args &current_command_args,
+                                       uint32_t index) {
+    return nullptr;
   }
 
   bool HasOverrideCallback() const {
@@ -376,7 +367,6 @@ protected:
   lldb::CommandOverrideCallback m_deprecated_command_override_callback;
   lldb::CommandOverrideCallbackWithResult m_command_override_callback;
   void *m_command_override_baton;
-  bool m_is_user_command = false;
 
   // Helper function to populate IDs or ID ranges as the command argument data
   // to the specified command argument entry.

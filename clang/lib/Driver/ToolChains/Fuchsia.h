@@ -54,9 +54,7 @@ public:
     return true;
   }
   bool isPICDefault() const override { return false; }
-  bool isPIEDefault(const llvm::opt::ArgList &Args) const override {
-    return true;
-  }
+  bool isPIEDefault() const override { return true; }
   bool isPICDefaultForced() const override { return false; }
   llvm::DebuggerKind getDefaultDebuggerTuning() const override {
     return llvm::DebuggerKind::GDB;
@@ -72,6 +70,9 @@ public:
 
   SanitizerMask getSupportedSanitizers() const override;
   SanitizerMask getDefaultSanitizers() const override;
+
+  void addProfileRTLibs(const llvm::opt::ArgList &Args,
+                        llvm::opt::ArgStringList &CmdArgs) const override;
 
   RuntimeLibType
   GetRuntimeLibType(const llvm::opt::ArgList &Args) const override;

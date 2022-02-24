@@ -28,7 +28,7 @@
 
 namespace llvm {
 class StringRef;
-} // namespace llvm
+} // end namespace llvm
 
 namespace mlir {
 namespace tblgen {
@@ -48,8 +48,6 @@ struct NamedTypeConstraint {
   bool isOptional() const;
   // Returns true if this operand/result is variadic.
   bool isVariadic() const;
-  // Returns true if this operand/result is a variadic of a variadic constraint.
-  bool isVariadicOfVariadic() const;
   // Returns true if this is a variable length type constraint. This is either
   // variadic or optional.
   bool isVariableLength() const { return isOptional() || isVariadic(); }
@@ -61,7 +59,7 @@ struct NamedTypeConstraint {
 // Operation argument: either attribute or operand
 using Argument = llvm::PointerUnion<NamedAttribute *, NamedTypeConstraint *>;
 
-} // namespace tblgen
-} // namespace mlir
+} // end namespace tblgen
+} // end namespace mlir
 
 #endif // MLIR_TABLEGEN_ARGUMENT_H_

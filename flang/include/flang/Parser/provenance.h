@@ -30,7 +30,7 @@ namespace Fortran::parser {
 
 // Each character in the contiguous source stream built by the
 // prescanner corresponds to a particular character in a source file,
-// include file, macro expansion, or compiler-inserted text.
+// include file, macro expansion, or compiler-inserted padding.
 // The location of this original character to which a parsable character
 // corresponds is its provenance.
 //
@@ -149,7 +149,6 @@ public:
     return *this;
   }
 
-  void ClearSearchPath();
   void AppendSearchPathDirectory(std::string); // new last directory
   const SourceFile *Open(std::string path, llvm::raw_ostream &error,
       std::optional<std::string> &&prependPath = std::nullopt);

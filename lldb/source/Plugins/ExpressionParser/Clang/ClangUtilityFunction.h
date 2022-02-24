@@ -74,9 +74,9 @@ public:
 private:
   class ClangUtilityFunctionHelper : public ClangExpressionHelper {
   public:
-    ClangUtilityFunctionHelper() = default;
+    ClangUtilityFunctionHelper() {}
 
-    ~ClangUtilityFunctionHelper() override = default;
+    ~ClangUtilityFunctionHelper() override {}
 
     /// Return the object that the parser should use when resolving external
     /// values.  May be NULL if everything should be self-contained.

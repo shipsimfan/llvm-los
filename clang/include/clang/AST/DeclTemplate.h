@@ -160,7 +160,9 @@ public:
 
   /// Determine whether this template parameter list contains an
   /// unexpanded parameter pack.
-  bool containsUnexpandedParameterPack() const;
+  bool containsUnexpandedParameterPack() const {
+    return ContainsUnexpandedParameterPack;
+  }
 
   /// Determine whether this template parameter list contains a parameter pack.
   bool hasParameterPack() const {
@@ -202,10 +204,6 @@ public:
              bool OmitTemplateKW = false) const;
   void print(raw_ostream &Out, const ASTContext &Context,
              const PrintingPolicy &Policy, bool OmitTemplateKW = false) const;
-
-  static bool shouldIncludeTypeForArgument(const PrintingPolicy &Policy,
-                                           const TemplateParameterList *TPL,
-                                           unsigned Idx);
 };
 
 /// Stores a list of template parameters and the associated
@@ -498,7 +496,7 @@ private:
       TemplateSpecializationKind TSK, const TemplateArgumentList *TemplateArgs,
       const ASTTemplateArgumentListInfo *TemplateArgsAsWritten,
       SourceLocation POI, MemberSpecializationInfo *MSInfo)
-      : Function(FD, MSInfo ? true : false), Template(Template, TSK - 1),
+      : Function(FD, MSInfo ? 1 : 0), Template(Template, TSK - 1),
         TemplateArguments(TemplateArgs),
         TemplateArgumentsAsWritten(TemplateArgsAsWritten),
         PointOfInstantiation(POI) {
@@ -729,10 +727,6 @@ public:
 
   /// Returns the number of explicit template arguments that were given.
   unsigned getNumTemplateArgs() const { return NumArgs; }
-
-  llvm::ArrayRef<TemplateArgumentLoc> arguments() const {
-    return llvm::makeArrayRef(getTemplateArgs(), getNumTemplateArgs());
-  }
 
   /// Returns the nth template argument.
   const TemplateArgumentLoc &getTemplateArg(unsigned I) const {
@@ -1194,7 +1188,7 @@ class TemplateTypeParmDecl final : public TypeDecl,
 
   /// Whether the type constraint has been initialized. This can be false if the
   /// constraint was not initialized yet or if there was an error forming the
-  /// type constraint.
+  /// type constriant.
   bool TypeConstraintInitialized : 1;
 
   /// Whether this non-type template parameter is an "expanded"
@@ -1211,12 +1205,13 @@ class TemplateTypeParmDecl final : public TypeDecl,
   DefArgStorage DefaultArgument;
 
   TemplateTypeParmDecl(DeclContext *DC, SourceLocation KeyLoc,
-                       SourceLocation IdLoc, IdentifierInfo *Id, bool Typename,
-                       bool HasTypeConstraint, Optional<unsigned> NumExpanded)
+                       SourceLocation IdLoc, IdentifierInfo *Id,
+                       bool Typename, bool HasTypeConstraint,
+                       Optional<unsigned> NumExpanded)
       : TypeDecl(TemplateTypeParm, DC, IdLoc, Id, KeyLoc), Typename(Typename),
-        HasTypeConstraint(HasTypeConstraint), TypeConstraintInitialized(false),
-        ExpandedParameterPack(NumExpanded),
-        NumExpanded(NumExpanded.getValueOr(0)) {}
+      HasTypeConstraint(HasTypeConstraint), TypeConstraintInitialized(false),
+      ExpandedParameterPack(NumExpanded),
+      NumExpanded(NumExpanded ? *NumExpanded : 0) {}
 
 public:
   static TemplateTypeParmDecl *Create(const ASTContext &C, DeclContext *DC,
@@ -2461,10 +2456,10 @@ private:
   SourceLocation FriendLoc;
 
   FriendTemplateDecl(DeclContext *DC, SourceLocation Loc,
-                     TemplateParameterList **Params, unsigned NumParams,
+                     MutableArrayRef<TemplateParameterList *> Params,
                      FriendUnion Friend, SourceLocation FriendLoc)
-      : Decl(Decl::FriendTemplate, DC, Loc), NumParams(NumParams),
-        Params(Params), Friend(Friend), FriendLoc(FriendLoc) {}
+      : Decl(Decl::FriendTemplate, DC, Loc), NumParams(Params.size()),
+        Params(Params.data()), Friend(Friend), FriendLoc(FriendLoc) {}
 
   FriendTemplateDecl(EmptyShell Empty) : Decl(Decl::FriendTemplate, Empty) {}
 

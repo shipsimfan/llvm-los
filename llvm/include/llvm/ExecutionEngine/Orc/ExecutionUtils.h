@@ -24,6 +24,7 @@
 #include "llvm/Support/DynamicLibrary.h"
 #include <algorithm>
 #include <cstdint>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -33,6 +34,7 @@ class ConstantArray;
 class GlobalVariable;
 class Function;
 class Module;
+class TargetMachine;
 class Value;
 
 namespace orc {
@@ -258,18 +260,12 @@ private:
 /// the containing object being added to the JITDylib.
 class StaticLibraryDefinitionGenerator : public DefinitionGenerator {
 public:
-  // Interface builder function for objects loaded from this archive.
-  using GetObjectFileInterface =
-      unique_function<Expected<MaterializationUnit::Interface>(
-          ExecutionSession &ES, MemoryBufferRef ObjBuffer)>;
-
   /// Try to create a StaticLibraryDefinitionGenerator from the given path.
   ///
   /// This call will succeed if the file at the given path is a static library
   /// is a valid archive, otherwise it will return an error.
   static Expected<std::unique_ptr<StaticLibraryDefinitionGenerator>>
-  Load(ObjectLayer &L, const char *FileName,
-       GetObjectFileInterface GetObjFileInterface = GetObjectFileInterface());
+  Load(ObjectLayer &L, const char *FileName);
 
   /// Try to create a StaticLibraryDefinitionGenerator from the given path.
   ///
@@ -277,15 +273,13 @@ public:
   /// or a MachO universal binary containing a static library that is compatible
   /// with the given triple. Otherwise it will return an error.
   static Expected<std::unique_ptr<StaticLibraryDefinitionGenerator>>
-  Load(ObjectLayer &L, const char *FileName, const Triple &TT,
-       GetObjectFileInterface GetObjFileInterface = GetObjectFileInterface());
+  Load(ObjectLayer &L, const char *FileName, const Triple &TT);
 
   /// Try to create a StaticLibrarySearchGenerator from the given memory buffer.
   /// This call will succeed if the buffer contains a valid archive, otherwise
   /// it will return an error.
   static Expected<std::unique_ptr<StaticLibraryDefinitionGenerator>>
-  Create(ObjectLayer &L, std::unique_ptr<MemoryBuffer> ArchiveBuffer,
-         GetObjectFileInterface GetObjFileInterface = GetObjectFileInterface());
+  Create(ObjectLayer &L, std::unique_ptr<MemoryBuffer> ArchiveBuffer);
 
   Error tryToGenerate(LookupState &LS, LookupKind K, JITDylib &JD,
                       JITDylibLookupFlags JDLookupFlags,
@@ -294,11 +288,9 @@ public:
 private:
   StaticLibraryDefinitionGenerator(ObjectLayer &L,
                                    std::unique_ptr<MemoryBuffer> ArchiveBuffer,
-                                   GetObjectFileInterface GetObjFileInterface,
                                    Error &Err);
 
   ObjectLayer &L;
-  GetObjectFileInterface GetObjFileInterface;
   std::unique_ptr<MemoryBuffer> ArchiveBuffer;
   std::unique_ptr<object::Archive> Archive;
 };

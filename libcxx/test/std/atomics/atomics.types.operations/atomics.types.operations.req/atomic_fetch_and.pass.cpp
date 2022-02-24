@@ -5,16 +5,18 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// UNSUPPORTED: libcpp-has-no-threads
 
 // <atomic>
 
-// template<class T>
-//     T
-//     atomic_fetch_and(volatile atomic<T>*, atomic<T>::value_type) noexcept;
+// template <class Integral>
+//     Integral
+//     atomic_fetch_and(volatile atomic<Integral>* obj, Integral op);
 //
-// template<class T>
-//     T
-//     atomic_fetch_and(atomic<T>*, atomic<T>::value_type) noexcept;
+// template <class Integral>
+//     Integral
+//     atomic_fetch_and(atomic<Integral>* obj, Integral op);
 
 #include <atomic>
 #include <type_traits>
@@ -28,19 +30,17 @@ struct TestFn {
   void operator()() const {
     {
         typedef std::atomic<T> A;
-        A t(T(1));
+        A t;
+        std::atomic_init(&t, T(1));
         assert(std::atomic_fetch_and(&t, T(2)) == T(1));
         assert(t == T(0));
-
-        ASSERT_NOEXCEPT(std::atomic_fetch_and(&t, T(2)));
     }
     {
         typedef std::atomic<T> A;
-        volatile A t(T(3));
+        volatile A t;
+        std::atomic_init(&t, T(3));
         assert(std::atomic_fetch_and(&t, T(2)) == T(3));
         assert(t == T(2));
-
-        ASSERT_NOEXCEPT(std::atomic_fetch_and(&t, T(2)));
     }
   }
 };
