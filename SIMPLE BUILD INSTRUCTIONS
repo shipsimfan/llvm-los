@@ -1,0 +1,16 @@
+#Simple Build Instructions
+
+On a UNIX-like machine, run the following commands from the cloned repository to build LLVM for LOS:
+```sh
+mkdir build
+cd build
+cmake -DLLVM_ENABLE_PROJECTS="clang;lld" -DCMAKE_BUILD_TYPE="Release" -DCMAKE_INSTALL_PREFIX="/usr/local" -G "Ninja" ../llvm
+cmake --build .
+cmake --build . --target install
+```
+
+You may replace "Ninja" with "Unix Makefiles" if you prefer to use Make over Ninja. Ninja is preferred to Make because it is both quicker and uses less memory.
+You may also replace the install prefix with any prefered location to install clang, just be sure that it is available on your PATH.
+
+If the build fails midway due to running out of memory, just re-running the build command allows it to continue. This may happen multiple times.
+Ninja uses less memory than Make if your are encountering running out of memory while using Make.
